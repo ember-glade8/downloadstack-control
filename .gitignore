@@ -1,0 +1,49 @@
+# 运行期产物（安装后生成，不进仓库）
+config.json
+logs/
+cache/
+state/
+backups/
+*.log
+
+# 安装产物（install 脚本生成）
+aria2/
+ariaNg/
+ariang/
+qBittorrent/
+ControlPanel/
+tools/
+start_aria2.cmd
+stop_aria2.cmd
+start_ariang.cmd
+start_qbit.cmd
+start_aria2.sh
+stop_aria2.sh
+start_ariang.sh
+start_qbit.sh
+yt-download.cmd
+yt-download.sh
+diag-report.txt
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 构建
+build/
+dist/
+*.spec
+
+# 编辑器/系统
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+# 分发包（本地生成）
+*.tar.gz
+*.zip
+
+# 本地推送脚本（含 token 用法，不入库）
+push-to-github.ps1

@@ -1,0 +1,15 @@
+# 统一行尾，防止 Windows/Linux 互相污染
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.sh    text eol=lf
+*.py    text eol=lf
+*.md    text eol=lf
+*.json  text eol=lf
+*.txt   text eol=lf
+*.desktop text eol=lf
+
+# 二进制
+*.png   binary
+*.ico   binary
+*.zip   binary
+*.tar.gz binary

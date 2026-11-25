@@ -1,0 +1,44 @@
+{
+  "_readme": "参考文件，不需要改名。面板首次启动会按自身位置自动生成 config.json；<ROOT> 与 <DOWNLOADS> 会被替换成实际目录。",
+  "aria2": {
+    "host": "127.0.0.1",
+    "port": 6800,
+    "exe": "<ROOT>/aria2/aria2c.exe",
+    "conf": "<ROOT>/aria2/aria2.conf",
+    "secret": "<ROOT>/aria2/rpc-secret.txt",
+    "logdir": "<ROOT>/logs"
+  },
+  "qbit": {
+    "host": "127.0.0.1",
+    "port": 8080,
+    "user": "admin",
+    "pass": "",
+    "config_dir": "<ROOT>/qBittorrent/profile/qBittorrent/config",
+    "save_dir": "<DOWNLOADS>/qBittorrent",
+    "exe_dir": "<ROOT>/qBittorrent"
+  },
+  "yt": {
+    "bat": "",
+    "bat2": "",
+    "ini": ""
+  },
+  "ariang": {
+    "port": 16800,
+    "dir": "<ROOT>/ariaNg",
+    "script": "<ROOT>/start_ariang.cmd"
+  },
+  "scripts": {
+    "start": "<ROOT>/start_aria2.cmd",
+    "stop": "<ROOT>/stop_aria2.cmd",
+    "qbit": "<ROOT>/start_qbit.cmd"
+  },
+  "ui": {
+    "theme": "dark",
+    "autostart_panel": false,
+    "autostart_aria2": false,
+    "upscale": false
+  },
+  "paths": {
+    "downloads": "<DOWNLOADS>"
+  }
+}

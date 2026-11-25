@@ -1,0 +1,15 @@
+Third-party notice
+
+This repository ships ONLY our own source code. No third-party binaries are
+bundled. install.bat downloads these programs from their official release
+pages at setup time; they stay separate programs with their own licenses:
+
+  aria2        GPL-2.0    https://github.com/aria2/aria2/releases
+  AriaNg       MIT        https://github.com/mayswind/AriaNg/releases
+  qBittorrent  GPL-2.0    https://www.qbittorrent.org/
+  yt-dlp       Unlicense  https://github.com/yt-dlp/yt-dlp/releases
+
+Python packages installed by the user via pip:
+
+  flet      Apache-2.0
+  requests  Apache-2.0
