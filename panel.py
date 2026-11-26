@@ -569,6 +569,8 @@ class Probe:
                       "aul": int(st.get("alltime_ul", 0) or 0),
                       "tor": len(tq),
                       "seed": seed_cnt,
+                      "dht": int(st.get("dht_nodes", 0) or 0),
+                      "conn_status": str(st.get("connection_status", "") or ""),
                       "err": ""}
             self.q_tasks = q_tasks[:25]
         except Exception as e:

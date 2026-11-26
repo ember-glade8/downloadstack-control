@@ -970,12 +970,13 @@
       const bq = document.getElementById('btn-q'); bq.textContent = S.q.on ? '■ 停止' : '▶ 启动'; bq.className = 'btn flex-1 ' + (S.q.on ? 'btn-rose' : 'btn-mint');
 
       document.getElementById('val-m').textContent = trCnt + ' TR';
-      document.getElementById('st-m').textContent = S.m.ok ? 'DHT OK' : 'NEEDS FIX';
-      document.getElementById('st-m').className = 'mod-st mono ' + (S.m.ok ? 'c-violet' : 'c-amber');
+      const dhtN = S.q.dht || 0;
+      document.getElementById('st-m').textContent = dhtN > 0 ? (`DHT ${dhtN}`) : (S.m.ok ? 'DHT OK' : 'NEEDS FIX');
+      document.getElementById('st-m').className = 'mod-st mono ' + ((dhtN > 0 || S.m.ok) ? 'c-violet' : 'c-amber');
       document.getElementById('m-conf-ok').textContent = S.m.ok ? '健康 ✔' : ('缺 ' + (S.m.missing||[]).length + ' 项');
       document.getElementById('m-tr-cnt').textContent = (S.m.tracker_count || 0) + ' 个';
       document.getElementById('m-cache-cnt').textContent = (S.m.cached_trackers || 0) + ' 个';
-      document.getElementById('m-dht-sz').textContent = S.m.dht_dat_size > 0 ? fmtBytes(S.m.dht_dat_size) : '冷启动';
+      document.getElementById('m-dht-sz').textContent = dhtN > 0 ? (`qB ${dhtN} 节点`) : (S.m.dht_dat_size > 0 ? fmtBytes(S.m.dht_dat_size) : '冷启动');
 
       document.getElementById('led-y').className = 'led ' + (S.y.on ? 'bg-amber led-on' : 'bg-off');
       const by = document.getElementById('btn-y'); by.textContent = S.y.on ? '■ 关闭视频壳' : '▶ 启动视频壳'; by.className = 'btn flex-1 ' + (S.y.on ? 'btn-rose' : 'btn-amber');
