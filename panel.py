@@ -541,6 +541,14 @@ class ControlBackend:
         self.logs = []
         self.wave = [0] * 40
         self._q_warn_at = 0.0
+        self.yt_job = {
+            "running": False, "pid": None, "url": "",
+            "quality": "best",
+            "cookies": str((self.cfg.get("yt") or {}).get("cookies") or "none"),
+            "cookies_file": str((self.cfg.get("yt") or {}).get("cookies_file") or ""),
+            "pct": 0.0, "speed": "", "eta": "", "status": "就绪",
+            "logs": [], "file": "",
+        }
         self.log("Spatial 3D 控制台启动，配置 %s" % CONFIG)
         self.poll_once()
         t = threading.Thread(target=self._poll_loop, daemon=True)
@@ -747,6 +755,174 @@ class ControlBackend:
         found = shutil.which("yt-dlp")
         return found or ""
 
+    def _find_ffmpeg(self):
+        cands = [
+            APP_DIR / "tools" / "ffmpeg" / "bin" / ("ffmpeg.exe" if IS_WIN else "ffmpeg"),
+            ROOT / "tools" / "ffmpeg" / "bin" / ("ffmpeg.exe" if IS_WIN else "ffmpeg"),
+        ]
+        for c in cands:
+            try:
+                if c.is_file():
+                    return str(c.parent)
+            except Exception:
+                pass
+        found = shutil.which("ffmpeg")
+        return str(Path(found).parent) if found else ""
+
+    def _find_video2x(self):
+        env = (os.environ.get("VIDEO2X_PATH") or "").strip()
+        if env and Path(env).is_file():
+            return env
+        cands = [
+            ROOT / "tools" / "video2x" / ("video2x.exe" if IS_WIN else "video2x"),
+            APP_DIR / "tools" / "video2x" / ("video2x.exe" if IS_WIN else "video2x"),
+        ]
+        for c in cands:
+            try:
+                if c.is_file():
+                    return str(c)
+            except Exception:
+                pass
+        return shutil.which("video2x") or ""
+
+    @staticmethod
+    def _clean_video_url(raw: str) -> str:
+        import re
+        s = (raw or "").strip()
+        m = re.search(r"https?://[^\s\"'<>]+", s)
+        return m.group(0).rstrip(".,;!?）)】》」") if m else s
+
+    def _yt_append_log(self, line: str):
+        ts = datetime.now().strftime("%H:%M:%S")
+        with self.lock:
+            self.yt_job["logs"].append("%s %s" % (ts, line))
+            if len(self.yt_job["logs"]) > 200:
+                self.yt_job["logs"] = self.yt_job["logs"][-200:]
+
+    def _run_yt_worker(self, url: str, quality: str, cookies: str, cookies_file: str, upscale: bool):
+        import re
+        ytdlp = self._find_ytdlp()
+        if not ytdlp:
+            with self.lock:
+                self.yt_job["running"] = False
+                self.yt_job["status"] = "未检测到 yt-dlp"
+            self._yt_append_log("[ERROR] 未找到 yt-dlp，请先运行一键配置或安装 yt-dlp")
+            return
+        out_dir = Path(self.yt_output())
+        out_dir.mkdir(parents=True, exist_ok=True)
+        cmd = [ytdlp, "--newline", "--progress", "--no-color", "-P", str(out_dir)]
+        ff_dir = self._find_ffmpeg()
+        if ff_dir:
+            cmd += ["--ffmpeg-location", ff_dir]
+        if quality == "1080":
+            cmd += ["-f", "bv*[height<=1080]+ba/b[height<=1080]/best", "--merge-output-format", "mp4"]
+        elif quality == "720":
+            cmd += ["-f", "bv*[height<=720]+ba/b[height<=720]/best", "--merge-output-format", "mp4"]
+        elif quality == "audio":
+            cmd += ["-x", "--audio-format", "mp3", "--audio-quality", "0"]
+        else:
+            cmd += ["-f", "bv*+ba/best", "--merge-output-format", "mp4"]
+
+        if cookies in ("firefox", "chrome", "edge"):
+            cmd += ["--cookies-from-browser", cookies]
+        elif cookies == "file" and cookies_file and Path(cookies_file).is_file():
+            cmd += ["--cookies", cookies_file]
+
+        cmd.append(url)
+        env = os.environ.copy()
+        px = self._sys_proxy()
+        if px:
+            env["HTTP_PROXY"] = env["HTTPS_PROXY"] = env["http_proxy"] = env["https_proxy"] = px
+            env.pop("ALL_PROXY", None)
+            env.pop("all_proxy", None)
+            env["NO_PROXY"] = env["no_proxy"] = "localhost,127.0.0.1,::1,.local"
+
+        pct_re = re.compile(r"(\d+(?:\.\d+)?)%")
+        spd_re = re.compile(r"at\s+([^\s]+/s)")
+        eta_re = re.compile(r"ETA\s+([0-9:]+)")
+        dest_re = re.compile(r"(?:Destination:|Merging formats into\s+\"?)(.+?)\"?$")
+
+        last_file = ""
+        try:
+            proc = subprocess.Popen(
+                cmd, cwd=str(out_dir), env=env,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding="utf-8", errors="replace",
+                **_popen_kwargs()
+            )
+            with self.lock:
+                self.yt_job["pid"] = proc.pid
+                self.yt_job["status"] = "下载中…"
+            self.pids["yt_job"] = proc.pid
+            save_pids(self.pids)
+            self._yt_append_log("[INFO] 启动 yt-dlp PID=%s（画质=%s | 代理=%s）" % (proc.pid, quality, px or "直连"))
+            self.log("YT 工坊开始下载：%s" % url[:80], "OK")
+
+            assert proc.stdout is not None
+            for raw in proc.stdout:
+                line = raw.strip()
+                if not line:
+                    continue
+                m_pct = pct_re.search(line)
+                if m_pct and "[download]" in line:
+                    m_spd = spd_re.search(line)
+                    m_eta = eta_re.search(line)
+                    with self.lock:
+                        self.yt_job["pct"] = float(m_pct.group(1))
+                        if m_spd:
+                            self.yt_job["speed"] = m_spd.group(1)
+                        if m_eta:
+                            self.yt_job["eta"] = m_eta.group(1)
+                    continue
+                m_dst = dest_re.search(line)
+                if m_dst:
+                    cand = m_dst.group(1).strip().strip('"')
+                    if cand:
+                        last_file = cand
+                        with self.lock:
+                            self.yt_job["file"] = cand
+                self._yt_append_log(line)
+
+            rc = proc.wait()
+            if rc == 0:
+                with self.lock:
+                    self.yt_job["pct"] = 100.0
+                    self.yt_job["status"] = "下载完成 ✔"
+                self._yt_append_log("[OK] 下载完成 → %s" % (last_file or out_dir))
+                self.log("YT 工坊下载完成 → %s" % (last_file or out_dir), "OK")
+                if upscale and quality != "audio":
+                    v2x = self._find_video2x()
+                    if v2x and last_file and Path(last_file).is_file():
+                        with self.lock:
+                            self.yt_job["status"] = "2x AI 超分中…"
+                        self._yt_append_log("[INFO] 检测到 Video2X，开始 2x 超分：%s" % Path(last_file).name)
+                        out_up = str(Path(last_file).with_stem(Path(last_file).stem + "_2x"))
+                        up_proc = subprocess.Popen([v2x, "-i", last_file, "-o", out_up, "-s", "2"],
+                                                   cwd=str(out_dir), **_popen_kwargs())
+                        with self.lock:
+                            self.yt_job["pid"] = up_proc.pid
+                        up_rc = up_proc.wait()
+                        with self.lock:
+                            self.yt_job["status"] = "2x 超分完成 ✔" if up_rc == 0 else "下载完成（超分异常）"
+                        self._yt_append_log("[OK] 2x 超分完成 → %s" % out_up if up_rc == 0 else "[WARN] 超分退出码 %s" % up_rc)
+                    else:
+                        self._yt_append_log("[WARN] 未检测到 Video2X 可执行文件，已跳过 2x 超分（视频已正常保存）")
+            else:
+                with self.lock:
+                    if self.yt_job["status"] != "已取消":
+                        self.yt_job["status"] = "下载失败 (码 %s)" % rc
+                self._yt_append_log("[ERROR] yt-dlp 退出码 %s（若报 403 请在上方勾选浏览器 Cookies）" % rc)
+        except Exception as ex:
+            with self.lock:
+                self.yt_job["status"] = "执行异常"
+            self._yt_append_log("[ERROR] %s" % ex)
+        finally:
+            self.pids.pop("yt_job", None)
+            save_pids(self.pids)
+            with self.lock:
+                self.yt_job["running"] = False
+                self.yt_job["pid"] = None
+
     def _magnet_diag(self):
         if MT is None:
             return {"ok": False, "tracker_count": 0, "missing": ["magnet_tools"], "dht_dat_size": 0}
@@ -764,12 +940,21 @@ class ControlBackend:
         with self.lock:
             logs = list(self.logs[-120:])
             wave = list(self.wave)
+            yt_job = dict(self.yt_job)
+            yt_job["logs"] = list(self.yt_job["logs"][-120:])
         yt_state = dict(self.pr.y)
         yt_state["upscale"] = bool(self.cfg.get("ui", {}).get("upscale"))
+        yt_state["on"] = bool(yt_state.get("on") or yt_job.get("running"))
+        yt_job["has_ytdlp"] = bool(self._find_ytdlp())
+        yt_job["has_ffmpeg"] = bool(self._find_ffmpeg())
+        yt_job["has_video2x"] = bool(self._find_video2x())
+        yt_job["out_dir"] = self.yt_output()
+        yt_job["proxy"] = self._sys_proxy() or "直连"
         return {
             "aria2": dict(self.pr.a),
             "qbit": dict(self.pr.q),
             "yt": yt_state,
+            "yt_studio": yt_job,
             "magnet": self._magnet_diag(),
             "tasks": {
                 "aria2": list(self.pr.a_tasks),
@@ -1158,8 +1343,56 @@ class ControlBackend:
             v = not bool(self.cfg["ui"].get("upscale"))
             self.cfg["ui"]["upscale"] = v
             save_cfg(self.cfg)
-            self.log("超分开关 → %s（下次启动 YT 壳生效）" % ("开" if v else "关"))
+            self.log("超分开关 → %s（下次启动 YT 壳/内置下载生效）" % ("开" if v else "关"))
             return True, "2x 超分已%s" % ("开启" if v else "关闭"), {}
+
+        if act == "yt_download":
+            import threading
+            raw_url = self._clean_video_url(str(body.get("url") or ""))
+            if not raw_url:
+                return False, "请先粘贴视频链接或分享口令", {}
+            with self.lock:
+                if self.yt_job.get("running"):
+                    return False, "当前已有 YT 视频正在下载，请等待完成或先取消", {}
+                quality = str(body.get("quality") or "best")
+                cookies = str(body.get("cookies") or "none")
+                cookies_file = str(body.get("cookies_file") or "").strip()
+                upscale = bool(body.get("upscale", self.cfg["ui"].get("upscale")))
+                self.cfg["yt"]["cookies"] = cookies
+                self.cfg["yt"]["cookies_file"] = cookies_file
+                self.cfg["ui"]["upscale"] = upscale
+                save_cfg(self.cfg)
+                self.yt_job.update({
+                    "running": True, "pid": None, "url": raw_url,
+                    "quality": quality, "cookies": cookies, "cookies_file": cookies_file,
+                    "pct": 0.0, "speed": "", "eta": "", "status": "初始化中…", "file": "",
+                })
+            t = threading.Thread(
+                target=self._run_yt_worker,
+                args=(raw_url, quality, cookies, cookies_file, upscale),
+                daemon=True,
+            )
+            t.start()
+            return True, "已启动内置 YT 视频下载", {}
+
+        if act == "yt_cancel":
+            with self.lock:
+                pid = self.yt_job.get("pid")
+            if pid and pid_alive(pid):
+                kill_tree(pid)
+                with self.lock:
+                    self.yt_job["status"] = "已取消"
+                    self.yt_job["running"] = False
+                    self.yt_job["pid"] = None
+                self._yt_append_log("[WARN] 已取消下载并结束进程树 PID=%s" % pid)
+                self.log("已取消 YT 工坊下载 PID %s" % pid, "WARN")
+                return True, "已取消下载并清理进程树", {}
+            return False, "当前没有运行中的内置 YT 下载", {}
+
+        if act == "yt_clear_log":
+            with self.lock:
+                self.yt_job["logs"] = []
+            return True, "YT 日志已清空", {}
 
         if act == "start_y":
             bat = Path(self.cfg["yt"]["bat"])

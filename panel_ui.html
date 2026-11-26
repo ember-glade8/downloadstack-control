@@ -108,40 +108,38 @@
     }
     .spd-dn { font-weight: 800; background: linear-gradient(90deg, #6ee7b7, #67e8f9, #fff); -webkit-background-clip: text; background-clip: text; color: transparent; }
 
-    /* ==================== 3D CURVED SPATIAL COCKPIT ==================== */
-    .view { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; transform-style: preserve-3d; }
+    /* ==================== 3D CURVED SPATIAL COCKPIT (HIT-TEST SAFE) ==================== */
+    .view { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
 
-    /* Entire Curved 3D Console Stage tilts subtly with mouse! */
     #cockpitRig {
       flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 14px;
-      transform-style: preserve-3d; will-change: transform;
+      will-change: transform;
     }
 
     /* UPPER CURVED 3-WING CONSOLE BAND */
     .upper-wings {
       flex: 1.08; min-height: 0; display: grid;
       grid-template-columns: 1.02fr 1.46fr 1.02fr; gap: 16px;
-      transform-style: preserve-3d;
+      position: relative; z-index: 10;
     }
     .wing-left {
-      transform: rotateY(8.5deg) translateZ(6px);
+      transform: perspective(1400px) rotateY(7.5deg);
       transform-origin: right center;
-      transition: transform 0.35s cubic-bezier(0.22,1,0.36,1), border-color 0.25s;
+      transition: transform 0.32s cubic-bezier(0.22,1,0.36,1), border-color 0.25s;
     }
-    .wing-left:hover { transform: rotateY(3deg) translateZ(18px); border-color: rgba(0,245,184,0.42); }
+    .wing-left:hover { transform: perspective(1400px) rotateY(2.5deg) translateY(-2px); border-color: rgba(0,245,184,0.42); }
 
     .wing-center {
-      transform: translateZ(20px);
-      transition: transform 0.35s cubic-bezier(0.22,1,0.36,1), border-color 0.25s;
+      transition: transform 0.32s cubic-bezier(0.22,1,0.36,1), border-color 0.25s;
     }
     .wing-center:hover { border-color: rgba(0,212,255,0.45); }
 
     .wing-right {
-      transform: rotateY(-8.5deg) translateZ(6px);
+      transform: perspective(1400px) rotateY(-7.5deg);
       transform-origin: left center;
-      transition: transform 0.35s cubic-bezier(0.22,1,0.36,1), border-color 0.25s;
+      transition: transform 0.32s cubic-bezier(0.22,1,0.36,1), border-color 0.25s;
     }
-    .wing-right:hover { transform: rotateY(-3deg) translateZ(18px); border-color: rgba(192,132,252,0.45); }
+    .wing-right:hover { transform: perspective(1400px) rotateY(-2.5deg) translateY(-2px); border-color: rgba(192,132,252,0.45); }
 
     /* Panel Interiors */
     .panel-box {
@@ -232,15 +230,13 @@
     /* ==================== LOWER 4 EXTRUDED 3D HARDWARE CONSOLE MODULES ==================== */
     .modules-deck {
       display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; flex-shrink: 0;
-      transform: rotateX(6deg) translateZ(14px);
-      transform-origin: center bottom;
-      transform-style: preserve-3d;
+      position: relative; z-index: 25;
     }
-    .mod-wrap { perspective: 1200px; transform-style: preserve-3d; }
+    .mod-wrap { position: relative; }
     .mod-card {
       position: relative; border-radius: 22px; padding: 1.5px; height: 204px;
       background: linear-gradient(145deg, rgba(255,255,255,0.22), rgba(255,255,255,0.04) 48%, var(--c1));
-      transform-style: preserve-3d; will-change: transform;
+      will-change: transform;
       /* Real 3D extruded console thickness + underglow */
       box-shadow:
         0 9px 0 -1px rgba(8, 13, 28, 0.94),
@@ -250,7 +246,7 @@
       transition: box-shadow 0.3s ease;
     }
     .mod-card::before {
-      content: ""; position: absolute; inset: -1px; border-radius: inherit; z-index: 0;
+      content: ""; position: absolute; inset: -1px; border-radius: inherit; z-index: 0; pointer-events: none;
       background: conic-gradient(from var(--ang, 0deg), transparent 0deg, transparent 200deg, var(--c1) 290deg, var(--c2) 335deg, transparent 360deg);
       opacity: 0.35; transition: opacity 0.3s; animation: spin 3.8s linear infinite;
     }
@@ -268,7 +264,7 @@
     .mod-surface {
       position: relative; z-index: 1; height: 100%; border-radius: 20.5px;
       background: linear-gradient(160deg, rgba(10, 17, 36, 0.86), rgba(4, 7, 16, 0.95));
-      overflow: hidden; transform-style: preserve-3d;
+      overflow: hidden;
       padding: 14px; display: flex; flex-direction: column; justify-content: space-between;
     }
     .mod-canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
@@ -277,7 +273,7 @@
       background: radial-gradient(250px circle at var(--gx,50%) var(--gy,50%), var(--glare), transparent 60%);
     }
     .mod-card:hover .mod-glare { opacity: 1; }
-    .mod-z { position: relative; z-index: 2; transform: translateZ(26px); }
+    .mod-z { position: relative; z-index: 5; }
 
     .mod-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
     .mod-id { display: flex; align-items: center; gap: 9px; min-width: 0; }
@@ -405,6 +401,7 @@
         <button class="nav-btn" data-view="tasks" onclick="switchView('tasks', this)">⚡ 任务队列 <span id="nav-task-cnt" class="badge-cnt mono">0</span></button>
         <button class="nav-btn" data-view="ariang" onclick="switchView('ariang', this)">🌐 内置 AriaNg</button>
         <button class="nav-btn" data-view="magnet" onclick="switchView('magnet', this)">🧲 磁力工坊</button>
+        <button class="nav-btn" data-view="yt" onclick="switchView('yt', this)">🎬 YT 视频</button>
       </nav>
 
       <div class="top-right">
@@ -615,8 +612,9 @@
                   </div>
                 </div>
                 <div class="mod-actions mod-z">
-                  <button onclick="act(S.y.on?'stop_y':'start_y')" id="btn-y" class="btn btn-amber flex-1">▶ 启动视频壳</button>
-                  <button onclick="act('open_path',{key:'yt_out'})" class="btn flex-1">📂 视频成品</button>
+                  <button onclick="switchView('yt', document.querySelector('[data-view=yt]'))" class="btn btn-amber flex-1">🎬 视频工坊</button>
+                  <button onclick="act(S.y.on?'stop_y':'start_y')" id="btn-y" class="btn flex-1">▶ 外部壳</button>
+                  <button onclick="act('open_path',{key:'yt_out'})" class="btn" title="打开视频成品目录">📂</button>
                 </div>
               </div>
             </div>
@@ -706,6 +704,100 @@
               1. 自动识别 <code class="mono c-cyan">magnet:?</code> 与纯 40 位 Hex / 32 位 Base32 InfoHash。<br/>
               2. 自动预取公共 <code class="mono c-mint">.torrent</code> 并做 SHA1 InfoHash 严格校验，跳过元数据卡顿。<br/>
               3. 自动发现携带合法 <code class="mono">token</code> 的真实 DHT 节点，彻底解决 aria2 冷启动 0 节点。
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== VIEW 5: YT VIDEO STUDIO ==================== -->
+    <section id="view-yt" class="view hidden">
+      <div class="sub-card console-glass">
+        <div class="box-head">
+          <div>
+            <div class="box-title" style="font-size:14px;">🎬 YT-DLP 视频下载工坊 &amp; 2x AI 超分</div>
+            <div class="box-sub">支持 YouTube / B站 / 抖音 / 小红书 / X 等千余站点 · 分享口令自动提取链接 · 代理自动透传</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button onclick="act('start_y')" class="btn btn-amber">↗ 打开独立 YT 壳</button>
+            <button onclick="act('open_path',{key:'yt_out'})" class="btn btn-cyan">📂 视频输出目录</button>
+          </div>
+        </div>
+
+        <div class="split-2">
+          <!-- Left: Controls -->
+          <div class="panel-box" style="background:rgba(3,8,20,0.74);border:1px solid rgba(255,179,71,0.32);gap:12px;">
+            <div class="box-title c-amber mono">◤ 视频链接与画质配置</div>
+            <textarea id="yt-url" class="inp mono" style="height:82px;resize:none;line-height:1.5;" placeholder="粘贴视频链接或抖音/小红书分享口令（自动提取 URL）…"></textarea>
+
+            <div>
+              <label class="lbl">清晰度 / 格式</label>
+              <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;" id="yt-q-group">
+                <button type="button" onclick="pickYtQ('best',this)" data-q="best" class="btn btn-amber">最佳 MP4</button>
+                <button type="button" onclick="pickYtQ('1080',this)" data-q="1080" class="btn">≤ 1080P</button>
+                <button type="button" onclick="pickYtQ('720',this)" data-q="720" class="btn">≤ 720P</button>
+                <button type="button" onclick="pickYtQ('audio',this)" data-q="audio" class="btn">仅音频 MP3</button>
+              </div>
+            </div>
+
+            <div class="g2">
+              <div>
+                <label class="lbl">登录态 / Cookies（防抖音/小红书 403）</label>
+                <select id="yt-cookies" class="inp mono" onchange="toggleYtCookieFile()">
+                  <option value="none">不使用 Cookies</option>
+                  <option value="firefox">Firefox 登录态</option>
+                  <option value="chrome">Chrome 登录态</option>
+                  <option value="edge">Edge 登录态</option>
+                  <option value="file">指定 cookies.txt</option>
+                </select>
+              </div>
+              <div style="display:flex;flex-direction:column;justify-content:flex-end;">
+                <div style="display:flex;align-items:center;justify-content:space-between;background:rgba(255,179,71,0.10);border:1px solid rgba(255,179,71,0.3);border-radius:10px;padding:6px 10px;">
+                  <span class="mono c-amber" style="font-size:11px;font-weight:700;">⚡ 下载后 2x AI 超分</span>
+                  <div id="yt-sw-up" class="sw" onclick="act('toggle_upscale')"><i></i></div>
+                </div>
+              </div>
+            </div>
+
+            <div id="yt-cookie-path-wrap" class="hidden">
+              <label class="lbl">cookies.txt 路径</label>
+              <input id="yt-cookies-file" class="inp mono" placeholder="输入导出的 cookies.txt 完整路径" />
+            </div>
+
+            <div style="display:flex;gap:8px;">
+              <button onclick="startYtStudio()" id="yt-go-btn" class="btn btn-amber flex-1" style="padding:9px 14px;font-size:12.5px;">▶ 开始下载视频</button>
+              <button onclick="act('yt_cancel')" class="btn btn-rose" style="padding:9px 14px;">■ 取消（杀进程树）</button>
+            </div>
+
+            <div class="kpi-grid" style="margin-top:auto;">
+              <div class="kpi-tile"><div class="kpi-lbl">引擎状态</div><div id="yt-env-bins" class="kpi-val mono c-mint" style="font-size:11.5px;">检测中…</div></div>
+              <div class="kpi-tile"><div class="kpi-lbl">网络代理</div><div id="yt-env-proxy" class="kpi-val mono c-cyan" style="font-size:11.5px;">--</div></div>
+            </div>
+          </div>
+
+          <!-- Right: Live Progress & Output Log -->
+          <div class="panel-box" style="background:rgba(3,8,20,0.74);border:1px solid rgba(0,212,255,0.24);">
+            <div class="box-head">
+              <div class="box-title c-cyan mono">◤ 实时下载进度与终端</div>
+              <button onclick="act('yt_clear_log')" class="btn" style="padding:3px 9px;font-size:10.5px;">清空日志</button>
+            </div>
+
+            <div style="border-radius:14px;padding:12px 14px;background:rgba(2,5,14,0.88);border:1px solid rgba(255,179,71,0.25);display:flex;flex-direction:column;gap:8px;">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;">
+                <div id="yt-status" class="mono c-amber" style="font-size:12.5px;font-weight:700;">就绪</div>
+                <div class="mono" style="font-size:18px;font-weight:800;color:#fff;"><span id="yt-pct">0.0</span>%</div>
+              </div>
+              <div class="prog-track" style="height:7px;">
+                <div id="yt-bar" class="prog-fill" style="width:0%;background:linear-gradient(90deg,#ffb347,#ff3d71);box-shadow:0 0 12px rgba(255,179,71,0.65);"></div>
+              </div>
+              <div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;" class="mono">
+                <span>速率：<b id="yt-spd" class="c-cyan">-</b></span>
+                <span>剩余时间：<b id="yt-eta" class="c-mint">-</b></span>
+              </div>
+            </div>
+
+            <div id="yt-log-box" class="mono" style="flex:1;min-height:0;overflow-y:auto;border-radius:12px;padding:10px 12px;background:rgba(2,5,14,0.92);border:1px solid rgba(255,255,255,0.08);font-size:11px;line-height:1.55;color:#cbd5e1;user-select:text;">
+              等待投递视频链接…
             </div>
           </div>
         </div>
@@ -832,7 +924,7 @@
     }
     function switchView(v, btn) {
       S.curView = v;
-      ['cockpit','tasks','ariang','magnet'].forEach(k => document.getElementById('view-' + k).classList.toggle('hidden', k !== v));
+      ['cockpit','tasks','ariang','magnet','yt'].forEach(k => document.getElementById('view-' + k).classList.toggle('hidden', k !== v));
       document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === v));
       moveNavPill(btn || document.querySelector(`.nav-btn[data-view="${v}"]`));
       if (v === 'ariang' && !S.ariangLoaded) { document.getElementById('ariangFrame').src = S.urls.ariang; S.ariangLoaded = true; }
@@ -899,6 +991,24 @@
       if (!url) { toast('请先粘贴磁力链接或 40 位 InfoHash', 'amber'); return; }
       const j = await act('add_download', { url, engine });
       if (j && j.ok) inp.value = '';
+    }
+    let ytQuality = 'best', ytPrefsLoaded = false, pollFail = 0;
+    function pickYtQ(q, btn) {
+      ytQuality = q;
+      document.querySelectorAll('#yt-q-group button').forEach(b => {
+        b.className = (b.dataset.q === q) ? 'btn btn-amber' : 'btn';
+      });
+    }
+    function toggleYtCookieFile() {
+      const v = document.getElementById('yt-cookies').value;
+      document.getElementById('yt-cookie-path-wrap').classList.toggle('hidden', v !== 'file');
+    }
+    async function startYtStudio() {
+      const url = (document.getElementById('yt-url').value || '').trim();
+      if (!url) { toast('请先粘贴视频链接或分享口令', 'amber'); document.getElementById('yt-url').focus(); return; }
+      const cookies = document.getElementById('yt-cookies').value;
+      const cookies_file = (document.getElementById('yt-cookies-file').value || '').trim();
+      await act('yt_download', { url, quality: ytQuality, cookies, cookies_file, upscale: !!S.y.upscale });
     }
     function saveSettings() {
       act('save_cfg', {
@@ -979,8 +1089,40 @@
       document.getElementById('m-dht-sz').textContent = dhtN > 0 ? (`qB ${dhtN} 节点`) : (S.m.dht_dat_size > 0 ? fmtBytes(S.m.dht_dat_size) : '冷启动');
 
       document.getElementById('led-y').className = 'led ' + (S.y.on ? 'bg-amber led-on' : 'bg-off');
-      const by = document.getElementById('btn-y'); by.textContent = S.y.on ? '■ 关闭视频壳' : '▶ 启动视频壳'; by.className = 'btn flex-1 ' + (S.y.on ? 'btn-rose' : 'btn-amber');
+      const by = document.getElementById('btn-y'); by.textContent = S.y.on ? '■ 关外部壳' : '▶ 外部壳'; by.className = 'btn flex-1 ' + (S.y.on ? 'btn-rose' : '');
       document.getElementById('sw-up').classList.toggle('on', !!S.y.upscale);
+      document.getElementById('yt-sw-up').classList.toggle('on', !!S.y.upscale);
+
+      // YT Video Studio sync
+      const ys = d.yt_studio;
+      if (ys) {
+        document.getElementById('yt-status').textContent = ys.status || '就绪';
+        const pct = Number(ys.pct || 0);
+        document.getElementById('yt-pct').textContent = pct.toFixed(1);
+        document.getElementById('yt-bar').style.width = Math.min(100, pct) + '%';
+        document.getElementById('yt-spd').textContent = ys.speed || '-';
+        document.getElementById('yt-eta').textContent = ys.eta || '-';
+        document.getElementById('yt-env-bins').textContent =
+          `yt-dlp:${ys.has_ytdlp?'✔':'✘'} · ffmpeg:${ys.has_ffmpeg?'✔':'✘'} · V2X:${ys.has_video2x?'✔':'无'}`;
+        document.getElementById('yt-env-proxy').textContent = ys.proxy || '直连';
+        const goBtn = document.getElementById('yt-go-btn');
+        goBtn.disabled = !!ys.running;
+        goBtn.textContent = ys.running ? '⏳ 下载进行中…' : '▶ 开始下载视频';
+        if (!ytPrefsLoaded) {
+          if (ys.cookies) { document.getElementById('yt-cookies').value = ys.cookies; toggleYtCookieFile(); }
+          if (ys.cookies_file) document.getElementById('yt-cookies-file').value = ys.cookies_file;
+          ytPrefsLoaded = true;
+        }
+        const ybox = document.getElementById('yt-log-box');
+        if (Array.isArray(ys.logs) && ys.logs.length) {
+          const atB = ybox.scrollHeight - ybox.scrollTop - ybox.clientHeight < 24;
+          ybox.innerHTML = ys.logs.map(l => {
+            const c = l.includes('[ERROR]') ? 'c-rose' : (l.includes('[WARN]') ? 'c-amber' : (l.includes('[OK]') ? 'c-mint' : 'c-cyan'));
+            return `<div class="${c}">${esc(l)}</div>`;
+          }).join('');
+          if (atB) ybox.scrollTop = ybox.scrollHeight;
+        }
+      }
 
       // Tasks
       const aT = S.tasks.aria2 || [], qT = S.tasks.qbit || [];
@@ -1066,7 +1208,17 @@
     }
 
     async function pollState() {
-      try { const r = await fetch('/api/state', { cache:'no-store' }); if (r.ok) applyState(await r.json()); } catch (e) {}
+      try {
+        const r = await fetch('/api/state', { cache:'no-store' });
+        if (r.ok) { pollFail = 0; applyState(await r.json()); return; }
+      } catch (e) {}
+      pollFail++;
+      if (pollFail === 2) {
+        const tk = document.getElementById('ticker');
+        tk.textContent = '[WARN ] 后端服务已断开，请重新双击桌面「启动面板.bat」启动服务';
+        tk.className = 'mono c-rose';
+        toast('后端服务未连接，请重新双击启动面板.bat', 'rose');
+      }
     }
 
     // ==================== SILKY FLUID CURSOR + GLOBAL 3D COCKPIT PARALLAX ====================
@@ -1096,17 +1248,17 @@
     const modSprings = [];
     document.querySelectorAll('.mod-card').forEach(el => {
       const gl = el.querySelector('.mod-glare');
-      const sp = { el, gl, rx:0, ry:0, trx:0, try:0, tz:0, ttz:0 };
+      const sp = { el, gl, rx:0, ry:0, trx:0, try:0, ty:0, tty:0 };
       modSprings.push(sp);
       el.addEventListener('mousemove', e => {
         const r = el.getBoundingClientRect();
         const x = e.clientX - r.left, y = e.clientY - r.top;
-        sp.trx = ((y/r.height)-0.5) * -14;
-        sp.try = ((x/r.width)-0.5) * 14;
-        sp.ttz = 16;
+        sp.trx = ((y/r.height)-0.5) * -7;
+        sp.try = ((x/r.width)-0.5) * 7;
+        sp.tty = -4;
         if (gl) { gl.style.setProperty('--gx', x+'px'); gl.style.setProperty('--gy', y+'px'); }
       });
-      el.addEventListener('mouseleave', () => { sp.trx = 0; sp.try = 0; sp.ttz = 0; });
+      el.addEventListener('mouseleave', () => { sp.trx = 0; sp.try = 0; sp.tty = 0; });
     });
 
     // ==================== MULTI-CANVAS 60FPS 3D CONSOLE RENDERER ====================
@@ -1143,16 +1295,10 @@
 
       const normMX = (mX / (window.innerWidth || 1) - 0.5) * 2;
       const normMY = (mY / (window.innerHeight || 1) - 0.5) * 2;
-      if (window.innerWidth > 1180 && S.curView === 'cockpit') {
-        rigRY += (normMX * 2.4 - rigRY) * 0.06;
-        rigRX += (-normMY * 1.8 - rigRX) * 0.06;
-        cockpitRig.style.transform = `rotateX(${rigRX.toFixed(2)}deg) rotateY(${rigRY.toFixed(2)}deg)`;
-      } else { cockpitRig.style.transform = ''; }
-
       for (const sp of modSprings) {
-        sp.rx += (sp.trx - sp.rx) * 0.14; sp.ry += (sp.try - sp.ry) * 0.14; sp.tz += (sp.ttz - sp.tz) * 0.14;
-        sp.el.style.transform = (Math.abs(sp.rx)>0.02||Math.abs(sp.ry)>0.02||sp.tz>0.1)
-          ? `rotateX(${sp.rx.toFixed(2)}deg) rotateY(${sp.ry.toFixed(2)}deg) translateZ(${sp.tz.toFixed(1)}px)` : '';
+        sp.rx += (sp.trx - sp.rx) * 0.16; sp.ry += (sp.try - sp.ry) * 0.16; sp.ty += (sp.tty - sp.ty) * 0.16;
+        sp.el.style.transform = (Math.abs(sp.rx)>0.02||Math.abs(sp.ry)>0.02||Math.abs(sp.ty)>0.05)
+          ? `perspective(1100px) rotateX(${sp.rx.toFixed(2)}deg) rotateY(${sp.ry.toFixed(2)}deg) translateY(${sp.ty.toFixed(1)}px)` : '';
       }
 
       const totalMbps = ((S.a.dn||0) + (S.q.dn||0)) / (1024*1024);
