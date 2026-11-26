@@ -412,6 +412,7 @@
         </div>
         <button onclick="act('selfcheck')" class="btn btn-pill">🩺 自检</button>
         <button onclick="act('backup')" class="btn btn-pill">💾 备份</button>
+        <button onclick="toggleGuide()" class="btn btn-mint btn-pill" title="查看使用教程与排错指南">📖 教程</button>
         <button onclick="toggleDrawer()" class="btn btn-cyan btn-pill">⚙ 设置</button>
         <button onclick="askConfirm('确认一键停止全部服务？','按 Aria2 → qBittorrent → YT 壳顺序安全停机，仅停止本面板记录的 PID。',()=>act('stop_all'))" class="btn btn-rose btn-pill">■ 全停</button>
       </div>
@@ -872,6 +873,114 @@
     </div>
   </aside>
 
+  <!-- INTERACTIVE USAGE GUIDE MODAL -->
+  <div id="guide-wrap" class="modal-wrap hidden" onclick="if(event.target===this)toggleGuide()">
+    <div class="console-glass" style="max-width:780px;width:94vw;max-height:86vh;border-radius:26px;padding:20px;display:flex;flex-direction:column;gap:14px;border-color:rgba(0,245,184,0.36);overflow:hidden;">
+      <div class="box-head" style="padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,0.10);">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span class="led bg-mint led-on"></span>
+          <div>
+            <div style="font-size:15px;font-weight:800;color:#fff;">📖 DownloadStack 3D 控制台使用教程</div>
+            <div class="box-sub mono">全引擎上手 · 磁力/视频技巧 · 排错速查（按 Esc 可关闭）</div>
+          </div>
+        </div>
+        <button onclick="toggleGuide()" class="btn btn-pill" style="padding:4px 11px;">✕ 关闭</button>
+      </div>
+
+      <!-- Guide Tabs -->
+      <div style="display:flex;gap:6px;flex-wrap:wrap;" id="guide-tabs">
+        <button onclick="pickGuide('start',this)" data-g="start" class="btn btn-mint btn-pill">🚀 1 分钟上手</button>
+        <button onclick="pickGuide('dl',this)" data-g="dl" class="btn btn-pill">⚡ 直链 &amp; BT</button>
+        <button onclick="pickGuide('magyt',this)" data-g="magyt" class="btn btn-pill">🧲 磁力 &amp; 🎬 视频</button>
+        <button onclick="pickGuide('fix',this)" data-g="fix" class="btn btn-pill">🩺 排错 &amp; 目录</button>
+      </div>
+
+      <!-- Guide Body -->
+      <div style="flex:1;overflow-y:auto;padding-right:4px;font-size:12.5px;line-height:1.75;color:#dbeafe;">
+        <!-- TAB 1: Quick Start -->
+        <div id="g-start" style="display:flex;flex-direction:column;gap:10px;">
+          <div class="kpi-tile" style="padding:12px 14px;border-color:rgba(0,245,184,0.28);">
+            <div class="c-mint mono" style="font-weight:700;margin-bottom:4px;">0 · 先看状态灯（3 种状态一眼看懂）</div>
+            <div><b class="c-mint">● 绿 / 青 / 紫亮灯</b>：服务在线，可随时投递任务。</div>
+            <div><b class="c-dim">● 灰灯 OFFLINE</b>：服务未启动，点击对应卡片上的「▶ 启动」即可拉起。</div>
+            <div><b class="c-rose">● 红灯 ERROR</b>：端口已通但认证或接口异常，点该卡的「⚡ 测试」并展开底部日志查看原因。</div>
+          </div>
+          <div class="kpi-tile" style="padding:12px 14px;border-color:rgba(0,212,255,0.28);">
+            <div class="c-cyan mono" style="font-weight:700;margin-bottom:4px;">1 · 最省事用法：中枢「万能极速直投舱」</div>
+            <div>在 3D 控制台正中间输入框粘贴任意链接，系统会自动识别并分流：</div>
+            <div>· <b>HTTP / HTTPS 直链</b> → 自动交给 <b class="c-mint">Aria2</b> 多线程高速下载</div>
+            <div>· <b>magnet:? 磁力 / 40 位 InfoHash</b> → 自动补全公共 Tracker 并预取 <code class="mono">.torrent</code>，秒下不卡元数据</div>
+            <div>· <b>YouTube / B站 / 抖音 / 小红书 链接</b> → 自动调用 <b class="c-amber">yt-dlp</b> 下载视频</div>
+          </div>
+          <div class="kpi-tile" style="padding:12px 14px;">
+            <div class="c-violet mono" style="font-weight:700;margin-bottom:4px;">2 · 顶部 5 大工作台</div>
+            <div><b>✦ 3D 控制台</b>（全局监控与一键启停） · <b>⚡ 任务队列</b>（暂停/继续/删除真实任务） · <b>🌐 内置 AriaNg</b>（同源免端口报错） · <b>🧲 磁力工坊</b>（磁力解析与 DHT 修复） · <b>🎬 YT 视频</b>（画质、Cookies 与 2x 超分）。</div>
+          </div>
+        </div>
+
+        <!-- TAB 2: Aria2 & qBittorrent -->
+        <div id="g-dl" class="hidden" style="display:flex;flex-direction:column;gap:10px;">
+          <div class="kpi-tile" style="padding:12px 14px;border-color:rgba(0,245,184,0.28);">
+            <div class="c-mint mono" style="font-weight:700;margin-bottom:4px;">⚡ 普通文件 / 直链下载（Aria2 + AriaNg）</div>
+            <div>1. 底部 <b>ARIA2</b> 卡片点「▶ 启动」让状态灯变绿。</div>
+            <div>2. 直接在中间直投舱粘链接回车，或点顶部「🌐 内置 AriaNg」/ 卡片「↗ 跳转 AriaNg」（已同源挂载并自动注入 RPC Token，无需手动填密钥）。</div>
+            <div>3. 支持断点续传，所有任务都可在「⚡ 任务队列」里暂停、继续或移除。</div>
+          </div>
+          <div class="kpi-tile" style="padding:12px 14px;border-color:rgba(0,212,255,0.28);">
+            <div class="c-cyan mono" style="font-weight:700;margin-bottom:4px;">🌐 BT / PT 种子下载（qBittorrent）</div>
+            <div>1. 底部 <b>qBITTORRENT</b> 卡片点「▶ 启动」→ 点「↗ 跳转 WebUI」打开管理页。</div>
+            <div>2. 支持直接拖入 <code class="mono">.torrent</code> 文件，或在「🧲 磁力工坊」中一键增强投递至 qBittorrent。</div>
+            <div>3. 若你在 qBittorrent 开启了本机免密（<code class="mono">LocalHostAuth=false</code>），本面板会自动免密探测；否则在右上角「⚙ 设置」填入 WebUI 账号密码即可。</div>
+            <div class="c-amber" style="font-size:11.5px;margin-top:4px;">提示：PT 站下载完成后请保持做种，不要随意删除种子任务。</div>
+          </div>
+        </div>
+
+        <!-- TAB 3: Magnet & YT Video -->
+        <div id="g-magyt" class="hidden" style="display:flex;flex-direction:column;gap:10px;">
+          <div class="kpi-tile" style="padding:12px 14px;border-color:rgba(168,85,247,0.34);">
+            <div class="c-violet mono" style="font-weight:700;margin-bottom:4px;">🧲 磁力链接 / DHT 加速（磁力工坊）</div>
+            <div>1. 切换到顶部 <b>「🧲 磁力工坊」</b>，粘贴 <code class="mono">magnet:?</code> 或纯 40 位 InfoHash，点「🔍 校验解析」可预览 Hash 与 Tracker。</div>
+            <div>2. 点击「🧲 增强投递至 qBittorrent」或「⚡ 增强投递至 Aria2」，后台会自动补全公共高速 Tracker，并优先预取经 SHA1 校验的 <code class="mono">.torrent</code>，跳过漫长的元数据等待。</div>
+            <div>3. 若发现 DHT 节点为 0 或磁力没速度，点击「🔧 一键修复 DHT/磁力」与「🌐 更新并热载 Tracker」即可即时生效。</div>
+          </div>
+          <div class="kpi-tile" style="padding:12px 14px;border-color:rgba(255,179,71,0.34);">
+            <div class="c-amber mono" style="font-weight:700;margin-bottom:4px;">🎬 平台视频下载 &amp; 2x AI 超分（YT 视频工坊）</div>
+            <div>1. 切换到顶部 <b>「🎬 YT 视频」</b>，粘贴视频链接或抖音/小红书分享口令（会自动提取其中的链接）。</div>
+            <div>2. 选择清晰度（<b>最佳 MP4 / ≤1080P / ≤720P / 仅音频 MP3</b>），系统会自动透传当前系统代理。</div>
+            <div>3. <b>遇抖音 / 小红书 403 或提示登录？</b> 在「登录态 / Cookies」下拉框选择你已登录该站的 Firefox / Chrome / Edge，或指定导出的 <code class="mono">cookies.txt</code>（会自动记住）。</div>
+            <div>4. 打开 <b>「⚡ 2x AI 超分」</b> 开关后，若本机检测到 Video2X 将在下载完成后自动超分（未安装会自动跳过，不影响视频保存）。</div>
+          </div>
+        </div>
+
+        <!-- TAB 4: Troubleshoot & Paths -->
+        <div id="g-fix" class="hidden" style="display:flex;flex-direction:column;gap:10px;">
+          <div class="kpi-tile" style="padding:12px 14px;border-color:rgba(255,61,113,0.3);">
+            <div class="c-rose mono" style="font-weight:700;margin-bottom:4px;">🩺 三步快速排错</div>
+            <div>1. 点击顶部 <b>「🩺 自检」</b>，一次性体检全部端口（18550 / 6800 / 8080）、核心文件与 RPC/WebUI 连通性。</div>
+            <div>2. 展开底部日志条，红色 <code class="mono">[ERROR]</code> 行会直接标明失败原因（如密码错、端口占用、缺组件）。</div>
+            <div>3. 面板只操作自己记录的 PID 或通过官方 API 优雅关闭，点击「■ 全停」绝不会误杀你其他程序。</div>
+          </div>
+          <div class="kpi-tile mono" style="padding:12px 14px;font-size:11.5px;">
+            <div class="c-cyan" style="font-weight:700;margin-bottom:6px;">📂 当前本机成品与配置路径</div>
+            <div><span class="c-dim">总下载目录：</span><span id="gp-dl" class="c-mint">-</span></div>
+            <div><span class="c-dim">qB 种子目录：</span><span id="gp-qb" class="c-cyan">-</span></div>
+            <div><span class="c-dim">YT 视频目录：</span><span id="gp-yt" class="c-amber">-</span></div>
+            <div><span class="c-dim">Aria2 配置：</span><span id="gp-a2" class="c-dim">-</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.10);flex-wrap:wrap;">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button onclick="toggleGuide();switchView('magnet',document.querySelector('[data-view=magnet]'))" class="btn btn-violet">去磁力工坊</button>
+          <button onclick="toggleGuide();switchView('yt',document.querySelector('[data-view=yt]'))" class="btn btn-amber">去 YT 视频</button>
+          <button onclick="toggleGuide();act('selfcheck')" class="btn btn-cyan">🩺 一键自检</button>
+        </div>
+        <button onclick="toggleGuide()" class="btn btn-mint btn-pill">我知道了</button>
+      </div>
+    </div>
+  </div>
+
   <!-- CONFIRM MODAL -->
   <div id="modal-wrap" class="modal-wrap hidden">
     <div class="modal-box console-glass" style="border-color:rgba(255,61,113,0.48);">
@@ -1025,6 +1134,19 @@
     function closeConfirm() { document.getElementById('modal-wrap').classList.add('hidden'); modalCb=null; }
     document.getElementById('modal-ok').addEventListener('click', () => { if (modalCb) modalCb(); closeConfirm(); });
     function toggleDrawer() { document.getElementById('drawer').classList.toggle('open'); document.getElementById('drawer-mask').classList.toggle('hidden'); }
+    function toggleGuide() { document.getElementById('guide-wrap').classList.toggle('hidden'); }
+    function pickGuide(id, btn) {
+      ['start','dl','magyt','fix'].forEach(k => document.getElementById('g-' + k).classList.toggle('hidden', k !== id));
+      document.querySelectorAll('#guide-tabs button').forEach(b => {
+        b.className = (b.dataset.g === id) ? 'btn btn-mint btn-pill' : 'btn btn-pill';
+      });
+    }
+    window.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        document.getElementById('guide-wrap').classList.add('hidden');
+        closeConfirm();
+      }
+    });
     function toggleLogSheet() {
       const sh = document.getElementById('log-sheet'); sh.classList.toggle('open');
       document.getElementById('log-btn').textContent = sh.classList.contains('open') ? '收起日志 ▼' : '展开日志 ▲';
@@ -1177,6 +1299,10 @@
 
       const cfg = d.cfg;
       if (cfg) {
+        document.getElementById('gp-dl').textContent = cfg.paths?.downloads || '-';
+        document.getElementById('gp-qb').textContent = cfg.qbit?.save_dir || '-';
+        document.getElementById('gp-yt').textContent = d.yt_studio?.out_dir || '-';
+        document.getElementById('gp-a2').textContent = cfg.aria2?.conf || '-';
         document.getElementById('port-a').textContent = ':' + (cfg.aria2?.port || 6800);
         document.getElementById('port-q').textContent = ':' + (cfg.qbit?.port || 8080);
         document.getElementById('sw-auto-panel').classList.toggle('on', !!cfg.ui?.autostart_panel);
