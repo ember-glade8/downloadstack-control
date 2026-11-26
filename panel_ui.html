@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DownloadStack // Control 3D</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: #020308; color: #f0f7ff;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+      user-select: none; -webkit-font-smoothing: antialiased;
+    }
+    button, input { font-family: inherit; }
+
+    #scene3d { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 0; cursor: grab; }
+    #scene3d:active { cursor: grabbing; }
+
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+    .hidden { display: none !important; }
+
+    .hud-glass {
+      background: linear-gradient(145deg, rgba(12, 20, 38, 0.58), rgba(5, 9, 20, 0.74));
+      backdrop-filter: blur(24px) saturate(170%);
+      -webkit-backdrop-filter: blur(24px) saturate(170%);
+      border: 1px solid rgba(160, 220, 255, 0.14);
+      box-shadow: 0 24px 60px -18px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+    }
+
+    /* Overlay Layout */
+    .hud-layer {
+      position: fixed; inset: 0; z-index: 10; pointer-events: none;
+      display: flex; flex-direction: column; justify-content: space-between;
+      padding: 16px 20px;
+    }
+
+    /* Top Bar */
+    .topbar {
+      pointer-events: auto; max-width: 1440px; width: 100%; margin: 0 auto;
+      border-radius: 999px; padding: 8px 16px;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand-icon {
+      width: 34px; height: 34px; border-radius: 999px;
+      background: linear-gradient(135deg, rgba(0,245,184,0.34), rgba(0,212,255,0.34));
+      border: 1px solid rgba(0,245,184,0.58);
+      box-shadow: 0 0 20px rgba(0,245,184,0.45);
+      display: flex; align-items: center; justify-content: center; color: #b8ffec;
+    }
+    .brand-title { font-size: 13px; font-weight: 700; letter-spacing: 0.1em; color: #fff; }
+    .brand-title span { color: #67e8f9; font-weight: 400; }
+    .brand-sub { font-size: 10px; color: #94a3b8; margin-top: 1px; }
+
+    .top-stats {
+      display: flex; align-items: center; gap: 18px;
+      padding: 5px 18px; border-radius: 999px;
+      background: rgba(2, 6, 16, 0.62); border: 1px solid rgba(255,255,255,0.10);
+    }
+    .stat-item { display: flex; align-items: center; gap: 8px; }
+    .stat-lbl { font-size: 10px; color: #94a3b8; }
+    .stat-dn {
+      font-size: 14px; font-weight: 700;
+      background: linear-gradient(90deg, #6ee7b7, #a5f3fc, #fff);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .stat-up { font-size: 12px; font-weight: 600; color: #67e8f9; }
+    .stat-div { width: 1px; height: 14px; background: rgba(255,255,255,0.14); }
+    .top-actions { display: flex; align-items: center; gap: 6px; }
+
+    /* Center Reticle */
+    .center-stage { flex: 1; position: relative; pointer-events: none; }
+    .focus-pill {
+      position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 8px;
+      padding: 5px 14px; border-radius: 999px;
+      background: rgba(2, 6, 16, 0.48); border: 1px solid rgba(255,255,255,0.10);
+      backdrop-filter: blur(12px); font-size: 10.5px; color: #cbd5e1; white-space: nowrap;
+    }
+    .focus-dot { width: 6px; height: 6px; border-radius: 999px; background: #00f5b8; box-shadow: 0 0 8px #00f5b8; }
+
+    /* Bottom Container */
+    .bottom-wrap { max-width: 1440px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+    .pods-grid {
+      pointer-events: auto; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px;
+    }
+
+    /* 3D Engine Pod */
+    .pod-wrap { perspective: 1100px; }
+    .pod {
+      position: relative; border-radius: 22px; padding: 1.5px;
+      background: linear-gradient(135deg, rgba(255,255,255,0.18), rgba(255,255,255,0.03) 50%, var(--c1, #00f5b8));
+      transform-style: preserve-3d; will-change: transform;
+      transition: box-shadow 0.3s ease;
+      box-shadow: 0 24px 54px -18px rgba(0,0,0,0.88);
+    }
+    .pod::before {
+      content: ""; position: absolute; inset: -1px; border-radius: inherit;
+      background: conic-gradient(from var(--ang, 0deg), transparent 0deg, transparent 210deg, var(--c1, #00f5b8) 295deg, var(--c2, #00d4ff) 335deg, transparent 360deg);
+      opacity: 0.25; transition: opacity 0.3s; animation: spin 4.2s linear infinite; z-index: 0;
+    }
+    .pod:hover::before { opacity: 1; }
+    .pod:hover { box-shadow: 0 32px 70px -15px rgba(0,0,0,0.95), 0 0 38px -8px var(--glow, rgba(0,245,184,0.45)); }
+    @keyframes spin { to { --ang: 360deg; } }
+    @property --ang { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+
+    .pod-inner {
+      position: relative; z-index: 1; border-radius: 20.5px; padding: 16px;
+      background: linear-gradient(160deg, rgba(10, 17, 34, 0.80), rgba(4, 7, 16, 0.90));
+      backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px);
+      overflow: hidden; transform-style: preserve-3d;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .pod-glare {
+      position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.25s;
+      background: radial-gradient(280px circle at var(--gx, 50%) var(--gy, 50%), var(--glare, rgba(0,245,184,0.2)), transparent 60%);
+    }
+    .pod:hover .pod-glare { opacity: 1; }
+    .z-pop { transform: translateZ(20px); position: relative; z-index: 2; }
+
+    .pod-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .pod-id { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .pod-name { font-size: 14px; font-weight: 700; color: #fff; letter-spacing: 0.02em; }
+    .pod-port { font-size: 10px; font-weight: 400; margin-left: 4px; opacity: 0.85; }
+    .pod-meta { font-size: 10.5px; color: #94a3b8; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pod-speed { text-align: right; flex-shrink: 0; }
+    .pod-speed-val { font-size: 15px; font-weight: 700; }
+    .pod-speed-st { font-size: 9.5px; letter-spacing: 0.06em; margin-top: 1px; }
+    .pod-btns { display: flex; align-items: center; gap: 6px; }
+    .flex-1 { flex: 1; }
+
+    /* LED Sonar */
+    .led { position: relative; width: 10px; height: 10px; border-radius: 999px; flex-shrink: 0; }
+    .led-on::after {
+      content: ""; position: absolute; inset: 0; border-radius: 999px;
+      background: currentColor; animation: sonar 1.8s ease-out infinite;
+    }
+    @keyframes sonar { 0% { transform: scale(1); opacity: 0.85; } 100% { transform: scale(2.8); opacity: 0; } }
+
+    /* Tactile Buttons */
+    .cbtn {
+      position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+      padding: 7px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;
+      border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.06); color: #eaf4ff;
+      cursor: pointer; transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); white-space: nowrap;
+    }
+    .cbtn:hover { transform: translateY(-2px) scale(1.03); border-color: var(--br, #00d4ff); box-shadow: 0 0 18px -3px var(--bg, rgba(0,212,255,0.5)); color: #fff; }
+    .cbtn:active { transform: scale(0.95); }
+    .cbtn-pill { border-radius: 999px; padding: 6px 12px; font-size: 11.5px; }
+    .cbtn-icon { padding: 7px 9px; }
+    .cbtn-mint { --br:#00f5b8; --bg:rgba(0,245,184,0.55); background: linear-gradient(135deg, rgba(0,245,184,0.26), rgba(0,212,255,0.12)); border-color: rgba(0,245,184,0.45); color: #b8ffec; }
+    .cbtn-cyan { --br:#00d4ff; --bg:rgba(0,212,255,0.55); background: linear-gradient(135deg, rgba(0,212,255,0.22), rgba(99,102,241,0.12)); border-color: rgba(0,212,255,0.4); color: #c4f4ff; }
+    .cbtn-amber { --br:#ffb347; --bg:rgba(255,179,71,0.55); background: linear-gradient(135deg, rgba(255,179,71,0.24), rgba(255,90,95,0.1)); border-color: rgba(255,179,71,0.42); color: #ffe4b5; }
+    .cbtn-rose { --br:#ff3d71; --bg:rgba(255,61,113,0.6); background: linear-gradient(135deg, rgba(255,61,113,0.28), rgba(168,85,247,0.12)); border-color: rgba(255,61,113,0.48); color: #ffc8d6; }
+
+    /* Upscale Pill & Switch */
+    .up-pill {
+      display: flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 999px;
+      background: rgba(255,179,71,0.10); border: 1px solid rgba(255,179,71,0.28);
+      font-size: 10.5px; font-weight: 600; color: #fde68a; flex-shrink: 0;
+    }
+    .sw { width: 36px; height: 19px; border-radius: 999px; background: rgba(255,255,255,0.13); border: 1px solid rgba(255,255,255,0.18); position: relative; cursor: pointer; transition: all 0.25s; }
+    .sw i { display: block; width: 13px; height: 13px; border-radius: 999px; background: #cbd5e1; position: absolute; top: 2px; left: 2px; transition: transform 0.28s cubic-bezier(0.34,1.56,0.64,1), background 0.2s; }
+    .sw.on { background: linear-gradient(90deg, #ff9f1c, #ffb347); box-shadow: 0 0 14px rgba(255,179,71,0.6); }
+    .sw.on i { transform: translateX(17px); background: #fff; }
+
+    /* Bottom Slim Log Strip */
+    .log-bar {
+      pointer-events: auto; border-radius: 16px; padding: 8px 14px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .log-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .log-left { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; cursor: pointer; }
+    #miniWave { width: 128px; height: 24px; flex-shrink: 0; border-radius: 6px; background: rgba(2,6,16,0.65); border: 1px solid rgba(255,255,255,0.10); }
+    .ticker { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .log-sheet { max-height: 0; opacity: 0; transition: max-height 0.32s cubic-bezier(0.22,1,0.36,1), opacity 0.25s ease; overflow: hidden; }
+    .log-sheet.open { max-height: 170px; opacity: 1; }
+    .log-list {
+      height: 155px; overflow-y: auto; border-radius: 12px; padding: 10px 12px;
+      background: rgba(2, 5, 14, 0.88); border: 1px solid rgba(255,255,255,0.08);
+      font-size: 11px; line-height: 1.55; user-select: text;
+    }
+
+    /* Slide-over Drawer */
+    .mask { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,0.56); backdrop-filter: blur(4px); }
+    .drawer {
+      position: fixed; top: 12px; right: 12px; bottom: 12px; width: 390px; max-width: 92vw; z-index: 50;
+      border-radius: 26px; padding: 20px; display: flex; flex-direction: column; justify-content: space-between; gap: 16px;
+      overflow-y: auto; transform: translateX(110%); transition: transform 0.36s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .drawer.open { transform: translateX(0); }
+    .drawer-head { display: flex; align-items: center; justify-content: space-between; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.10); }
+    .sec-title { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; margin-bottom: 8px; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .grid-3 { display: grid; grid-template-columns: 2fr 1fr; gap: 8px; }
+    .inp {
+      width: 100%; border-radius: 10px; padding: 7px 10px; font-size: 11.5px; color: #fff;
+      background: rgba(2, 6, 16, 0.85); border: 1px solid rgba(255,255,255,0.12); outline: none;
+    }
+    .inp:focus { border-color: #00d4ff; }
+    .field-lbl { display: block; font-size: 10.5px; color: #94a3b8; margin-bottom: 3px; }
+    .sw-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #cbd5e1; padding: 4px 0; }
+    .tip-box {
+      border-radius: 14px; padding: 11px 12px; font-size: 11px; line-height: 1.55;
+      background: rgba(255,179,71,0.10); border: 1px solid rgba(255,179,71,0.28); color: #fef3c7;
+    }
+
+    /* Confirm Modal */
+    .modal-wrap {
+      position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,0.72); backdrop-filter: blur(6px);
+      display: flex; align-items: center; justify-content: center; padding: 16px;
+    }
+    .modal-box { max-width: 400px; width: 100%; border-radius: 24px; padding: 22px; display: flex; flex-direction: column; gap: 14px; }
+
+    /* Toast */
+    #toasts { position: fixed; top: 74px; left: 50%; transform: translateX(-50%); z-index: 70; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
+    .toast { border-radius: 999px; padding: 7px 16px; font-size: 12px; font-weight: 600; transition: all 0.3s ease; }
+
+    /* Colors */
+    .c-mint { color: #6ee7b7; } .c-cyan { color: #67e8f9; } .c-amber { color: #fcd34d; } .c-rose { color: #fda4af; } .c-dim { color: #64748b; }
+    .bg-mint { background: #00f5b8; color: #00f5b8; } .bg-cyan { background: #00d4ff; color: #00d4ff; }
+    .bg-amber { background: #ffb347; color: #ffb347; } .bg-rose { background: #ff3d71; color: #ff3d71; } .bg-off { background: #475569; color: #475569; }
+
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-thumb { background: rgba(0,212,255,0.3); border-radius: 999px; }
+
+    @media (max-width: 960px) {
+      .top-stats { display: none; }
+      .pods-grid { grid-template-columns: 1fr; }
+      .hud-layer { overflow-y: auto; }
+    }
+  </style>
+</head>
+<body>
+
+  <canvas id="scene3d"></canvas>
+  <div id="toasts"></div>
+
+  <div class="hud-layer">
+    <!-- TOP FLOATING BAR -->
+    <header class="topbar hud-glass">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3">
+            <polygon points="12 2 21 7 21 17 12 22 3 17 3 7 12 2"/>
+          </svg>
+        </div>
+        <div>
+          <div class="brand-title">DOWNLOADSTACK <span>// 3D</span></div>
+          <div class="brand-sub mono">拖拽旋转 · 滚轮缩放 · UP <span id="uptime">00:00:00</span></div>
+        </div>
+      </div>
+
+      <div class="top-stats">
+        <div class="stat-item"><span class="stat-lbl mono">总下行</span><span id="top-dn" class="stat-dn mono">0.0 B/s</span></div>
+        <span class="stat-div"></span>
+        <div class="stat-item"><span class="stat-lbl mono">总上行</span><span id="top-up" class="stat-up mono">0.0 B/s</span></div>
+        <span class="stat-div"></span>
+        <div class="stat-item mono" style="font-size:11px;">
+          <span class="c-mint"><b id="top-tasks">0</b> 任务</span>
+          <span style="color:#475569">/</span>
+          <span class="c-amber"><b id="top-seed">0</b> 做种</span>
+        </div>
+      </div>
+
+      <div class="top-actions">
+        <button onclick="act('selfcheck')" class="cbtn cbtn-pill" title="一键自检">🩺 自检</button>
+        <button onclick="act('backup')" class="cbtn cbtn-pill" title="一键备份整套配置">💾 备份</button>
+        <button onclick="toggleDrawer()" class="cbtn cbtn-cyan cbtn-pill" title="工具与系统设置">⚙ 设置</button>
+        <button onclick="askConfirm('确认停止全部服务？', '按 Aria2 → qBittorrent → YT 壳 顺序安全停止，仅停止本面板记录的 PID。', () => act('stop_all'))" class="cbtn cbtn-rose cbtn-pill">■ 全停</button>
+      </div>
+    </header>
+
+    <!-- OPEN 3D CENTER STAGE -->
+    <div class="center-stage">
+      <div class="focus-pill mono">
+        <span class="focus-dot"></span>
+        <span id="focus-label">CORE SYNC · 实时连接本地引擎</span>
+      </div>
+    </div>
+
+    <!-- BOTTOM 3 ENGINE PODS + SLIM LOG BAR -->
+    <div class="bottom-wrap">
+      <div class="pods-grid">
+
+        <!-- POD 1: ARIA2 -->
+        <div class="pod-wrap" onmouseenter="focusEngine(0)" onmouseleave="focusEngine(-1)">
+          <div class="pod" style="--c1:#00f5b8; --c2:#00d4ff; --glow:rgba(0,245,184,0.42); --glare:rgba(0,245,184,0.2);">
+            <div class="pod-inner">
+              <div class="pod-glare"></div>
+              <div class="pod-head z-pop">
+                <div class="pod-id">
+                  <span id="led-a" class="led bg-off"></span>
+                  <div>
+                    <div class="pod-name">ARIA2 <span id="port-a" class="pod-port mono c-mint">:6800</span></div>
+                    <div class="pod-meta mono" id="a-meta">0 任务 / 0 连接</div>
+                  </div>
+                </div>
+                <div class="pod-speed">
+                  <div id="a-speed" class="pod-speed-val mono c-mint">0.0 B/s</div>
+                  <div id="a-st" class="pod-speed-st mono c-dim">OFFLINE</div>
+                </div>
+              </div>
+              <div class="pod-btns z-pop">
+                <button onclick="toggleA()" id="btn-a" class="cbtn cbtn-mint flex-1">▶ 启动</button>
+                <button onclick="act('ariang')" class="cbtn cbtn-cyan flex-1">↗ AriaNg</button>
+                <button onclick="act('restart_a')" class="cbtn cbtn-icon" title="重启 Aria2">↻</button>
+                <button onclick="act('test_a')" class="cbtn cbtn-icon" title="RPC 连通性测试">⚡</button>
+                <button onclick="act('open_path', {key:'aria2_dl'})" class="cbtn cbtn-icon" title="打开 Aria2 成品目录">📂</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- POD 2: QBITTORRENT -->
+        <div class="pod-wrap" onmouseenter="focusEngine(1)" onmouseleave="focusEngine(-1)">
+          <div class="pod" style="--c1:#00d4ff; --c2:#8b5cf6; --glow:rgba(0,212,255,0.42); --glare:rgba(0,212,255,0.2);">
+            <div class="pod-inner">
+              <div class="pod-glare"></div>
+              <div class="pod-head z-pop">
+                <div class="pod-id">
+                  <span id="led-q" class="led bg-off"></span>
+                  <div>
+                    <div class="pod-name">qBITTORRENT <span id="port-q" class="pod-port mono c-cyan">:8080</span></div>
+                    <div class="pod-meta mono" id="q-meta">0 种子 / 0 做种</div>
+                  </div>
+                </div>
+                <div class="pod-speed">
+                  <div id="q-speed" class="pod-speed-val mono c-cyan">0.0 B/s</div>
+                  <div id="q-st" class="pod-speed-st mono c-dim">OFFLINE</div>
+                </div>
+              </div>
+              <div class="pod-btns z-pop">
+                <button onclick="toggleQ()" id="btn-q" class="cbtn cbtn-mint flex-1">▶ 启动</button>
+                <button onclick="act('webui')" class="cbtn cbtn-cyan flex-1">↗ WebUI</button>
+                <button onclick="act('test_q')" class="cbtn cbtn-icon" title="测试 WebUI 登录">⚡</button>
+                <button onclick="act('open_path', {key:'qbit_dl'})" class="cbtn cbtn-icon" title="打开 BT 下载目录">📂</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- POD 3: YT-DLP -->
+        <div class="pod-wrap" onmouseenter="focusEngine(2)" onmouseleave="focusEngine(-1)">
+          <div class="pod" style="--c1:#ffb347; --c2:#ff3d71; --glow:rgba(255,179,71,0.42); --glare:rgba(255,179,71,0.2);">
+            <div class="pod-inner">
+              <div class="pod-glare"></div>
+              <div class="pod-head z-pop">
+                <div class="pod-id">
+                  <span id="led-y" class="led bg-off"></span>
+                  <div>
+                    <div class="pod-name">YT-DLP 视频壳</div>
+                    <div class="pod-meta mono" id="y-meta">代理自动透传 · 进程树隔离</div>
+                  </div>
+                </div>
+                <div class="up-pill">
+                  <span>2x 超分</span>
+                  <div id="sw-up" class="sw" onclick="act('toggle_upscale')"><i></i></div>
+                </div>
+              </div>
+              <div class="pod-btns z-pop">
+                <button onclick="toggleY()" id="btn-y" class="cbtn cbtn-amber flex-1">▶ 启动下载壳</button>
+                <button onclick="act('open_path', {key:'yt_out'})" class="cbtn flex-1">📂 输出目录</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- BOTTOM SLIM WAVEFORM + EXPANDABLE TERMINAL -->
+      <div class="log-bar hud-glass">
+        <div class="log-row">
+          <div class="log-left" onclick="toggleLogSheet()">
+            <canvas id="miniWave" width="128" height="24"></canvas>
+            <div id="ticker" class="ticker mono c-mint">正在连接本地控制服务…</div>
+          </div>
+          <div class="top-actions">
+            <button onclick="toggleLogSheet()" id="log-toggle-btn" class="cbtn" style="padding:4px 10px;font-size:11px;">展开日志 ▲</button>
+            <button onclick="act('clear_log')" class="cbtn" style="padding:4px 10px;font-size:11px;">清空</button>
+            <button onclick="act('export_log')" class="cbtn cbtn-cyan" style="padding:4px 10px;font-size:11px;">导出</button>
+          </div>
+        </div>
+        <div id="log-sheet" class="log-sheet">
+          <div id="log-list" class="log-list mono"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT SLIDE-OVER SETTINGS & TOOLS DRAWER -->
+  <div id="drawer-mask" class="mask hidden" onclick="toggleDrawer()"></div>
+  <aside id="drawer" class="drawer hud-glass">
+    <div style="display:flex;flex-direction:column;gap:16px;">
+      <div class="drawer-head">
+        <div style="font-size:14px;font-weight:700;color:#fff;">⚙ 工具与系统设置</div>
+        <button onclick="toggleDrawer()" class="cbtn cbtn-pill" style="padding:4px 10px;">✕</button>
+      </div>
+
+      <div>
+        <div class="sec-title mono c-cyan">◤ 快捷维护</div>
+        <div class="grid-2">
+          <button onclick="act('ports')" class="cbtn">◎ 端口占用</button>
+          <button onclick="act('open_path', {key:'downloads'})" class="cbtn">📂 总下载目录</button>
+          <button onclick="act('open_path', {key:'aria2_conf'})" class="cbtn">📝 aria2.conf</button>
+          <button onclick="act('open_path', {key:'aria2_logdir'})" class="cbtn">📄 Aria2 日志</button>
+          <button onclick="act('open_path', {key:'qbit_cfg'})" class="cbtn">📁 qB 配置</button>
+          <button onclick="askConfirm('清理 Aria2 日志？', '仅删除 Aria2 日志目录内文件，不触碰配置与任务。', () => act('clean_logs'))" class="cbtn cbtn-amber">🧹 清理日志</button>
+          <button onclick="askConfirm('清理临时缓存？', '仅清理面板 cache 目录，不影响成品与任务。', () => act('clean_cache'))" class="cbtn cbtn-amber" style="grid-column:span 2;">🧹 清理面板临时缓存</button>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <div class="sec-title mono c-mint" style="margin-bottom:0;">◤ 连接参数（config.json）</div>
+        <div class="grid-3">
+          <div><label class="field-lbl">Aria2 RPC 主机</label><input id="f-a-host" class="inp mono" /></div>
+          <div><label class="field-lbl">端口</label><input id="f-a-port" class="inp mono" /></div>
+        </div>
+        <div><label class="field-lbl">Aria2 密钥文件</label><input id="f-a-secret" class="inp mono" /></div>
+        <div class="grid-3">
+          <div><label class="field-lbl">qBittorrent 主机</label><input id="f-q-host" class="inp mono" /></div>
+          <div><label class="field-lbl">端口</label><input id="f-q-port" class="inp mono" /></div>
+        </div>
+        <div class="grid-2">
+          <div><label class="field-lbl">qB 账号</label><input id="f-q-user" class="inp mono" /></div>
+          <div><label class="field-lbl">qB 密码</label><input id="f-q-pass" type="password" class="inp mono" /></div>
+        </div>
+        <div><label class="field-lbl">qB 保存目录</label><input id="f-q-save" class="inp mono" /></div>
+        <div><label class="field-lbl">外部视频脚本</label><input id="f-yt-bat" class="inp mono" /></div>
+        <div class="sw-row">
+          <span>开机自启本面板</span>
+          <div id="sw-auto-panel" class="sw" onclick="act('toggle_autostart_panel')"><i></i></div>
+        </div>
+        <div class="sw-row">
+          <span>开机后台拉起 Aria2</span>
+          <div id="sw-auto-aria2" class="sw" onclick="act('toggle_autostart_aria2')"><i></i></div>
+        </div>
+      </div>
+
+      <div class="tip-box">
+        <b>磁力 / DHT 提示：</b>代理或 NAT 环境下磁力取元数据慢时，优先直接拖入 <code class="mono c-cyan">.torrent</code> 种子文件到 qBittorrent。
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.10);">
+      <button onclick="saveSettings()" class="cbtn cbtn-mint flex-1">💾 保存并生效</button>
+      <button onclick="askConfirm('恢复默认配置？', '将把 config.json 重置为出厂默认值。', () => act('reset_cfg'))" class="cbtn cbtn-amber">重置</button>
+    </div>
+  </aside>
+
+  <!-- CONFIRM MODAL -->
+  <div id="modal-wrap" class="modal-wrap hidden">
+    <div class="modal-box hud-glass" style="border-color:rgba(255,61,113,0.42);">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span class="led bg-rose"></span>
+        <div id="modal-title" style="font-size:14px;font-weight:700;color:#fff;">确认操作</div>
+      </div>
+      <div id="modal-body" style="font-size:12px;color:#cbd5e1;line-height:1.6;"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:4px;">
+        <button onclick="closeConfirm()" class="cbtn cbtn-pill">取消</button>
+        <button id="modal-ok" class="cbtn cbtn-rose cbtn-pill">确认执行</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const S = {
+      a: { on: false, err: '', dn: 0, up: 0, task: 0, conn: 0 },
+      q: { on: false, err: '', dn: 0, up: 0, tor: 0, seed: 0 },
+      y: { on: false, upscale: false },
+      cfgLoaded: false,
+      focus: -1,
+      boost: 0,
+      wave: Array(40).fill(0)
+    };
+
+    function fmt(bps) {
+      let n = Number(bps) || 0;
+      const units = ['B/s', 'KiB/s', 'MiB/s', 'GiB/s'];
+      let i = 0;
+      while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+      return n.toFixed(1) + ' ' + units[i];
+    }
+
+    function toast(msg, tone = 'cyan') {
+      const box = document.getElementById('toasts');
+      const border = { mint:'rgba(0,245,184,0.55)', cyan:'rgba(0,212,255,0.55)', amber:'rgba(255,179,71,0.55)', rose:'rgba(255,61,113,0.65)' }[tone] || 'rgba(0,212,255,0.55)';
+      const color = { mint:'#a7f3d0', cyan:'#a5f3fc', amber:'#fde68a', rose:'#fecdd3' }[tone] || '#a5f3fc';
+      const el = document.createElement('div');
+      el.className = 'toast hud-glass';
+      el.style.borderColor = border; el.style.color = color;
+      el.textContent = msg;
+      box.appendChild(el);
+      S.boost = Math.min(2.2, S.boost + 0.85);
+      setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translateY(-10px)'; setTimeout(() => el.remove(), 300); }, 2200);
+    }
+
+    async function act(action, payload = {}) {
+      S.boost = Math.min(2.2, S.boost + 0.7);
+      try {
+        const res = await fetch('/api/action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, ...payload })
+        });
+        const j = await res.json();
+        if (j.msg) toast(j.msg, j.ok ? 'mint' : 'rose');
+        await pollState();
+      } catch (e) {
+        toast('请求失败：请确认面板服务正在运行', 'rose');
+      }
+    }
+
+    function toggleA() { act(S.a.on ? 'stop_a' : 'start_a'); }
+    function toggleQ() { act(S.q.on ? 'stop_q' : 'start_q'); }
+    function toggleY() { act(S.y.on ? 'stop_y' : 'start_y'); }
+
+    function saveSettings() {
+      act('save_cfg', {
+        a_host: document.getElementById('f-a-host').value,
+        a_port: document.getElementById('f-a-port').value,
+        a_secret: document.getElementById('f-a-secret').value,
+        q_host: document.getElementById('f-q-host').value,
+        q_port: document.getElementById('f-q-port').value,
+        q_user: document.getElementById('f-q-user').value,
+        q_pass: document.getElementById('f-q-pass').value,
+        q_save: document.getElementById('f-q-save').value,
+        yt_bat: document.getElementById('f-yt-bat').value
+      });
+      toggleDrawer();
+    }
+
+    let modalFn = null;
+    function askConfirm(title, body, fn) {
+      document.getElementById('modal-title').textContent = title;
+      document.getElementById('modal-body').textContent = body;
+      modalFn = fn;
+      document.getElementById('modal-wrap').classList.remove('hidden');
+    }
+    function closeConfirm() { document.getElementById('modal-wrap').classList.add('hidden'); modalFn = null; }
+    document.getElementById('modal-ok').addEventListener('click', () => { if (modalFn) modalFn(); closeConfirm(); });
+
+    function toggleDrawer() {
+      document.getElementById('drawer').classList.toggle('open');
+      document.getElementById('drawer-mask').classList.toggle('hidden');
+    }
+    function toggleLogSheet() {
+      const sh = document.getElementById('log-sheet');
+      sh.classList.toggle('open');
+      document.getElementById('log-toggle-btn').textContent = sh.classList.contains('open') ? '收起日志 ▼' : '展开日志 ▲';
+    }
+    function focusEngine(i) {
+      S.focus = i;
+      const labels = ['ARIA2 直链轨道聚焦', 'qBittorrent BT/PT 轨道聚焦', 'YT-DLP 视频轨道聚焦'];
+      document.getElementById('focus-label').textContent = i >= 0 ? labels[i] : 'CORE SYNC · 实时连接本地引擎';
+    }
+
+    function applyState(d) {
+      S.a = d.aria2 || S.a;
+      S.q = d.qbit || S.q;
+      S.y = d.yt || S.y;
+      if (Array.isArray(d.wave) && d.wave.length) S.wave = d.wave;
+
+      document.getElementById('uptime').textContent = d.uptime || '00:00:00';
+      document.getElementById('top-dn').textContent = fmt((S.a.dn || 0) + (S.q.dn || 0));
+      document.getElementById('top-up').textContent = fmt((S.a.up || 0) + (S.q.up || 0));
+      document.getElementById('top-tasks').textContent = S.a.task || 0;
+      document.getElementById('top-seed').textContent = S.q.seed || 0;
+
+      // Aria2
+      document.getElementById('a-speed').textContent = fmt(S.a.dn);
+      document.getElementById('a-meta').textContent = `${S.a.task || 0} 任务 / ${S.a.conn || 0} 连接`;
+      const ast = S.a.on ? 'ONLINE' : (S.a.err ? 'ERROR' : 'OFFLINE');
+      document.getElementById('a-st').textContent = ast;
+      document.getElementById('a-st').className = 'pod-speed-st mono ' + (S.a.on ? 'c-mint' : (S.a.err ? 'c-rose' : 'c-dim'));
+      document.getElementById('led-a').className = 'led ' + (S.a.on ? 'bg-mint led-on' : (S.a.err ? 'bg-rose led-on' : 'bg-off'));
+      const ba = document.getElementById('btn-a');
+      ba.textContent = S.a.on ? '■ 停止' : '▶ 启动';
+      ba.className = 'cbtn flex-1 ' + (S.a.on ? 'cbtn-rose' : 'cbtn-mint');
+
+      // qBit
+      document.getElementById('q-speed').textContent = fmt(S.q.dn);
+      document.getElementById('q-meta').textContent = `${S.q.tor || 0} 种子 / ${S.q.seed || 0} 做种`;
+      const qst = S.q.on ? 'ONLINE' : (S.q.err ? 'ERROR' : 'OFFLINE');
+      document.getElementById('q-st').textContent = qst;
+      document.getElementById('q-st').className = 'pod-speed-st mono ' + (S.q.on ? 'c-cyan' : (S.q.err ? 'c-rose' : 'c-dim'));
+      document.getElementById('led-q').className = 'led ' + (S.q.on ? 'bg-cyan led-on' : (S.q.err ? 'bg-rose led-on' : 'bg-off'));
+      const bq = document.getElementById('btn-q');
+      bq.textContent = S.q.on ? '■ 停止' : '▶ 启动';
+      bq.className = 'cbtn flex-1 ' + (S.q.on ? 'cbtn-rose' : 'cbtn-mint');
+
+      // YT
+      document.getElementById('led-y').className = 'led ' + (S.y.on ? 'bg-amber led-on' : 'bg-off');
+      const by = document.getElementById('btn-y');
+      by.textContent = S.y.on ? '■ 关闭下载壳' : '▶ 启动下载壳';
+      by.className = 'cbtn flex-1 ' + (S.y.on ? 'cbtn-rose' : 'cbtn-amber');
+      document.getElementById('sw-up').classList.toggle('on', !!S.y.upscale);
+
+      // Config sync (only fill inputs when drawer is closed so we never overwrite user typing)
+      const cfg = d.cfg;
+      if (cfg) {
+        document.getElementById('port-a').textContent = ':' + (cfg.aria2?.port || 6800);
+        document.getElementById('port-q').textContent = ':' + (cfg.qbit?.port || 8080);
+        document.getElementById('sw-auto-panel').classList.toggle('on', !!cfg.ui?.autostart_panel);
+        document.getElementById('sw-auto-aria2').classList.toggle('on', !!cfg.ui?.autostart_aria2);
+        if (!S.cfgLoaded || !document.getElementById('drawer').classList.contains('open')) {
+          document.getElementById('f-a-host').value = cfg.aria2?.host || '127.0.0.1';
+          document.getElementById('f-a-port').value = cfg.aria2?.port || 6800;
+          document.getElementById('f-a-secret').value = cfg.aria2?.secret || '';
+          document.getElementById('f-q-host').value = cfg.qbit?.host || '127.0.0.1';
+          document.getElementById('f-q-port').value = cfg.qbit?.port || 8080;
+          document.getElementById('f-q-user').value = cfg.qbit?.user || 'admin';
+          document.getElementById('f-q-pass').value = cfg.qbit?.pass || '';
+          document.getElementById('f-q-save').value = cfg.qbit?.save_dir || '';
+          document.getElementById('f-yt-bat').value = cfg.yt?.bat || '';
+          S.cfgLoaded = true;
+        }
+      }
+
+      // Logs
+      if (Array.isArray(d.logs) && d.logs.length) {
+        const last = d.logs[d.logs.length - 1];
+        const cls = s => s.includes('[ERROR]') ? 'c-rose' : (s.includes('[WARN') ? 'c-amber' : (s.includes('[OK') ? 'c-cyan' : 'c-mint'));
+        const tk = document.getElementById('ticker');
+        tk.textContent = last;
+        tk.className = 'ticker mono ' + cls(last);
+        const list = document.getElementById('log-list');
+        const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 24;
+        list.innerHTML = d.logs.map(l => `<div class="${cls(l)}">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>`).join('');
+        if (atBottom) list.scrollTop = list.scrollHeight;
+      } else {
+        document.getElementById('log-list').innerHTML = '';
+      }
+
+      drawMiniWave();
+    }
+
+    async function pollState() {
+      try {
+        const r = await fetch('/api/state', { cache: 'no-store' });
+        if (r.ok) applyState(await r.json());
+      } catch (e) {}
+    }
+
+    // ==================== SPRING 3D POD TILT ====================
+    const pods = [];
+    document.querySelectorAll('.pod').forEach(el => {
+      const gl = el.querySelector('.pod-glare');
+      const p = { el, gl, rx:0, ry:0, trx:0, try:0 };
+      pods.push(p);
+      el.addEventListener('mousemove', e => {
+        const r = el.getBoundingClientRect();
+        const x = e.clientX - r.left, y = e.clientY - r.top;
+        p.trx = ((y/r.height)-0.5) * -14;
+        p.try = ((x/r.width)-0.5) * 14;
+        if (gl) { gl.style.setProperty('--gx', x+'px'); gl.style.setProperty('--gy', y+'px'); }
+      });
+      el.addEventListener('mouseleave', () => { p.trx = 0; p.try = 0; });
+    });
+
+    // ==================== FULLSCREEN TRUE-3D SHADED SCENE ====================
+    const canvas = document.getElementById('scene3d');
+    const ctx = canvas.getContext('2d');
+    let W = 0, H = 0;
+    function resize() {
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      W = window.innerWidth; H = window.innerHeight;
+      canvas.width = W * dpr; canvas.height = H * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    let camRX = 0.28, camRY = 0.4, vRX = 0, vRY = 0.008, zoom = 1.0, targetZoom = 1.0;
+    let mx = 0, my = 0, drag = false, lx = 0, ly = 0;
+
+    canvas.addEventListener('mousedown', e => { drag = true; lx = e.clientX; ly = e.clientY; vRX = 0; vRY = 0; });
+    window.addEventListener('mouseup', () => drag = false);
+    window.addEventListener('mousemove', e => {
+      mx = (e.clientX / (W || 1) - 0.5) * 2;
+      my = (e.clientY / (H || 1) - 0.5) * 2;
+      if (!drag) return;
+      vRY = (e.clientX - lx) * 0.009; vRX = (e.clientY - ly) * 0.009;
+      camRY += vRY; camRX = Math.max(-1.1, Math.min(1.1, camRX + vRX));
+      lx = e.clientX; ly = e.clientY;
+    });
+    canvas.addEventListener('wheel', e => {
+      targetZoom = Math.max(0.65, Math.min(1.55, targetZoom - e.deltaY * 0.0008));
+    }, { passive: true });
+
+    const PHI = (1 + Math.sqrt(5)) / 2;
+    const icoV = [
+      [-1,PHI,0],[1,PHI,0],[-1,-PHI,0],[1,-PHI,0],
+      [0,-1,PHI],[0,1,PHI],[0,-1,-PHI],[0,1,-PHI],
+      [PHI,0,-1],[PHI,0,1],[-PHI,0,-1],[-PHI,0,1]
+    ].map(([x,y,z]) => { const l = Math.hypot(x,y,z); return [x/l,y/l,z/l]; });
+    const icoF = [
+      [0,11,5],[0,5,1],[0,1,7],[0,7,10],[0,10,11],
+      [1,5,9],[5,11,4],[11,10,2],[10,7,6],[7,1,8],
+      [3,9,4],[3,4,2],[3,2,6],[3,6,8],[3,8,9],
+      [4,9,5],[2,4,11],[6,2,10],[8,6,7],[9,8,1]
+    ];
+
+    const stars = Array.from({ length: 140 }, () => ({
+      x: (Math.random() - 0.5) * 14, y: (Math.random() - 0.5) * 9, z: (Math.random() - 0.5) * 14,
+      c: Math.random() > 0.5 ? '#00f5b8' : '#00d4ff'
+    }));
+    const streams = Array.from({ length: 48 }, (_, i) => ({ sat: i % 3, t: Math.random(), sp: 0.012 + Math.random() * 0.016 }));
+
+    let time = 0;
+    function render3D() {
+      time += 0.018;
+      for (const p of pods) {
+        p.rx += (p.trx - p.rx) * 0.14; p.ry += (p.try - p.ry) * 0.14;
+        p.el.style.transform = (Math.abs(p.rx)>0.02||Math.abs(p.ry)>0.02)
+          ? `rotateX(${p.rx.toFixed(2)}deg) rotateY(${p.ry.toFixed(2)}deg) translateZ(10px)` : '';
+      }
+
+      const mbps = ((S.a.dn || 0) + (S.q.dn || 0)) / (1024 * 1024);
+      const speed = 0.005 + Math.min(0.016, mbps * 0.0008) + S.boost * 0.018;
+      S.boost *= 0.93;
+      zoom += (targetZoom - zoom) * 0.08;
+      if (!drag) { vRY += (speed - vRY) * 0.04; vRX *= 0.92; camRY += vRY; camRX += vRX; }
+
+      const effRX = camRX + my * 0.14, effRY = camRY + mx * 0.22;
+      const cx = W / 2, cy = H * 0.43;
+      const fov = Math.min(W, H) * 0.72 * zoom;
+
+      const bg = ctx.createRadialGradient(cx, cy, 10, cx, cy, Math.max(W, H) * 0.72);
+      bg.addColorStop(0, '#091529'); bg.addColorStop(0.45, '#040814'); bg.addColorStop(1, '#020308');
+      ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+
+      const cY = Math.cos(effRY), sY = Math.sin(effRY), cX = Math.cos(effRX), sX = Math.sin(effRX);
+      function xform(x, y, z) {
+        const x1 = x * cY - z * sY, z1 = x * sY + z * cY;
+        const y2 = y * cX - z1 * sX, z2 = y * sX + z1 * cX;
+        const pz = 5.4 + z2;
+        if (pz < 0.4) return null;
+        const sc = fov / pz;
+        return [cx + x1 * sc, cy + y2 * sc, z2, sc, x1, y2];
+      }
+
+      // 3D Floor Grid
+      const gridY = 2.15, zShift = (time * (0.45 + mbps * 0.04)) % 1;
+      ctx.lineWidth = 1;
+      for (let i = -8; i <= 8; i++) {
+        const p1 = xform(i * 0.85, gridY, -6), p2 = xform(i * 0.85, gridY, 6);
+        if (p1 && p2) {
+          const gr = ctx.createLinearGradient(p1[0], p1[1], p2[0], p2[1]);
+          gr.addColorStop(0, 'rgba(0,212,255,0)'); gr.addColorStop(0.5, 'rgba(0,212,255,0.16)'); gr.addColorStop(1, 'rgba(0,245,184,0)');
+          ctx.strokeStyle = gr; ctx.beginPath(); ctx.moveTo(p1[0], p1[1]); ctx.lineTo(p2[0], p2[1]); ctx.stroke();
+        }
+        const gz = (i - zShift) * 0.85;
+        const q1 = xform(-6.8, gridY, gz), q2 = xform(6.8, gridY, gz);
+        if (q1 && q2) {
+          ctx.strokeStyle = `rgba(0,245,184,${Math.max(0, 0.16 - Math.abs(gz) * 0.022)})`;
+          ctx.beginPath(); ctx.moveTo(q1[0], q1[1]); ctx.lineTo(q2[0], q2[1]); ctx.stroke();
+        }
+      }
+
+      // Stars
+      for (const st of stars) {
+        const p = xform(st.x, st.y, st.z);
+        if (!p) continue;
+        ctx.fillStyle = st.c; ctx.globalAlpha = Math.max(0.08, Math.min(0.7, (4 - p[2]) / 8));
+        ctx.beginPath(); ctx.arc(p[0], p[1], Math.max(0.8, p[3] * 0.015), 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      // Halo
+      const halo = ctx.createRadialGradient(cx, cy, 10, cx, cy, 240 * zoom);
+      const focusCol = (S.a.err || S.q.err) ? 'rgba(255,61,113,0.30)'
+        : S.focus === 0 ? 'rgba(0,245,184,0.28)' : S.focus === 1 ? 'rgba(0,212,255,0.28)'
+        : S.focus === 2 ? 'rgba(255,179,71,0.28)' : 'rgba(0,225,220,0.24)';
+      halo.addColorStop(0, focusCol); halo.addColorStop(0.5, 'rgba(124,58,237,0.09)'); halo.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(cx, cy, 240 * zoom, 0, Math.PI * 2); ctx.fill();
+
+      // 3D Gyro Rings
+      const rings = [
+        { rad: 1.95, tx: 0.72, tz: time * 0.45, col: 'rgba(0,245,184,0.45)', w: 2.0 },
+        { rad: 2.28, tx: -0.58, tz: -time * 0.35, col: 'rgba(0,212,255,0.42)', w: 1.8 },
+        { rad: 2.58, tx: 0.32, tz: time * 0.25, col: 'rgba(139,92,246,0.34)', w: 1.4 }
+      ];
+      rings.forEach(rg => {
+        ctx.beginPath(); let st = false;
+        for (let i = 0; i <= 90; i++) {
+          const a = (i / 90) * Math.PI * 2, x = Math.cos(a) * rg.rad, y = Math.sin(a) * rg.rad;
+          const y1 = y * Math.cos(rg.tx), z1 = y * Math.sin(rg.tx);
+          const p = xform(x * Math.cos(rg.tz) - z1 * Math.sin(rg.tz), y1, x * Math.sin(rg.tz) + z1 * Math.cos(rg.tz));
+          if (!p) continue;
+          if (!st) { ctx.moveTo(p[0], p[1]); st = true; } else ctx.lineTo(p[0], p[1]);
+        }
+        ctx.strokeStyle = rg.col; ctx.lineWidth = rg.w; ctx.stroke();
+      });
+
+      // Shaded Crystal Core
+      const coreScale = 1.08 * (1 + Math.sin(time * 2.6) * 0.04 + S.boost * 0.08);
+      const tVerts = icoV.map(([x,y,z]) => xform(x * coreScale, y * coreScale, z * coreScale));
+      const faces = [];
+      for (const [i,j,k] of icoF) {
+        const a = tVerts[i], b = tVerts[j], c = tVerts[k];
+        if (!a || !b || !c) continue;
+        const ux = b[4]-a[4], uy = b[5]-a[5], uz = b[2]-a[2], vx = c[4]-a[4], vy = c[5]-a[5], vz = c[2]-a[2];
+        const nx = uy*vz-uz*vy, ny = uz*vx-ux*vz, nz = ux*vy-uy*vx;
+        if (nz > 0) continue;
+        const nl = Math.hypot(nx, ny, nz) || 1;
+        const diff = Math.max(0.08, -(nx * -0.45 + ny * -0.55 + nz * 0.7) / nl);
+        faces.push({ a, b, c, depth: (a[2]+b[2]+c[2])/3, diff });
+      }
+      faces.sort((p, q) => q.depth - p.depth);
+      for (const f of faces) {
+        ctx.beginPath(); ctx.moveTo(f.a[0], f.a[1]); ctx.lineTo(f.b[0], f.b[1]); ctx.lineTo(f.c[0], f.c[1]); ctx.closePath();
+        ctx.fillStyle = `rgba(${Math.round(8+f.diff*24)},${Math.round(55+f.diff*190)},${Math.round(95+f.diff*160)},0.52)`;
+        ctx.fill();
+        ctx.strokeStyle = `rgba(120,255,235,${0.25 + f.diff * 0.65})`; ctx.lineWidth = 1.25; ctx.stroke();
+      }
+
+      // 3 Satellites + Energy Streams
+      const sats = [
+        { name: 'ARIA2', on: S.a.on, err: !!S.a.err, col: '#00f5b8', rad: 1.95, ang: time * 0.9, tx: 0.72, tz: time * 0.45 },
+        { name: 'qBIT',  on: S.q.on, err: !!S.q.err, col: '#00d4ff', rad: 2.28, ang: time * 0.7 + 2.1, tx: -0.58, tz: -time * 0.35 },
+        { name: 'YT-DLP',on: S.y.on, err: false,     col: '#ffb347', rad: 2.58, ang: time * 0.55 + 4.2, tx: 0.32, tz: time * 0.25 }
+      ];
+      const satPos = sats.map(s => {
+        const x = Math.cos(s.ang) * s.rad, y = Math.sin(s.ang) * s.rad;
+        const y1 = y * Math.cos(s.tx), z1 = y * Math.sin(s.tx);
+        const x2 = x * Math.cos(s.tz) - z1 * Math.sin(s.tz), z2 = x * Math.sin(s.tz) + z1 * Math.cos(s.tz);
+        return { ...s, x: x2, y: y1, z: z2, p: xform(x2, y1, z2) };
+      });
+
+      for (const st of streams) {
+        const sat = satPos[st.sat];
+        if (!sat.on) continue;
+        st.t += st.sp * (1 + S.boost * 0.6);
+        if (st.t > 1) st.t = 0;
+        const p = xform(sat.x * (1 - st.t), sat.y * (1 - st.t), sat.z * (1 - st.t));
+        if (!p) continue;
+        ctx.beginPath(); ctx.arc(p[0], p[1], Math.max(1.2, 3.2 * (1 - st.t * 0.4)), 0, Math.PI * 2);
+        ctx.fillStyle = sat.col; ctx.shadowColor = sat.col; ctx.shadowBlur = 10; ctx.fill(); ctx.shadowBlur = 0;
+      }
+
+      satPos.forEach((s, idx) => {
+        if (!s.p) return;
+        const isF = S.focus === idx;
+        const col = s.err ? '#ff3d71' : (s.on ? s.col : '#475569');
+        ctx.beginPath(); ctx.arc(s.p[0], s.p[1], Math.max(4, (isF ? 11 : 7.5) * (s.p[3] / 120)), 0, Math.PI * 2);
+        ctx.fillStyle = col; ctx.shadowColor = (s.on || s.err) ? col : 'transparent'; ctx.shadowBlur = isF ? 28 : 16; ctx.fill(); ctx.shadowBlur = 0;
+        ctx.font = '600 10px ui-monospace, Consolas, monospace'; ctx.fillStyle = (s.on || s.err) ? '#e6f7ff' : '#64748b';
+        ctx.fillText(s.name, s.p[0] + 12, s.p[1] + 3);
+      });
+
+      requestAnimationFrame(render3D);
+    }
+    render3D();
+
+    const mCanvas = document.getElementById('miniWave');
+    const mctx = mCanvas.getContext('2d');
+    function drawMiniWave() {
+      const W = mCanvas.width, H = mCanvas.height;
+      mctx.clearRect(0, 0, W, H);
+      const peak = Math.max(1024 * 1024, ...S.wave);
+      mctx.beginPath();
+      S.wave.forEach((v, i) => {
+        const x = (i / Math.max(1, S.wave.length - 1)) * W;
+        const y = H - Math.min(0.9, (v || 0) / peak) * (H - 4) - 2;
+        if (i === 0) mctx.moveTo(x, y); else mctx.lineTo(x, y);
+      });
+      mctx.strokeStyle = '#00f5b8'; mctx.lineWidth = 1.8; mctx.stroke();
+    }
+
+    pollState();
+    setInterval(pollState, 1500);
+  </script>
+</body>
+</html>

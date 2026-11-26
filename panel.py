@@ -1861,16 +1861,637 @@ def main(page: ft.Page):
     Panel(page)
 
 
+# ================= Spatial 3D Web HUD 后端服务 =================
+class ControlBackend:
+    """真 3D Web HUD 后端控制器：复用全部探测、PID 隔离、配置与维护逻辑。"""
+
+    def __init__(self):
+        import threading
+        self.lock = threading.Lock()
+        self.cfg = load_cfg()
+        self.pr = Probe(self.cfg)
+        self.pids = load_pids()
+        self.t0 = time.time()
+        self.logs = []
+        self.wave = [0] * 40
+        self._q_warn_at = 0.0
+        self.log("Spatial 3D 控制台启动，配置 %s" % CONFIG)
+        self.poll_once()
+        t = threading.Thread(target=self._poll_loop, daemon=True)
+        t.start()
+
+    def log(self, msg, level="INFO"):
+        line = "%s [%-5s] %s" % (datetime.now().strftime("%H:%M:%S"), level, msg)
+        with self.lock:
+            self.logs.append(line)
+            if len(self.logs) > 300:
+                self.logs = self.logs[-300:]
+        try:
+            with open(LOGS / ("panel-%s.log" % datetime.now().strftime("%Y%m%d")),
+                      "a", encoding="utf-8") as f:
+                f.write(line + "\n")
+        except Exception:
+            pass
+
+    def poll_once(self):
+        try:
+            self.pr.poll_a()
+            self.pr.poll_q()
+            self.pr.poll_y()
+            q = self.pr.q
+            if q.get("err") and q.get("installed"):
+                now = time.time()
+                if now - self._q_warn_at > 60:
+                    self._q_warn_at = now
+                    self.log("qBittorrent 在运行但登录失败：请到设置抽屉填写 WebUI 密码", "WARN")
+            total_dn = int((self.pr.a.get("dn") or 0) + (self.pr.q.get("dn") or 0))
+            with self.lock:
+                self.wave.append(total_dn)
+                if len(self.wave) > 40:
+                    self.wave = self.wave[-40:]
+        except Exception as ex:
+            self.log("轮询异常 %s" % type(ex).__name__, "ERROR")
+
+    def _poll_loop(self):
+        while True:
+            time.sleep(1.5)
+            self.poll_once()
+
+    def yt_output(self):
+        ini = (self.cfg["yt"].get("ini") or "").strip()
+        if ini:
+            got = ini_get(ini, "OUTPUT")
+            if got:
+                return got
+        base = self.cfg.get("paths", {}).get("downloads") or str(DL_HOME)
+        return str(Path(base) / "yt-dlp")
+
+    def _sys_proxy(self):
+        if not IS_WIN:
+            for k in ("HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"):
+                v = (os.environ.get(k) or "").strip()
+                if v:
+                    return v
+            return ""
+        try:
+            import winreg
+            k = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                               r"Software\Microsoft\Windows\CurrentVersion\Internet Settings")
+            try:
+                enable, _ = winreg.QueryValueEx(k, "ProxyEnable")
+            except Exception:
+                enable = 0
+            try:
+                server, _ = winreg.QueryValueEx(k, "ProxyServer")
+            except Exception:
+                server = ""
+            winreg.CloseKey(k)
+            if not enable or not server:
+                return ""
+            s = str(server).strip()
+            if "=" in s:
+                for part in s.split(";"):
+                    if part.lower().startswith("http="):
+                        s = part.split("=", 1)[1]
+                        break
+            if not s:
+                return ""
+            if not s.lower().startswith(("http://", "socks5://", "socks4://", "https://")):
+                s = "http://" + s
+            return s
+        except Exception:
+            return ""
+
+    def run_cmd(self, args, title, key=None, cwd=None):
+        try:
+            proc = subprocess.Popen(args, cwd=cwd or str(ROOT), **_popen_kwargs())
+            if key:
+                self.pids[key] = proc.pid
+                save_pids(self.pids)
+            self.log("%s 发起 PID %s" % (title, proc.pid))
+            return True, "%s 已发起" % title
+        except Exception as ex:
+            self.log("%s 失败 %s" % (title, ex), "ERROR")
+            return False, "%s 失败" % title
+
+    def _open_local(self, path):
+        if not path or not Path(path).exists():
+            self.log("路径不存在 %s" % path, "WARN")
+            return False, "路径不存在"
+        open_path(path)
+        self.log("打开 %s" % path)
+        return True, "已打开本地路径"
+
+    def _run_key(self, name, cmd, on):
+        try:
+            if IS_WIN:
+                import winreg
+                k = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                                   r"Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0,
+                                   winreg.KEY_SET_VALUE)
+                if on:
+                    winreg.SetValueEx(k, name, 0, winreg.REG_SZ, cmd)
+                else:
+                    try:
+                        winreg.DeleteValue(k, name)
+                    except FileNotFoundError:
+                        pass
+                winreg.CloseKey(k)
+                return True
+            if IS_MAC:
+                plist_dir = Path.home() / "Library" / "LaunchAgents"
+                plist_dir.mkdir(parents=True, exist_ok=True)
+                pf = plist_dir / ("com.downloadstack.%s.plist" % name.lower())
+                if on:
+                    pf.write_text(
+                        '<?xml version="1.0" encoding="UTF-8"?>\n'
+                        '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" '
+                        '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
+                        '<plist version="1.0"><dict>\n'
+                        '  <key>Label</key><string>com.downloadstack.%s</string>\n'
+                        '  <key>ProgramArguments</key><array><string>/bin/sh</string>'
+                        '<string>-c</string><string>%s</string></array>\n'
+                        '  <key>RunAtLoad</key><true/>\n'
+                        '</dict></plist>\n' % (name.lower(), cmd.replace("&", "&amp;")),
+                        encoding="utf-8")
+                else:
+                    pf.unlink(missing_ok=True)
+                return True
+            adir = Path.home() / ".config" / "autostart"
+            adir.mkdir(parents=True, exist_ok=True)
+            df = adir / ("downloadstack-%s.desktop" % name.lower())
+            if on:
+                df.write_text(
+                    "[Desktop Entry]\nType=Application\nName=%s\nExec=/bin/sh -c \"%s\"\n"
+                    "X-GNOME-Autostart-enabled=true\n" % (name, cmd.replace('"', '\\"')),
+                    encoding="utf-8")
+            else:
+                df.unlink(missing_ok=True)
+            return True
+        except Exception as ex:
+            self.log("自启设置失败 %s" % ex, "ERROR")
+            return False
+
+    def get_state(self):
+        sec = int(time.time() - self.t0)
+        up = "%02d:%02d:%02d" % (sec // 3600, sec % 3600 // 60, sec % 60)
+        with self.lock:
+            logs = list(self.logs[-120:])
+            wave = list(self.wave)
+        yt_state = dict(self.pr.y)
+        yt_state["upscale"] = bool(self.cfg.get("ui", {}).get("upscale"))
+        return {
+            "aria2": dict(self.pr.a),
+            "qbit": dict(self.pr.q),
+            "yt": yt_state,
+            "cfg": self.cfg,
+            "wave": wave,
+            "logs": logs,
+            "uptime": up,
+        }
+
+    def handle_action(self, body):
+        act = (body.get("action") or "").strip()
+        if act == "start_a":
+            script = str((self.cfg.get("scripts") or {}).get("start") or "")
+            if script and not Path(script).exists():
+                self.log("未检测到启动脚本：请先运行安装器或检查 aria2 路径", "ERROR")
+                return False, "未检测到 Aria2 启动脚本"
+            if port_open(self.cfg["aria2"]["host"], self.cfg["aria2"]["port"]):
+                self.log("Aria2 已在运行，直接打开 AriaNg", "WARN")
+                self.handle_action({"action": "ariang"})
+                return True, "Aria2 已在运行，已打开 AriaNg"
+            ok, msg = self.run_cmd(script_cmd(self.cfg["scripts"]["start"]), "启动 Aria2", "stack")
+            time.sleep(1.2)
+            self.poll_once()
+            return ok, msg
+
+        if act == "stop_a":
+            ok, msg = self.run_cmd(script_cmd(self.cfg["scripts"]["stop"]), "停止 Aria2")
+            time.sleep(1.0)
+            self.poll_once()
+            return ok, "已发送 Aria2 停止指令" if ok else msg
+
+        if act == "restart_a":
+            self.handle_action({"action": "stop_a"})
+            time.sleep(1.2)
+            return self.handle_action({"action": "start_a"})
+
+        if act == "ariang":
+            try:
+                import base64
+                a = self.cfg.get("ariang", {}) or {}
+                port = int(a.get("port") or 16800)
+                if not port_open("127.0.0.1", port):
+                    script = str(a.get("script") or "")
+                    if script and Path(script).exists():
+                        self.run_cmd(script_cmd(script), "启动 AriaNg 静态服务", "ariang")
+                        for _ in range(16):
+                            time.sleep(0.4)
+                            if port_open("127.0.0.1", port):
+                                break
+                token = read_secret(self.cfg["aria2"]["secret"])
+                rpc_host = self.cfg["aria2"].get("host") or "127.0.0.1"
+                rpc_port = int(self.cfg["aria2"].get("port") or 6800)
+                base_url = "http://127.0.0.1:%d/" % port
+                if token:
+                    b64 = base64.b64encode(token.encode("utf-8")).decode("ascii")
+                    url = "%s#!/settings/rpc/set/http/%s/%d/jsonrpc/%s" % (base_url, rpc_host, rpc_port, b64)
+                else:
+                    url = base_url
+                webbrowser.open(url)
+                self.log("打开 AriaNg：%s%s" % (base_url, "（已自动注入 RPC 配置）" if token else ""), "OK")
+                return True, "已打开 AriaNg"
+            except Exception as ex:
+                self.log("打开 AriaNg 失败 %s" % ex, "ERROR")
+                return False, "打开 AriaNg 失败"
+
+        if act == "test_a":
+            try:
+                v = (self.pr.a_call("aria2.getVersion") or {}).get("version", "?")
+                self.log("Aria2 RPC 通，version=%s" % v, "OK")
+                return True, "Aria2 RPC 连通 (v%s)" % v
+            except Exception as ex:
+                self.log("Aria2 RPC 不通 %s" % ex, "ERROR")
+                return False, "Aria2 RPC 不通"
+
+        if act == "ports":
+            parts = []
+            for name, port in (("aria2", self.cfg["aria2"]["port"]),
+                               ("webui", self.cfg["qbit"]["port"]),
+                               ("ariang", int((self.cfg.get("ariang") or {}).get("port") or 16800))):
+                parts.append("%s:%s=%s" % (name, port, "占用" if port_open("127.0.0.1", port) else "空闲"))
+            msg = "端口 " + " ".join(parts)
+            self.log(msg)
+            return True, msg
+
+        if act == "start_q":
+            if port_open(self.cfg["qbit"]["host"], self.cfg["qbit"]["port"]):
+                self.log("qBittorrent 已在运行，跳过", "WARN")
+                return True, "qBittorrent 已在运行"
+            ok, msg = self.run_cmd(script_cmd(self.cfg["scripts"]["qbit"]), "启动 qBittorrent", "qbit")
+            time.sleep(1.5)
+            self.poll_once()
+            return ok, msg
+
+        if act == "stop_q":
+            pid = self.pids.get("qbit")
+            if pid and pid_alive(pid):
+                kill_tree(pid)
+                self.pids.pop("qbit", None)
+                save_pids(self.pids)
+                self.log("已停止 qBittorrent PID %s" % pid, "WARN")
+                self.poll_once()
+                return True, "已停止 qBittorrent"
+            self.log("没有本面板记录的 qBittorrent 进程", "WARN")
+            return False, "未找到本面板启动的 qB 进程"
+
+        if act == "webui":
+            try:
+                url = "http://%s:%d/" % (self.cfg["qbit"]["host"], int(self.cfg["qbit"]["port"]))
+                webbrowser.open(url)
+                self.log("打开 WebUI %s" % url)
+                return True, "已打开 qB WebUI"
+            except Exception as ex:
+                self.log("打开 WebUI 失败 %s" % ex, "ERROR")
+                return False, "打开 WebUI 失败"
+
+        if act == "test_q":
+            try:
+                s, base = self.pr.q_login()
+                v = s.get(base + "/api/v2/app/version", timeout=2).text.strip()
+                self.log("WebUI 通，version=%s" % v, "OK")
+                return True, "WebUI 连通 (%s)" % v
+            except Exception as ex:
+                self.log("WebUI 不通 %s" % ex, "ERROR")
+                return False, "WebUI 登录失败"
+
+        if act == "toggle_upscale":
+            v = not bool(self.cfg["ui"].get("upscale"))
+            self.cfg["ui"]["upscale"] = v
+            save_cfg(self.cfg)
+            self.log("超分开关 → %s（下次启动 YT 壳生效）" % ("开" if v else "关"))
+            return True, "2x 超分已%s" % ("开启" if v else "关闭")
+
+        if act == "start_y":
+            bat = Path(self.cfg["yt"]["bat"])
+            if not bat.exists():
+                bat = Path(self.cfg["yt"]["bat2"])
+            if not str(bat) or not bat.exists():
+                cand = [
+                    Path(str(self.cfg["scripts"].get("start") or "")).parent / "ControlPanel" / "ytdl_gui.py",
+                    ROOT / "ControlPanel" / "ytdl_gui.py",
+                    APP_DIR / "ytdl_gui.py",
+                ]
+                hit = next((c for c in cand if c.is_file()), None)
+                if hit is None:
+                    self.log("未找到 YT 下载器 ytdl_gui.py", "ERROR")
+                    return False, "未找到 YT 下载器"
+                py = str(ROOT / ".venv" / ("Scripts/python.exe" if IS_WIN else "bin/python"))
+                if not Path(py).is_file():
+                    py = sys.executable
+                bat = hit
+                cmd_override = [py, "-B", str(hit)]
+            else:
+                cmd_override = script_cmd(bat)
+            pid = self.pids.get("yt")
+            if pid and pid_alive(pid):
+                self.log("YT 壳已在运行，跳过", "WARN")
+                return True, "YT 下载壳已在运行"
+            try:
+                env = os.environ.copy()
+                env["UPSCALE"] = "1" if self.cfg["ui"].get("upscale") else "0"
+                px = self._sys_proxy()
+                if px:
+                    env["HTTP_PROXY"] = env["HTTPS_PROXY"] = env["http_proxy"] = env["https_proxy"] = px
+                    env.pop("ALL_PROXY", None)
+                    env.pop("all_proxy", None)
+                    env["NO_PROXY"] = env["no_proxy"] = "localhost,127.0.0.1,::1,.local"
+                else:
+                    for k in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
+                        env.pop(k, None)
+                proc = subprocess.Popen(cmd_override, cwd=str(bat.parent), env=env, **_popen_kwargs())
+                self.pids["yt"] = proc.pid
+                save_pids(self.pids)
+                self.log("启动 YT 下载壳 PID %s（超分：%s｜代理：%s）"
+                         % (proc.pid, "开" if env["UPSCALE"] == "1" else "关", px if px else "直连"), "OK")
+                self.poll_once()
+                return True, "YT 下载壳已启动"
+            except Exception as ex:
+                self.log("启动 YT 壳失败 %s" % ex, "ERROR")
+                return False, "启动 YT 壳失败"
+
+        if act == "stop_y":
+            pid = self.pids.get("yt")
+            if pid and pid_alive(pid):
+                kill_tree(pid)
+                self.pids.pop("yt", None)
+                save_pids(self.pids)
+                self.log("已关闭 YT 壳 PID %s" % pid, "WARN")
+                self.poll_once()
+                return True, "已关闭 YT 下载壳"
+            self.log("没有本面板记录的 YT 壳进程", "WARN")
+            return False, "未找到运行中的 YT 壳进程"
+
+        if act == "backup":
+            stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            dst = BACKUPS / ("backup-" + stamp)
+            try:
+                dst.mkdir(parents=True, exist_ok=True)
+                n = 0
+                for src, name in ((self.cfg["aria2"]["conf"], "aria2.conf"),
+                                  (str(Path(self.cfg["qbit"]["config_dir"]) / "qBittorrent.ini"), "qBittorrent.ini"),
+                                  (str(CONFIG), "config.json"),
+                                  (self.cfg["yt"]["ini"], "ytshell-paths.ini")):
+                    if src and Path(src).exists():
+                        shutil.copy2(src, dst / name)
+                        n += 1
+                self.log("备份完成 %d 个文件 → %s" % (n, dst), "OK")
+                return True, "已备份 %d 个配置文件" % n
+            except Exception as ex:
+                self.log("备份失败 %s" % ex, "ERROR")
+                return False, "备份失败"
+
+        if act == "selfcheck":
+            self.log("开始一键自检")
+            for name, port in (("aria2", self.cfg["aria2"]["port"]),
+                               ("webui", self.cfg["qbit"]["port"]),
+                               ("ariang", int((self.cfg.get("ariang") or {}).get("port") or 16800))):
+                on = port_open("127.0.0.1", port)
+                self.log("  端口 %s:%s %s" % (name, port, "在线" if on else "未监听"), "OK" if on else "WARN")
+            for name, path in (("aria2c", self.cfg["aria2"]["exe"]),
+                               ("aria2.conf", self.cfg["aria2"]["conf"]),
+                               ("qBittorrent.ini", str(Path(self.cfg["qbit"]["config_dir"]) / "qBittorrent.ini"))):
+                ok = Path(path).exists()
+                self.log("  %s %s" % (name, "存在" if ok else "缺失"), "OK" if ok else "ERROR")
+            try:
+                t = CACHE / "_w.tmp"
+                t.write_text("x", encoding="utf-8")
+                t.unlink(missing_ok=True)
+                self.log("  缓存目录可写 (%s)" % CACHE, "OK")
+            except Exception as ex:
+                self.log("  缓存目录不可写 %s" % ex, "ERROR")
+            self.handle_action({"action": "test_a"})
+            self.handle_action({"action": "test_q"})
+            return True, "一键自检完成，详见日志"
+
+        if act == "clean_logs":
+            n = 0
+            try:
+                for f in Path(self.cfg["aria2"]["logdir"]).glob("*"):
+                    if f.is_file():
+                        f.unlink()
+                        n += 1
+            except Exception:
+                pass
+            self.log("清理 Aria2 日志 %d 个" % n, "OK")
+            return True, "已清理 %d 个日志文件" % n
+
+        if act == "clean_cache":
+            n = 0
+            try:
+                for f in CACHE.rglob("*"):
+                    if f.is_file():
+                        f.unlink()
+                        n += 1
+            except Exception:
+                pass
+            self.log("清理缓存 %d 个" % n, "OK")
+            return True, "已清理 %d 个缓存文件" % n
+
+        if act == "stop_all":
+            self.log("一键全部停止：Aria2 → qBittorrent → YT 壳", "WARN")
+            self.handle_action({"action": "stop_a"})
+            self.handle_action({"action": "stop_q"})
+            self.handle_action({"action": "stop_y"})
+            return True, "已按安全顺序停止全部服务"
+
+        if act == "open_path":
+            key = body.get("key") or ""
+            dl_base = Path(self.cfg.get("paths", {}).get("downloads") or str(DL_HOME))
+            mapping = {
+                "aria2_conf": self.cfg["aria2"]["conf"],
+                "aria2_logdir": self.cfg["aria2"]["logdir"],
+                "aria2_dl": str(dl_base / "aria2"),
+                "qbit_cfg": self.cfg["qbit"]["config_dir"],
+                "qbit_dl": self.cfg["qbit"]["save_dir"],
+                "yt_out": self.yt_output(),
+                "downloads": str(dl_base),
+            }
+            return self._open_local(mapping.get(key, ""))
+
+        if act == "clear_log":
+            with self.lock:
+                self.logs = []
+            return True, "日志已清空"
+
+        if act == "export_log":
+            try:
+                out = LOGS / ("export-%s.log" % datetime.now().strftime("%Y%m%d-%H%M%S"))
+                with self.lock:
+                    content = "\n".join(self.logs)
+                out.write_text(content, encoding="utf-8")
+                self.log("日志已导出 %s" % out, "OK")
+                return True, "日志已导出"
+            except Exception as ex:
+                self.log("导出失败 %s" % ex, "ERROR")
+                return False, "导出失败"
+
+        if act == "save_cfg":
+            try:
+                self.cfg["aria2"]["host"] = str(body.get("a_host") or "127.0.0.1").strip()
+                self.cfg["aria2"]["port"] = int(str(body.get("a_port") or 6800).strip())
+                self.cfg["aria2"]["secret"] = str(body.get("a_secret") or "").strip()
+                self.cfg["qbit"]["host"] = str(body.get("q_host") or "127.0.0.1").strip()
+                self.cfg["qbit"]["port"] = int(str(body.get("q_port") or 8080).strip())
+                self.cfg["qbit"]["user"] = str(body.get("q_user") or "admin").strip()
+                self.cfg["qbit"]["pass"] = str(body.get("q_pass") or "")
+                self.cfg["qbit"]["save_dir"] = str(body.get("q_save") or "").strip()
+                self.cfg["yt"]["bat"] = str(body.get("yt_bat") or "").strip()
+                save_cfg(self.cfg)
+                self.pr.cfg = self.cfg
+                self.log("设置已保存并生效", "OK")
+                self.poll_once()
+                return True, "设置已保存"
+            except Exception as ex:
+                self.log("保存失败 %s" % ex, "ERROR")
+                return False, "保存失败"
+
+        if act == "reset_cfg":
+            self.cfg = json.loads(json.dumps(DEFAULT_CFG))
+            save_cfg(self.cfg)
+            self.pr.cfg = self.cfg
+            self.log("已恢复默认配置", "WARN")
+            self.poll_once()
+            return True, "已恢复默认配置"
+
+        if act == "toggle_autostart_panel":
+            v = not bool(self.cfg["ui"].get("autostart_panel"))
+            self.cfg["ui"]["autostart_panel"] = v
+            save_cfg(self.cfg)
+            self._run_key("DownloadStackPanel", '"%s" "%s"' % (sys.executable, PANEL_DIR / "panel.py"), v)
+            self.log("开机自启面板 %s" % ("开" if v else "关"))
+            return True, "开机自启面板已%s" % ("开启" if v else "关闭")
+
+        if act == "toggle_autostart_aria2":
+            v = not bool(self.cfg["ui"].get("autostart_aria2"))
+            self.cfg["ui"]["autostart_aria2"] = v
+            save_cfg(self.cfg)
+            start_script = self.cfg["scripts"]["start"]
+            cmd = ('cmd /c "%s"' % start_script) if IS_WIN else ('/bin/sh "%s"' % start_script)
+            self._run_key("DownloadStackAria2", cmd, v)
+            self.log("开机拉起 Aria2 %s" % ("开" if v else "关"))
+            return True, "开机拉起 Aria2 已%s" % ("开启" if v else "关闭")
+
+        return False, "未知操作"
+
+
+def _open_app_window(url: str):
+    """优先用 Edge/Chrome 无边框 App 模式打开，回退到默认浏览器。"""
+    if IS_WIN:
+        cands = [
+            Path(os.environ.get("PROGRAMFILES(X86)", "")) / "Microsoft/Edge/Application/msedge.exe",
+            Path(os.environ.get("PROGRAMFILES", "")) / "Microsoft/Edge/Application/msedge.exe",
+            Path(os.environ.get("PROGRAMFILES", "")) / "Google/Chrome/Application/chrome.exe",
+            Path(os.environ.get("LOCALAPPDATA", "")) / "Google/Chrome/Application/chrome.exe",
+        ]
+        for exe in cands:
+            if exe.is_file():
+                try:
+                    subprocess.Popen([str(exe), "--app=" + url, "--window-size=1440,900"],
+                                     **_popen_kwargs())
+                    return
+                except Exception:
+                    pass
+    webbrowser.open(url)
+
+
+def run_3d_server(open_browser=True):
+    """启动 Spatial 3D HUD 本地服务。"""
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    ui_file = APP_DIR / "panel_ui.html"
+    backend = ControlBackend()
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, fmt, *args):
+            return
+
+        def _send_json(self, obj, code=200):
+            raw = json.dumps(obj, ensure_ascii=False).encode("utf-8")
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def do_GET(self):
+            if self.path in ("/", "/index.html"):
+                html = ui_file.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(html)))
+                self.end_headers()
+                self.wfile.write(html)
+                return
+            if self.path.startswith("/api/state"):
+                self._send_json(backend.get_state())
+                return
+            self.send_error(404)
+
+        def do_POST(self):
+            if self.path.startswith("/api/action"):
+                length = int(self.headers.get("Content-Length") or 0)
+                raw = self.rfile.read(length) if length > 0 else b"{}"
+                try:
+                    body = json.loads(raw.decode("utf-8") or "{}")
+                except Exception:
+                    body = {}
+                ok, msg = backend.handle_action(body)
+                self._send_json({"ok": ok, "msg": msg})
+                return
+            self.send_error(404)
+
+    base_port = int(os.environ.get("DOWNLOADSTACK_WEB_PORT") or 18550)
+    srv = None
+    port = base_port
+    for p in range(base_port, base_port + 20):
+        try:
+            srv = ThreadingHTTPServer(("127.0.0.1", p), Handler)
+            port = p
+            break
+        except OSError:
+            continue
+    if srv is None:
+        raise RuntimeError("无法绑定本地面板端口 %d..%d" % (base_port, base_port + 19))
+
+    url = "http://127.0.0.1:%d/" % port
+    print("[DownloadStack 3D] 控制台运行中：%s" % url, flush=True)
+    if open_browser:
+        _open_app_window(url)
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        srv.server_close()
+
+
 if __name__ == "__main__":
-    # 无图形环境（SSH / 纯服务器）时自动改用 Web 模式，浏览器访问即可
     _no_display = (not IS_WIN) and (not IS_MAC) and not (
         os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
-    _force_web = os.environ.get("DOWNLOADSTACK_WEB") == "1"
-    if _force_web or _no_display:
-        if _no_display and not _force_web:
-            print("[提示] 没有图形环境，改用 Web 模式")
-        port = int(os.environ.get("DOWNLOADSTACK_WEB_PORT") or 8550)
-        print("[提示] 浏览器打开 http://127.0.0.1:%d" % port)
-        ft.run(main, view=ft.AppView.WEB_BROWSER, port=port)
+    _use_flet = (os.environ.get("DOWNLOADSTACK_UI") or "").lower() == "flet"
+    if (not _use_flet) and (APP_DIR / "panel_ui.html").is_file():
+        run_3d_server(open_browser=(not _no_display))
     else:
-        ft.run(main)
+        _force_web = os.environ.get("DOWNLOADSTACK_WEB") == "1"
+        if _force_web or _no_display:
+            if _no_display and not _force_web:
+                print("[提示] 没有图形环境，改用 Web 模式")
+            port = int(os.environ.get("DOWNLOADSTACK_WEB_PORT") or 8550)
+            print("[提示] 浏览器打开 http://127.0.0.1:%d" % port)
+            ft.run(main, view=ft.AppView.WEB_BROWSER, port=port)
+        else:
+            ft.run(main)
