@@ -544,7 +544,7 @@ class ControlBackend:
         self.yt_job = {
             "running": False, "pid": None, "url": "",
             "quality": "best",
-            "cookies": str((self.cfg.get("yt") or {}).get("cookies") or "none"),
+            "cookies": str((self.cfg.get("yt") or {}).get("cookies") or "auto"),
             "cookies_file": str((self.cfg.get("yt") or {}).get("cookies_file") or ""),
             "pct": 0.0, "speed": "", "eta": "", "status": "就绪",
             "logs": [], "file": "",
@@ -592,6 +592,9 @@ class ControlBackend:
             self.poll_once()
 
     def yt_output(self):
+        custom = (self.cfg.get("yt", {}).get("output") or "").strip()
+        if custom:
+            return custom
         ini = (self.cfg["yt"].get("ini") or "").strip()
         if ini:
             got = ini_get(ini, "OUTPUT")
@@ -599,6 +602,28 @@ class ControlBackend:
                 return got
         base = self.cfg.get("paths", {}).get("downloads") or str(DL_HOME)
         return str(Path(base) / "yt-dlp")
+
+    @staticmethod
+    def _pick_folder_dialog(initial: str = "") -> str:
+        """弹出跨平台系统原生文件夹选择框（置顶显示，防止被主窗遮挡）。"""
+        code = (
+            "import sys, tkinter as tk\n"
+            "from tkinter import filedialog\n"
+            "r = tk.Tk(); r.withdraw(); r.attributes('-topmost', True)\n"
+            "init = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] else ''\n"
+            "p = filedialog.askdirectory(initialdir=init or None, title='选择下载保存目录')\n"
+            "r.destroy()\n"
+            "print(p or '', end='')\n"
+        )
+        try:
+            init_arg = initial if (initial and Path(initial).is_dir()) else ""
+            res = subprocess.run(
+                [sys.executable, "-B", "-c", code, init_arg],
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120,
+            )
+            return (res.stdout or "").strip()
+        except Exception:
+            return ""
 
     def _sys_proxy(self):
         if not IS_WIN:
@@ -789,8 +814,62 @@ class ControlBackend:
     def _clean_video_url(raw: str) -> str:
         import re
         s = (raw or "").strip()
-        m = re.search(r"https?://[^\s\"'<>]+", s)
+        m = re.search(r"https?://[^\s\"'<>，。；！）)】》」]+", s)
         return m.group(0).rstrip(".,;!?）)】》」") if m else s
+
+    @staticmethod
+    def _is_cn_video_host(url: str) -> bool:
+        from urllib.parse import urlsplit
+        h = (urlsplit(url).hostname or "").lower().rstrip(".")
+        cn = ("douyin.com", "iesdouyin.com", "bilibili.com", "b23.tv",
+              "xiaohongshu.com", "xhslink.com", "kuaishou.com", "ixigua.com",
+              "weibo.com", "weibo.cn", "youku.com", "iqiyi.com", "qq.com", "acfun.cn")
+        return any(h == d or h.endswith("." + d) for d in cn)
+
+    @staticmethod
+    def _is_douyin_url(url: str) -> bool:
+        from urllib.parse import urlsplit
+        h = (urlsplit(url).hostname or "").lower().rstrip(".")
+        return h in ("douyin.com", "iesdouyin.com", "v.douyin.com") or h.endswith(".douyin.com") or h.endswith(".iesdouyin.com")
+
+    @staticmethod
+    def _is_xhs_url(url: str) -> bool:
+        from urllib.parse import urlsplit
+        h = (urlsplit(url).hostname or "").lower().rstrip(".")
+        return h in ("xiaohongshu.com", "xhslink.com") or h.endswith(".xiaohongshu.com") or h.endswith(".xhslink.com")
+
+    def _find_local_cookies_txt(self, explicit: str = "") -> str:
+        cands = []
+        if explicit:
+            cands.append(Path(explicit))
+        cands.append(PANEL_DIR / "cookies.txt")
+        ini = (self.cfg.get("yt") or {}).get("ini") or ""
+        if ini:
+            cands.append(Path(ini).parent / "cookies.txt")
+        for c in cands:
+            try:
+                if c.is_file() and c.stat().st_size > 20:
+                    return str(c)
+            except Exception:
+                pass
+        return ""
+
+    def _find_external_douyin_kernel(self):
+        ini = (self.cfg.get("yt") or {}).get("ini") or ""
+        cands = []
+        if ini:
+            cands.append(Path(ini).parent / "douyin_download.py")
+        bat = (self.cfg.get("yt") or {}).get("bat") or ""
+        if bat:
+            cands.append(Path(bat).parent / "douyin_download.py")
+        cands.append(PANEL_DIR / "douyin_download.py")
+        for c in cands:
+            try:
+                if c.is_file():
+                    return c
+            except Exception:
+                pass
+        return None
 
     def _yt_append_log(self, line: str):
         ts = datetime.now().strftime("%H:%M:%S")
@@ -799,17 +878,172 @@ class ControlBackend:
             if len(self.yt_job["logs"]) > 200:
                 self.yt_job["logs"] = self.yt_job["logs"][-200:]
 
-    def _run_yt_worker(self, url: str, quality: str, cookies: str, cookies_file: str, upscale: bool):
+    def _stream_direct_file(self, media_url: str, out_file: Path, referer: str = "", use_proxy: bool = False) -> bool:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+        }
+        if referer:
+            headers["Referer"] = referer
+        proxies = None
+        if use_proxy:
+            px = self._sys_proxy()
+            if px:
+                proxies = {"http": px, "https": px}
+        else:
+            proxies = {"http": None, "https": None}
+        r = requests.get(media_url, headers=headers, proxies=proxies, stream=True, timeout=25)
+        r.raise_for_status()
+        total = int(r.headers.get("Content-Length") or 0)
+        done = 0
+        t0 = time.time()
+        with open(out_file, "wb") as f:
+            for chunk in r.iter_content(chunk_size=131072):
+                if not chunk:
+                    continue
+                with self.lock:
+                    if not self.yt_job.get("running"):
+                        return False
+                f.write(chunk)
+                done += len(chunk)
+                dt = max(0.05, time.time() - t0)
+                spd = done / dt
+                pct = (done / total * 100.0) if total > 0 else min(95.0, done / (1024 * 1024) * 5.0)
+                with self.lock:
+                    self.yt_job["pct"] = round(min(99.5, pct), 1)
+                    self.yt_job["speed"] = hspeed(spd)
+                    self.yt_job["eta"] = ("%02d:%02d" % (int((total - done) / spd) // 60, int((total - done) / spd) % 60)) if (total > done and spd > 1) else "-"
+        return out_file.is_file() and out_file.stat().st_size > 10240
+
+    def _download_douyin_smart(self, url: str, out_dir: Path, upscale: bool):
+        """抖音专用双保险引擎：优先本地 douyin_download.py（无头高清封装），回退内置移动端直链解析。"""
         import re
-        ytdlp = self._find_ytdlp()
-        if not ytdlp:
+        kernel = self._find_external_douyin_kernel()
+        if kernel is not None:
+            self._yt_append_log("[INFO] 检测到本地抖音高清内核：%s，正在解析最高画质流…" % kernel.name)
             with self.lock:
-                self.yt_job["running"] = False
-                self.yt_job["status"] = "未检测到 yt-dlp"
-            self._yt_append_log("[ERROR] 未找到 yt-dlp，请先运行一键配置或安装 yt-dlp")
-            return
-        out_dir = Path(self.yt_output())
-        out_dir.mkdir(parents=True, exist_ok=True)
+                self.yt_job["status"] = "解析抖音高清流…"
+            runner = (
+                "import os, sys, subprocess\n"
+                "sys.path.insert(0, os.environ['DS_DY_DIR'])\n"
+                "from douyin_download import resolve_video_url, download_command\n"
+                "u = resolve_video_url(os.environ['DS_DY_URL'])\n"
+                "print('[INFO] 已解析目标地址', flush=True)\n"
+                "cmd = download_command(u)\n"
+                "print('[INFO] 启动封装下载…', flush=True)\n"
+                "rc = subprocess.call(cmd, cwd=os.environ['DS_DY_DIR'])\n"
+                "sys.exit(rc)\n"
+            )
+            env = os.environ.copy()
+            env["DS_DY_DIR"] = str(kernel.parent)
+            env["DS_DY_URL"] = url
+            env["YTSHELL_OUTPUT"] = str(out_dir)
+            env["UPSCALE"] = "1" if upscale else "0"
+            env["PYTHONUTF8"] = "1"
+            for k in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
+                env.pop(k, None)
+            proc = subprocess.Popen(
+                [sys.executable, "-u", "-B", "-c", runner],
+                cwd=str(kernel.parent), env=env,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding="utf-8", errors="replace",
+                **_popen_kwargs()
+            )
+            with self.lock:
+                self.yt_job["pid"] = proc.pid
+                self.yt_job["status"] = "抖音高清解析与下载中…"
+            self.pids["yt_job"] = proc.pid
+            save_pids(self.pids)
+            pct_re = re.compile(r"(\d+(?:\.\d+)?)%")
+            assert proc.stdout is not None
+            for raw in proc.stdout:
+                line = raw.strip()
+                if not line:
+                    continue
+                m = pct_re.search(line)
+                if m:
+                    with self.lock:
+                        self.yt_job["pct"] = float(m.group(1))
+                self._yt_append_log(line)
+            rc = proc.wait()
+            if rc == 0:
+                return True, str(out_dir)
+            self._yt_append_log("[WARN] 本地抖音内核退出码 %s，自动切换内置移动端直链回退…" % rc)
+
+        # 内置通用抖音移动端分享页解析（不依赖任何外部脚本、无需登录、不锁 Edge Cookie）
+        self._yt_append_log("[INFO] 启用内置抖音直链解析（免代理直连）…")
+        with self.lock:
+            self.yt_job["status"] = "内置解析抖音直链…"
+        s = requests.Session()
+        s.proxies = {"http": None, "https": None}
+        ua_mob = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+        r0 = s.get(url, headers={"User-Agent": ua_mob}, allow_redirects=True, timeout=15)
+        m_id = re.search(r"/(?:share/)?video/(\d{6,})", r0.url or url)
+        if not m_id:
+            m_id = re.search(r'"aweme_id"\s*:\s*"(\d{6,})"', r0.text or "")
+        if not m_id:
+            self._yt_append_log("[ERROR] 未能从链接提取抖音视频 ID")
+            return False, ""
+        aweme_id = m_id.group(1)
+        share_url = "https://www.iesdouyin.com/share/video/%s/" % aweme_id
+        r1 = s.get(share_url, headers={"User-Agent": ua_mob, "Referer": "https://www.iesdouyin.com/"}, timeout=15)
+        html = r1.text or ""
+        play_url = ""
+        title = "douyin_" + aweme_id
+        m_rd = re.search(r"window\._ROUTER_DATA\s*=\s*(\{.*?\})\s*</script>", html, re.S)
+        if m_rd:
+            try:
+                jd = json.loads(m_rd.group(1))
+                txt = json.dumps(jd, ensure_ascii=False)
+                m_desc = re.search(r'"desc"\s*:\s*"([^"]{1,80})"', txt)
+                if m_desc:
+                    safe = re.sub(r'[\\/:*?"<>|\r\n]+', "_", m_desc.group(1)).strip(" ._")
+                    if safe:
+                        title = safe[:60] + "_" + aweme_id[-6:]
+                m_u = re.search(r'"play_addr"\s*:\s*\{[^}]*"url_list"\s*:\s*\[\s*"([^"]+)"', txt)
+                if m_u:
+                    play_url = m_u.group(1).replace("playwm", "play")
+            except Exception:
+                pass
+        if not play_url:
+            m_u2 = re.search(r'https://[^"\'\\]+playwm[^"\'\\]+', html)
+            if m_u2:
+                play_url = m_u2.group(0).replace("\\u002F", "/").replace("playwm", "play")
+        if not play_url:
+            self._yt_append_log("[ERROR] 抖音页面未返回公开直链（该作品可能受限）")
+            return False, ""
+        out_file = out_dir / (title + ".mp4")
+        with self.lock:
+            self.yt_job["status"] = "下载抖音无水印视频…"
+            self.yt_job["file"] = str(out_file)
+        self._yt_append_log("[INFO] 命中抖音直链 → %s" % out_file.name)
+        ok = self._stream_direct_file(play_url, out_file, referer="https://www.douyin.com/", use_proxy=False)
+        return ok, str(out_file)
+
+    def _download_xhs_fallback(self, url: str, out_dir: Path):
+        """小红书公开视频直链回退解析（免代理直连）。"""
+        import re
+        self._yt_append_log("[INFO] 启用内置小红书视频直链回退解析…")
+        s = requests.Session()
+        s.proxies = {"http": None, "https": None}
+        ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+        r = s.get(url, headers={"User-Agent": ua}, allow_redirects=True, timeout=15)
+        html = r.text or ""
+        m_v = re.search(r'"masterUrl"\s*:\s*"(https?://[^"]+)"', html)
+        if not m_v:
+            m_v = re.search(r'https?://sns-video[^"\'\\\s]+\.mp4[^"\'\\\s]*', html)
+        if not m_v:
+            return False, ""
+        vurl = m_v.group(1 if m_v.lastindex else 0).replace("\\u002F", "/").replace("\\/", "/")
+        out_file = out_dir / ("xhs_%s.mp4" % datetime.now().strftime("%Y%m%d_%H%M%S"))
+        with self.lock:
+            self.yt_job["status"] = "下载小红书视频…"
+            self.yt_job["file"] = str(out_file)
+        ok = self._stream_direct_file(vurl, out_file, referer="https://www.xiaohongshu.com/", use_proxy=False)
+        return ok, str(out_file)
+
+    def _exec_ytdlp_once(self, ytdlp: str, url: str, quality: str, out_dir: Path,
+                         cookie_args: list, extra_args: list, use_proxy: bool):
+        import re
         cmd = [ytdlp, "--newline", "--progress", "--no-color", "-P", str(out_dir)]
         ff_dir = self._find_ffmpeg()
         if ff_dir:
@@ -822,68 +1056,142 @@ class ControlBackend:
             cmd += ["-x", "--audio-format", "mp3", "--audio-quality", "0"]
         else:
             cmd += ["-f", "bv*+ba/best", "--merge-output-format", "mp4"]
+        if "bilibili.com" in url.lower() or "b23.tv" in url.lower():
+            cmd += ["--add-header", "Referer:https://www.bilibili.com/"]
+        cmd += cookie_args + extra_args + [url]
 
-        if cookies in ("firefox", "chrome", "edge"):
-            cmd += ["--cookies-from-browser", cookies]
-        elif cookies == "file" and cookies_file and Path(cookies_file).is_file():
-            cmd += ["--cookies", cookies_file]
-
-        cmd.append(url)
         env = os.environ.copy()
-        px = self._sys_proxy()
+        px = self._sys_proxy() if use_proxy else ""
         if px:
             env["HTTP_PROXY"] = env["HTTPS_PROXY"] = env["http_proxy"] = env["https_proxy"] = px
             env.pop("ALL_PROXY", None)
             env.pop("all_proxy", None)
             env["NO_PROXY"] = env["no_proxy"] = "localhost,127.0.0.1,::1,.local"
+        else:
+            for k in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
+                env.pop(k, None)
 
         pct_re = re.compile(r"(\d+(?:\.\d+)?)%")
         spd_re = re.compile(r"at\s+([^\s]+/s)")
         eta_re = re.compile(r"ETA\s+([0-9:]+)")
         dest_re = re.compile(r"(?:Destination:|Merging formats into\s+\"?)(.+?)\"?$")
 
+        proc = subprocess.Popen(
+            cmd, cwd=str(out_dir), env=env,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, encoding="utf-8", errors="replace",
+            **_popen_kwargs()
+        )
+        with self.lock:
+            self.yt_job["pid"] = proc.pid
+            self.yt_job["status"] = "下载中…"
+        self.pids["yt_job"] = proc.pid
+        save_pids(self.pids)
+        self._yt_append_log("[INFO] yt-dlp PID=%s（画质=%s | 线路=%s）" % (proc.pid, quality, ("代理 " + px) if px else "直连"))
+
         last_file = ""
-        try:
-            proc = subprocess.Popen(
-                cmd, cwd=str(out_dir), env=env,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, encoding="utf-8", errors="replace",
-                **_popen_kwargs()
-            )
-            with self.lock:
-                self.yt_job["pid"] = proc.pid
-                self.yt_job["status"] = "下载中…"
-            self.pids["yt_job"] = proc.pid
-            save_pids(self.pids)
-            self._yt_append_log("[INFO] 启动 yt-dlp PID=%s（画质=%s | 代理=%s）" % (proc.pid, quality, px or "直连"))
-            self.log("YT 工坊开始下载：%s" % url[:80], "OK")
-
-            assert proc.stdout is not None
-            for raw in proc.stdout:
-                line = raw.strip()
-                if not line:
-                    continue
-                m_pct = pct_re.search(line)
-                if m_pct and "[download]" in line:
-                    m_spd = spd_re.search(line)
-                    m_eta = eta_re.search(line)
+        err_text = []
+        assert proc.stdout is not None
+        for raw in proc.stdout:
+            line = raw.strip()
+            if not line:
+                continue
+            m_pct = pct_re.search(line)
+            if m_pct and "[download]" in line:
+                m_spd = spd_re.search(line)
+                m_eta = eta_re.search(line)
+                with self.lock:
+                    self.yt_job["pct"] = float(m_pct.group(1))
+                    if m_spd:
+                        self.yt_job["speed"] = m_spd.group(1)
+                    if m_eta:
+                        self.yt_job["eta"] = m_eta.group(1)
+                continue
+            m_dst = dest_re.search(line)
+            if m_dst:
+                cand = m_dst.group(1).strip().strip('"')
+                if cand:
+                    last_file = cand
                     with self.lock:
-                        self.yt_job["pct"] = float(m_pct.group(1))
-                        if m_spd:
-                            self.yt_job["speed"] = m_spd.group(1)
-                        if m_eta:
-                            self.yt_job["eta"] = m_eta.group(1)
-                    continue
-                m_dst = dest_re.search(line)
-                if m_dst:
-                    cand = m_dst.group(1).strip().strip('"')
-                    if cand:
-                        last_file = cand
-                        with self.lock:
-                            self.yt_job["file"] = cand
-                self._yt_append_log(line)
+                        self.yt_job["file"] = cand
+            if "ERROR:" in line or "WARNING:" in line:
+                err_text.append(line)
+            self._yt_append_log(line)
+        rc = proc.wait()
+        return rc, last_file, "\n".join(err_text)
 
-            rc = proc.wait()
+    def _run_yt_worker(self, url: str, quality: str, cookies: str, cookies_file: str, upscale: bool):
+        out_dir = Path(self.yt_output())
+        out_dir.mkdir(parents=True, exist_ok=True)
+        last_file = ""
+        ok_dl = False
+        try:
+            self.log("YT 工坊开始下载：%s" % url[:80], "OK")
+            # 1) 抖音链接：直接走双保险抖音引擎（免 403、免 Edge 锁库）
+            if self._is_douyin_url(url) and quality != "audio":
+                ok_dl, last_file = self._download_douyin_smart(url, out_dir, upscale)
+                if ok_dl:
+                    with self.lock:
+                        self.yt_job["pct"] = 100.0
+                        self.yt_job["status"] = "下载完成 ✔"
+                    self._yt_append_log("[OK] 抖音视频下载完成 → %s" % (last_file or out_dir))
+                    self.log("YT 工坊抖音下载完成 → %s" % (last_file or out_dir), "OK")
+                    return
+
+            # 2) 全平台 yt-dlp 智能多轮策略（国内站默认直连，海外站默认走代理）
+            ytdlp = self._find_ytdlp()
+            if not ytdlp:
+                with self.lock:
+                    self.yt_job["status"] = "未检测到 yt-dlp"
+                self._yt_append_log("[ERROR] 未找到 yt-dlp，请先运行一键配置安装")
+                return
+
+            is_cn = self._is_cn_video_host(url)
+            use_proxy = not is_cn
+            local_ck = self._find_local_cookies_txt(cookies_file)
+            cookie_args = []
+            if cookies in ("firefox", "chrome", "edge"):
+                cookie_args = ["--cookies-from-browser", cookies]
+            elif cookies == "file" and local_ck:
+                cookie_args = ["--cookies", local_ck]
+            elif cookies == "auto" and local_ck:
+                cookie_args = ["--cookies", local_ck]
+                self._yt_append_log("[INFO] 自动加载本地 cookies.txt")
+
+            rc, last_file, err_txt = self._exec_ytdlp_once(ytdlp, url, quality, out_dir, cookie_args, [], use_proxy)
+
+            # Edge / Chrome 锁库自动救援
+            if rc != 0 and "Could not copy Chrome cookie database" in err_txt:
+                self._yt_append_log("[WARN] 检测到 Edge/Chrome 运行时独占锁定 Cookie 库，自动切换免锁库智能回退…")
+                fallback_ck = ["--cookies", local_ck] if local_ck else []
+                rc, last_file, err_txt = self._exec_ytdlp_once(ytdlp, url, quality, out_dir, fallback_ck, [], use_proxy)
+
+            # YouTube 风控自动切 android/web 客户端重试
+            if rc != 0 and ("youtube.com" in url.lower() or "youtu.be" in url.lower()):
+                self._yt_append_log("[WARN] YouTube 常规解析受限，自动切换 android/web 客户端重试…")
+                rc, last_file, err_txt = self._exec_ytdlp_once(
+                    ytdlp, url, quality, out_dir, cookie_args if "Could not copy" not in err_txt else [],
+                    ["--extractor-args", "youtube:player_client=android,web"], use_proxy
+                )
+
+            # 代理/直连智能反向重试一次（例如网络环境差异）
+            if rc != 0 and self._sys_proxy():
+                with self.lock:
+                    canceled = (self.yt_job["status"] == "已取消")
+                if not canceled and any(k in err_txt for k in ("Unable to download", "timed out", "Connection", "Proxy", "403")):
+                    alt_proxy = not use_proxy
+                    self._yt_append_log("[WARN] 自动切换%s线路重试…" % ("代理" if alt_proxy else "直连"))
+                    rc, last_file, err_txt = self._exec_ytdlp_once(
+                        ytdlp, url, quality, out_dir,
+                        (["--cookies", local_ck] if local_ck else []), [], alt_proxy
+                    )
+
+            # 小红书内置直链回退
+            if rc != 0 and self._is_xhs_url(url):
+                ok_xhs, xhs_file = self._download_xhs_fallback(url, out_dir)
+                if ok_xhs:
+                    rc, last_file = 0, xhs_file
+
             if rc == 0:
                 with self.lock:
                     self.yt_job["pct"] = 100.0
@@ -906,12 +1214,12 @@ class ControlBackend:
                             self.yt_job["status"] = "2x 超分完成 ✔" if up_rc == 0 else "下载完成（超分异常）"
                         self._yt_append_log("[OK] 2x 超分完成 → %s" % out_up if up_rc == 0 else "[WARN] 超分退出码 %s" % up_rc)
                     else:
-                        self._yt_append_log("[WARN] 未检测到 Video2X 可执行文件，已跳过 2x 超分（视频已正常保存）")
+                        self._yt_append_log("[WARN] 未检测到 Video2X 或目标文件，已跳过 2x 超分")
             else:
                 with self.lock:
                     if self.yt_job["status"] != "已取消":
                         self.yt_job["status"] = "下载失败 (码 %s)" % rc
-                self._yt_append_log("[ERROR] yt-dlp 退出码 %s（若报 403 请在上方勾选浏览器 Cookies）" % rc)
+                self._yt_append_log("[ERROR] 下载失败（若为需登录站点，建议导出 cookies.txt 或使用 Firefox 登录态，避免 Edge/Chrome 锁库）")
         except Exception as ex:
             with self.lock:
                 self.yt_job["status"] = "执行异常"
@@ -1105,11 +1413,44 @@ class ControlBackend:
                 self.log("WebUI 不通 %s" % ex, "ERROR")
                 return False, "qB WebUI 连接失败", {}
 
+        if act == "pick_folder":
+            target = str(body.get("target") or "").strip()
+            init = str(body.get("initial") or "").strip()
+            if not init:
+                if target == "yt":
+                    init = self.yt_output()
+                elif target in ("qbit", "magnet"):
+                    init = self.cfg["qbit"].get("save_dir") or str(DL_HOME)
+                else:
+                    init = self.cfg.get("paths", {}).get("downloads") or str(DL_HOME)
+            chosen = self._pick_folder_dialog(init)
+            if not chosen:
+                return False, "已取消选择目录", {"path": ""}
+            if target == "yt":
+                self.cfg["yt"]["output"] = chosen
+                save_cfg(self.cfg)
+                self.log("YT 视频保存目录已设为：%s" % chosen, "OK")
+            elif target == "qbit":
+                self.cfg["qbit"]["save_dir"] = chosen
+                save_cfg(self.cfg)
+                self.log("qBittorrent 保存目录已设为：%s" % chosen, "OK")
+            elif target == "downloads":
+                self.cfg["paths"]["downloads"] = chosen
+                save_cfg(self.cfg)
+                self.log("总下载目录已设为：%s" % chosen, "OK")
+            return True, "已选择目录：%s" % chosen, {"path": chosen}
+
         if act == "add_download":
             raw_url = str(body.get("url") or "").strip()
             engine = str(body.get("engine") or "auto").strip().lower()
+            save_dir = str(body.get("save_dir") or "").strip()
             if not raw_url:
                 return False, "请先粘贴下载链接或磁力链接", {}
+            if save_dir:
+                try:
+                    Path(save_dir).mkdir(parents=True, exist_ok=True)
+                except Exception:
+                    pass
             low = raw_url.lower()
             is_magnet = False
             magnet_info = None
@@ -1120,8 +1461,9 @@ class ControlBackend:
                     magnet_info = mi
             elif low.startswith("magnet:"):
                 is_magnet = True
-            video_hosts = ("youtube.com", "youtu.be", "bilibili.com", "b23.tv", "douyin.com",
-                           "xiaohongshu.com", "xhslink.com", "tiktok.com", "vimeo.com", "x.com", "twitter.com", "twitch.tv")
+            video_hosts = ("youtube.com", "youtu.be", "bilibili.com", "b23.tv", "douyin.com", "iesdouyin.com",
+                           "xiaohongshu.com", "xhslink.com", "tiktok.com", "vimeo.com", "x.com", "twitter.com",
+                           "twitch.tv", "kuaishou.com", "weibo.com")
             if engine == "auto":
                 if is_magnet or low.endswith(".torrent"):
                     engine = "magnet"
@@ -1142,7 +1484,6 @@ class ControlBackend:
                     except Exception:
                         enhanced = magnet_info.get("uri") or raw_url
 
-                # 优先尝试秒级预取 .torrent 元数据（带 SHA1 校验），跳过 [METADATA] 卡顿
                 tor_bytes, tor_src = b"", ""
                 if MT is not None and ih:
                     try:
@@ -1154,12 +1495,15 @@ class ControlBackend:
                     try:
                         s, base = self.pr.q_login()
                         hdr = {"Referer": base + "/", "Origin": base}
+                        extra_data = {"savepath": save_dir} if save_dir else {}
                         if tor_bytes:
                             r = s.post(base + "/api/v2/torrents/add", timeout=5.0, headers=hdr,
+                                       data=extra_data,
                                        files={"torrents": (ih + ".torrent", tor_bytes, "application/x-bittorrent")})
                         else:
+                            extra_data["urls"] = enhanced
                             r = s.post(base + "/api/v2/torrents/add", timeout=4.0, headers=hdr,
-                                       data={"urls": enhanced})
+                                       data=extra_data)
                         if r.status_code == 200:
                             note = "（已秒级预取种子 %s）" % tor_src if tor_bytes else "（已自动补全公共 Tracker）"
                             self.log("qBittorrent 磁力投递成功 %s" % note, "OK")
@@ -1175,11 +1519,13 @@ class ControlBackend:
                         import base64
                         if not port_open(self.cfg["aria2"]["host"], self.cfg["aria2"]["port"]):
                             self.handle_action({"action": "start_a"})
+                        opts = {"dir": save_dir} if save_dir else {}
                         if tor_bytes:
-                            gid = self.pr.a_call("aria2.addTorrent", [base64.b64encode(tor_bytes).decode("ascii")])
+                            gid = self.pr.a_call("aria2.addTorrent",
+                                                 [base64.b64encode(tor_bytes).decode("ascii"), [], opts])
                             note = "（已秒级预取种子 %s）" % tor_src
                         else:
-                            gid = self.pr.a_call("aria2.addUri", [[enhanced]])
+                            gid = self.pr.a_call("aria2.addUri", [[enhanced], opts])
                             note = "（已自动补全公共 Tracker）"
                         self.log("Aria2 磁力投递成功 GID=%s %s" % (gid, note), "OK")
                         self.poll_once()
@@ -1192,7 +1538,8 @@ class ControlBackend:
                 try:
                     if not port_open(self.cfg["aria2"]["host"], self.cfg["aria2"]["port"]):
                         self.handle_action({"action": "start_a"})
-                    gid = self.pr.a_call("aria2.addUri", [[raw_url]])
+                    opts = {"dir": save_dir} if save_dir else {}
+                    gid = self.pr.a_call("aria2.addUri", [[raw_url], opts] if opts else [[raw_url]])
                     self.log("Aria2 已投递直链任务 GID=%s" % gid, "OK")
                     self.poll_once()
                     return True, "已投递至 Aria2 高速下载", {"engine": "aria2", "gid": gid}
@@ -1203,9 +1550,12 @@ class ControlBackend:
             if engine == "qbit":
                 try:
                     s, base = self.pr.q_login()
+                    data = {"urls": raw_url}
+                    if save_dir:
+                        data["savepath"] = save_dir
                     r = s.post(base + "/api/v2/torrents/add", timeout=4.0,
                                headers={"Referer": base + "/", "Origin": base},
-                               data={"urls": raw_url})
+                               data=data)
                     if r.status_code == 200:
                         self.log("qBittorrent 已添加种子任务", "OK")
                         self.poll_once()
@@ -1216,22 +1566,15 @@ class ControlBackend:
                     return False, "qBittorrent 投递失败，请确认 qB 已启动", {}
 
             if engine == "yt":
-                ytdlp = self._find_ytdlp()
-                out_dir = Path(self.yt_output())
-                out_dir.mkdir(parents=True, exist_ok=True)
-                if ytdlp:
-                    env = os.environ.copy()
-                    px = self._sys_proxy()
-                    if px:
-                        env["HTTP_PROXY"] = env["HTTPS_PROXY"] = env["http_proxy"] = env["https_proxy"] = px
-                    cmd = [ytdlp, "-P", str(out_dir), raw_url]
-                    proc = subprocess.Popen(cmd, cwd=str(out_dir), env=env, **_popen_kwargs())
-                    self.pids["yt"] = proc.pid
-                    save_pids(self.pids)
-                    self.log("YT-DLP 后台开始下载 PID %s → %s" % (proc.pid, out_dir), "OK")
-                    self.poll_once()
-                    return True, "已调用 yt-dlp 开始下载视频", {"engine": "yt"}
-                return self.handle_action({"action": "start_y"})
+                return self.handle_action({
+                    "action": "yt_download",
+                    "url": raw_url,
+                    "quality": "best",
+                    "cookies": str((self.cfg.get("yt") or {}).get("cookies") or "auto"),
+                    "cookies_file": str((self.cfg.get("yt") or {}).get("cookies_file") or ""),
+                    "upscale": bool(self.cfg["ui"].get("upscale")),
+                    "save_dir": save_dir,
+                })
 
         if act == "magnet_parse":
             if MT is None:
@@ -1355,11 +1698,14 @@ class ControlBackend:
                 if self.yt_job.get("running"):
                     return False, "当前已有 YT 视频正在下载，请等待完成或先取消", {}
                 quality = str(body.get("quality") or "best")
-                cookies = str(body.get("cookies") or "none")
+                cookies = str(body.get("cookies") or "auto")
                 cookies_file = str(body.get("cookies_file") or "").strip()
+                save_dir = str(body.get("save_dir") or "").strip()
                 upscale = bool(body.get("upscale", self.cfg["ui"].get("upscale")))
                 self.cfg["yt"]["cookies"] = cookies
                 self.cfg["yt"]["cookies_file"] = cookies_file
+                if save_dir:
+                    self.cfg["yt"]["output"] = save_dir
                 self.cfg["ui"]["upscale"] = upscale
                 save_cfg(self.cfg)
                 self.yt_job.update({
@@ -1579,6 +1925,10 @@ class ControlBackend:
                 self.cfg["qbit"]["pass"] = str(body.get("q_pass") or "")
                 self.cfg["qbit"]["save_dir"] = str(body.get("q_save") or "").strip()
                 self.cfg["yt"]["bat"] = str(body.get("yt_bat") or "").strip()
+                if "downloads" in body and str(body.get("downloads") or "").strip():
+                    self.cfg["paths"]["downloads"] = str(body.get("downloads")).strip()
+                if "yt_out" in body:
+                    self.cfg["yt"]["output"] = str(body.get("yt_out") or "").strip()
                 save_cfg(self.cfg)
                 self.pr.cfg = self.cfg
                 self.pr._q_hold_until = 0

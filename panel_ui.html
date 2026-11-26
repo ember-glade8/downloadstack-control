@@ -481,6 +481,7 @@
               <div class="omni-inner">
                 <span id="omni-tag" class="omni-tag mono">智能识别</span>
                 <input id="omni-url" class="omni-inp mono" placeholder="粘贴直链 / magnet:? 磁力 / 40位 Hash / 视频链接，回车立即开下…" oninput="detectOmni()" onkeydown="if(event.key==='Enter')submitOmni()" />
+                <button onclick="pickFolder('omni')" id="omni-dir-btn" class="btn" style="padding:5px 9px;font-size:11px;" title="选择本次下载保存目录（留空则按各引擎默认目录）">📁 选目录</button>
                 <button onclick="submitOmni()" class="btn btn-mint" style="padding:6px 14px;">⚡ 极速投递</button>
               </div>
             </div>
@@ -682,7 +683,11 @@
         <div class="split-2">
           <div class="panel-box" style="background:rgba(3,8,20,0.72);border:1px solid rgba(168,85,247,0.3);">
             <div class="box-title c-violet mono">◤ 磁力 / InfoHash 解析与直投</div>
-            <textarea id="mag-input" class="inp mono" style="height:110px;resize:none;line-height:1.5;" placeholder="粘贴 magnet:?xt=urn:btih:... 或纯 40 位 InfoHash…"></textarea>
+            <textarea id="mag-input" class="inp mono" style="height:96px;resize:none;line-height:1.5;" placeholder="粘贴 magnet:?xt=urn:btih:... 或纯 40 位 InfoHash…"></textarea>
+            <div style="display:flex;gap:6px;align-items:center;">
+              <input id="mag-dir" class="inp mono flex-1" placeholder="保存目录（留空=使用默认 BT/Aria2 目录）" />
+              <button onclick="pickFolder('magnet')" class="btn" style="padding:6px 11px;">📁 选目录</button>
+            </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
               <button onclick="parseMagnetUI()" class="btn">🔍 校验解析</button>
               <button onclick="submitMagnet('qbit')" class="btn btn-cyan flex-1">🧲 增强投递至 qBittorrent</button>
@@ -743,13 +748,14 @@
 
             <div class="g2">
               <div>
-                <label class="lbl">登录态 / Cookies（防抖音/小红书 403）</label>
+                <label class="lbl">登录态 / Cookies（推荐自动智能，避免 Edge/Chrome 锁库）</label>
                 <select id="yt-cookies" class="inp mono" onchange="toggleYtCookieFile()">
+                  <option value="auto">自动智能（推荐 · 全平台自动适配）</option>
                   <option value="none">不使用 Cookies</option>
-                  <option value="firefox">Firefox 登录态</option>
-                  <option value="chrome">Chrome 登录态</option>
-                  <option value="edge">Edge 登录态</option>
-                  <option value="file">指定 cookies.txt</option>
+                  <option value="firefox">Firefox 登录态（不锁库）</option>
+                  <option value="file">指定 cookies.txt（稳定不锁库）</option>
+                  <option value="chrome">Chrome 登录态（需关闭 Chrome）</option>
+                  <option value="edge">Edge 登录态（需关闭 Edge）</option>
                 </select>
               </div>
               <div style="display:flex;flex-direction:column;justify-content:flex-end;">
@@ -763,6 +769,14 @@
             <div id="yt-cookie-path-wrap" class="hidden">
               <label class="lbl">cookies.txt 路径</label>
               <input id="yt-cookies-file" class="inp mono" placeholder="输入导出的 cookies.txt 完整路径" />
+            </div>
+
+            <div>
+              <label class="lbl">视频保存目录（可自由更改，自动记住）</label>
+              <div style="display:flex;gap:6px;align-items:center;">
+                <input id="yt-out-dir" class="inp mono flex-1" placeholder="留空使用默认视频下载目录" />
+                <button type="button" onclick="pickFolder('yt')" class="btn btn-cyan" style="padding:6px 11px;">📁 选择文件夹</button>
+              </div>
             </div>
 
             <div style="display:flex;gap:8px;">
@@ -857,7 +871,18 @@
           <div><label class="lbl">qB 账号</label><input id="f-q-user" class="inp mono" /></div>
           <div><label class="lbl">qB 密码（免密可留空）</label><input id="f-q-pass" type="password" class="inp mono" /></div>
         </div>
-        <div><label class="lbl">qB 保存目录</label><input id="f-q-save" class="inp mono" /></div>
+        <div>
+          <label class="lbl">总下载目录</label>
+          <div style="display:flex;gap:6px;"><input id="f-dl-root" class="inp mono flex-1" /><button type="button" onclick="pickFolder('downloads')" class="btn" style="padding:5px 9px;">📁</button></div>
+        </div>
+        <div>
+          <label class="lbl">qB 保存目录</label>
+          <div style="display:flex;gap:6px;"><input id="f-q-save" class="inp mono flex-1" /><button type="button" onclick="pickFolder('qbit')" class="btn" style="padding:5px 9px;">📁</button></div>
+        </div>
+        <div>
+          <label class="lbl">YT 视频保存目录</label>
+          <div style="display:flex;gap:6px;"><input id="f-yt-out" class="inp mono flex-1" /><button type="button" onclick="pickFolder('yt')" class="btn" style="padding:5px 9px;">📁</button></div>
+        </div>
         <div><label class="lbl">外部视频脚本</label><input id="f-yt-bat" class="inp mono" /></div>
         <div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#cbd5e1;padding-top:4px;">
           <span>开机自启本面板</span><div id="sw-auto-panel" class="sw" onclick="act('toggle_autostart_panel')"><i></i></div>
@@ -1077,10 +1102,41 @@
         tag.textContent = '🎬 YT 视频'; tag.style.color = '#fde68a';
       } else { tag.textContent = '⚡ Aria2 直链'; tag.style.color = '#a7f3d0'; }
     }
+    let omniSaveDir = '';
+    async function pickFolder(target) {
+      const initMap = {
+        yt: document.getElementById('yt-out-dir')?.value || '',
+        magnet: document.getElementById('mag-dir')?.value || '',
+        qbit: document.getElementById('f-q-save')?.value || '',
+        downloads: document.getElementById('f-dl-root')?.value || '',
+        omni: omniSaveDir || ''
+      };
+      const j = await act('pick_folder', { target, initial: initMap[target] || '' }, true);
+      if (!j || !j.ok || !j.path) return;
+      const p = j.path;
+      if (target === 'yt') {
+        document.getElementById('yt-out-dir').value = p;
+        document.getElementById('f-yt-out').value = p;
+      } else if (target === 'magnet') {
+        document.getElementById('mag-dir').value = p;
+      } else if (target === 'qbit') {
+        document.getElementById('f-q-save').value = p;
+      } else if (target === 'downloads') {
+        document.getElementById('f-dl-root').value = p;
+      } else if (target === 'omni') {
+        omniSaveDir = p;
+        const b = document.getElementById('omni-dir-btn');
+        const shortName = p.split(/[\\/]/).filter(Boolean).pop() || p;
+        b.textContent = '📁 ' + shortName.slice(0, 10);
+        b.title = '当前保存目录：' + p + '（点击更改）';
+        b.className = 'btn btn-cyan';
+      }
+      toast('已选定保存目录：' + p, 'mint');
+    }
     async function submitOmni() {
       const inp = document.getElementById('omni-url'), url = (inp.value || '').trim();
       if (!url) { toast('请先粘贴链接或磁力 Hash', 'amber'); inp.focus(); return; }
-      const j = await act('add_download', { url, engine: 'auto' });
+      const j = await act('add_download', { url, engine: 'auto', save_dir: omniSaveDir });
       if (j && j.ok) { inp.value = ''; detectOmni(); }
     }
     async function parseMagnetUI() {
@@ -1098,7 +1154,8 @@
     async function submitMagnet(engine) {
       const inp = document.getElementById('mag-input'), url = (inp.value || '').trim();
       if (!url) { toast('请先粘贴磁力链接或 40 位 InfoHash', 'amber'); return; }
-      const j = await act('add_download', { url, engine });
+      const save_dir = (document.getElementById('mag-dir')?.value || '').trim();
+      const j = await act('add_download', { url, engine, save_dir });
       if (j && j.ok) inp.value = '';
     }
     let ytQuality = 'best', ytPrefsLoaded = false, pollFail = 0;
@@ -1117,7 +1174,8 @@
       if (!url) { toast('请先粘贴视频链接或分享口令', 'amber'); document.getElementById('yt-url').focus(); return; }
       const cookies = document.getElementById('yt-cookies').value;
       const cookies_file = (document.getElementById('yt-cookies-file').value || '').trim();
-      await act('yt_download', { url, quality: ytQuality, cookies, cookies_file, upscale: !!S.y.upscale });
+      const save_dir = (document.getElementById('yt-out-dir')?.value || '').trim();
+      await act('yt_download', { url, quality: ytQuality, cookies, cookies_file, save_dir, upscale: !!S.y.upscale });
     }
     function saveSettings() {
       act('save_cfg', {
@@ -1125,6 +1183,7 @@
         a_secret: document.getElementById('f-a-secret').value, q_host: document.getElementById('f-q-host').value,
         q_port: document.getElementById('f-q-port').value, q_user: document.getElementById('f-q-user').value,
         q_pass: document.getElementById('f-q-pass').value, q_save: document.getElementById('f-q-save').value,
+        downloads: document.getElementById('f-dl-root').value, yt_out: document.getElementById('f-yt-out').value,
         yt_bat: document.getElementById('f-yt-bat').value
       }); toggleDrawer();
     }
@@ -1233,6 +1292,7 @@
         if (!ytPrefsLoaded) {
           if (ys.cookies) { document.getElementById('yt-cookies').value = ys.cookies; toggleYtCookieFile(); }
           if (ys.cookies_file) document.getElementById('yt-cookies-file').value = ys.cookies_file;
+          if (ys.out_dir) document.getElementById('yt-out-dir').value = ys.out_dir;
           ytPrefsLoaded = true;
         }
         const ybox = document.getElementById('yt-log-box');
@@ -1315,7 +1375,9 @@
           document.getElementById('f-q-port').value = cfg.qbit?.port || 8080;
           document.getElementById('f-q-user').value = cfg.qbit?.user || 'admin';
           document.getElementById('f-q-pass').value = cfg.qbit?.pass || '';
+          document.getElementById('f-dl-root').value = cfg.paths?.downloads || '';
           document.getElementById('f-q-save').value = cfg.qbit?.save_dir || '';
+          document.getElementById('f-yt-out').value = d.yt_studio?.out_dir || cfg.yt?.output || '';
           document.getElementById('f-yt-bat').value = cfg.yt?.bat || '';
           S.cfgLoaded = true;
         }
