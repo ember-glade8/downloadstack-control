@@ -2,13 +2,13 @@
 
 # DownloadStack Control
 
-**一个把 aria2 / AriaNg / qBittorrent / yt-dlp 串成一个控制台的 Windows / Linux / macOS 桌面面板**
+**把 aria2 / AriaNg / qBittorrent / Magnet 磁力增强 / yt-dlp 统一收拢进一个曲面 3D 空间控制台的跨平台桌面面板**
 
-赛博朋克 HUD 风格 · 只做监控与调度 · 不内置任何下载引擎
+Windows / Linux / macOS · 零前端构建 · 离线可用 · 同源直出 AriaNg · 不内置任何下载引擎二进制
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![Flet](https://img.shields.io/badge/Flet-1.1.3-00ccff)](https://flet.dev/)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-00E5A0)](#-支持平台)
+[![UI](https://img.shields.io/badge/UI-Spatial%203D%20Console-00E5A0)](#核心功能)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-00ccff)](#快速部署)
 [![License](https://img.shields.io/badge/License-MIT-FFB020)](LICENSE)
 [![PRs](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
 
@@ -18,344 +18,188 @@
 
 ## 📖 这是什么
 
-你机器上可能同时装了 **aria2**（下直链）、**AriaNg**（aria2 的网页界面）、**qBittorrent**（下 BT/PT）、
-**yt-dlp**（下视频）。它们各自有界面、各自要启停、各自的配置在各自目录里。
+机器上同时装了 **aria2**（直链加速）、**AriaNg**（aria2 网页管理）、**qBittorrent**（BT / PT）、**yt-dlp**（平台视频）时，各自独立启停、配置分散、磁力冷启动易卡元数据、AriaNg 经常遇端口或 Token 认证报错。
 
-**DownloadStack Control 不替代它们，只做一件事：把状态聚合到一个面板，把启停收进一个按钮。**
+**DownloadStack Control 不替代它们，只做一件事：用一个 3D 空间控制台统一监控、调度、投递任务与修复磁力/DHT。**
 
-> 面板本身不下载任何东西，只调用你已安装的程序；不修改它们的配置，只读取状态。
-
----
-
-## ✨ 功能
-
-### 监控
-- 🔴🟢 **三服务状态灯**：ONLINE（绿）/ ERROR（红）/ OFFLINE（灰），带呼吸脉冲动画
-- 📊 实时速率、任务数、连接数、种子数、做种数
-- 💫 环形负载表 + 迷你波形图（按 10 MiB/s 归一化）
-- 🧾 实时日志区（INFO 绿 / WARN 黄 / ERROR 红），支持清空与导出
-
-### 调度
-- ▶️ 一键启动 Aria2 + AriaNg（自动拉静态服务、自动打开浏览器）
-- ⏹️ 一键停止 / 重启（**只操作本面板记录的 PID**，不全局 `taskkill`）
-- 🧲 一键全部停止：按 Aria2 → qBittorrent → YT 壳 顺序
-- 🩺 一键自检：端口、文件、可写性、RPC、WebUI 全测一遍
-- 💾 一键备份：`aria2.conf` / `qBittorrent.ini` / `config.json` / 路径表 → `backups/`
-
-### 视频下载器（内置 GUI）
-- 🎬 粘链接 → 选清晰度（最佳 / ≤1080P / ≤720P / 仅音频 mp3）→ 下载
-- ⚡ **2x 超分开关**：检测到 Video2X 时下载完自动超分，没装会明确提示跳过
-- ❌ 取消会结束整个进程树，不留后台任务
-- 📂 一键打开保存目录
-
-### 工程细节
-- 🧩 **平台差异层**：`tasklist/taskkill` → `os.kill`/进程组；注册表 Run → LaunchAgents / `.desktop`
-- 🔌 **端口自动避让**：6800/16800 被占用时自动顺延到 6801/16801，并写进配置
-- 🧠 **安装根自动探测**：环境变量 → 上级目录 → `C~H:\Tools\DownloadStack`
-- 🛡 **凭据不落仓库**：`config.json`、`rpc-secret.txt`、`logs/`、`backups/` 全在 `.gitignore` 里
-- 🔍 **提交前体检**：`scripts/scan_secrets.py` 扫用户名、明文密码、绝对用户路径
+> 面板本身不打包第三方下载引擎二进制；只通过官方 JSON-RPC / WebUI API 与本机已安装组件协作。
 
 ---
 
-## 🖼 界面预览
+## 📋 环境与部署要求（开始前必看）
 
-> 截图里含本机路径，仓库默认不附带；跑起来后欢迎提 PR 补图。
-
-```
-┌──────────────────────── 状态总览区（三灯 · 8 项速率 · 环形表 · 波形）────────────────────────┐
-│导航区 │  下载区 · aria2        │  下载区 · BT 种子      │ 状态提示区（磁力/DHT 现状）│
-│ 仪表盘│  下载区 · 视频          │  工具与维护区          │ 使用教程区（9 小节，可下拉）│
-├──────────────────────────── 日志区（清空 / 导出）───────────────────────────────────────────┤
-└────────────────────────────────────────────────────────────────────────────────────────────┘
-```
+| 类别 | 组件 / 依赖 | 是否必装 | 说明 |
+| --- | --- | --- | --- |
+| **运行环境** | **Python 3.10+** | **必装** | Windows 官网安装时请勾选 `Add Python to PATH` |
+| **Python 依赖** | **`requests>=2.31`** | **必装** | 3D 主控制台 `panel.py` 唯一外部依赖（其余全用标准库） |
+| **展示窗口** | **Edge / Chrome / 任意现代浏览器** | **必装** | Windows 自动以 Edge/Chrome 无边框 App 窗口启动；Linux/macOS 自动开默认浏览器；无桌面 SSH 自动跑在 `http://127.0.0.1:18550/` |
+| **下载引擎** | **aria2 + AriaNg + yt-dlp + ffmpeg** | **一键自动安装** | 运行 `一键配置.bat` / `sh 一键配置.sh` 会从官方 Release 下载并做 SHA256 校验 |
+| **BT / PT 引擎** | **qBittorrent** | 可选 | 需要下种子/PT 时安装（支持 `WebUI` 密码登录与本机免密 `LocalHostAuth=false`） |
+| **视频下载 GUI** | **`flet==1.1.3`** | 可选 | 仅独立视频图形窗口 `ytdl_gui.py` 需要；不装也能正常使用 3D 主控制台与命令行直投 |
+| **AI 超分** | **Video2X** | 可选 | 检测到本地 Video2X 后可开启「2x 超分」开关，未安装自动跳过 |
 
 ---
 
-## 🚀 快速开始（只需一个入口）
+## 🚀 快速部署（任选一种）
 
-| 平台 | 入口 | 怎么用 |
+### 方式 A：全自动一键配置（推荐新手）
+
+| 平台 | 第一步：配置环境与组件 | 第二步：启动 3D 控制台 |
 | --- | --- | --- |
-| Windows | `一键配置.bat` | 双击 → 弹出图形向导 → 点「一键配置(含环境)」 |
-| Linux / macOS | `一键配置.sh` | 终端里执行一行：`sh 一键配置.sh` |
+| **Windows** | 双击 `一键配置.bat` → 点「一键配置(含环境)」 | 双击 `启动面板.bat` |
+| **Linux / macOS** | 终端执行 `sh 一键配置.sh`（支持 `--scan` / `--auto`） | 终端执行 `sh 启动面板.sh` |
+
+> Linux 里双击 `.sh` 默认会用文本编辑器打开，请在终端运行 `sh 一键配置.sh`。
+
+### 方式 B：极简手动部署（已有 aria2 / qBittorrent）
+
+如果你本机已经装好了 aria2 或 qBittorrent，只需 3 条命令即可跑起 3D 控制台：
 
 ```bash
-# Linux / macOS
+git clone https://github.com/ember-glade8/downloadstack-control.git
 cd downloadstack-control
-sh 一键配置.sh            # 交互式（会问你要不要装）
-sh 一键配置.sh --scan     # 只体检，不安装
-sh 一键配置.sh --auto     # 全自动
+python -m pip install requests          # 若还要用独立 ytdl_gui.py，改为 pip install -r requirements.txt
+python panel.py                         # 自动启动 http://127.0.0.1:18550/ 并打开 3D 控制台窗口
 ```
 
-> Linux 里双击 `.sh` 只会用文本编辑器打开（从 Windows 拷过去的文件没有执行权限，
-> 这是系统行为），所以 Linux 上请用上面那一行命令。
+> 首次启动会在同目录自动生成 `config.json`、`state/`、`logs/`、`cache/`、`backups/`，全部位于 `.gitignore` 内，不会污染仓库。点击右上角 **「⚙ 设置」** 即可填入或微调本机路径与端口。
 
-配置完成后启动面板：`启动面板.bat`（Windows）/ `sh 启动面板.sh`（Linux/macOS）。
+### 方式 C：无桌面 / SSH / NAS 服务器模式
 
-### 安装时你会看到什么
+```bash
+DOWNLOADSTACK_WEB_PORT=18550 python panel.py
+# 本机或 SSH 端口转发后浏览器访问 http://127.0.0.1:18550/
+```
 
-1. **先列清单**：左侧逐项 `✔ 就绪 / ✘ 缺失`，右侧日志同时打印"缺少 N 项：…"
-2. **逐项安装 + 进度条**：
+---
 
-   ```
-   正在安装 2/5：ffmpeg
-   === [2/5] 正在安装: ffmpeg ===
-         ffmpeg  45% (13.2/29.4 MB)
-   ```
+## ✨ 核心功能
 
-   进度条按「已完成项 + 当前项内部进度」推进；下载类项目显示 MB 与百分比，每项结束打 `完成/未完成`
-3. 全部结束后自动复扫，再点「启动控制台」
+### 1. 曲面 3D 空间控制台（`panel_ui.html`）
+- **零外链离线运行**：纯原生 HTML5 / CSS3 3D / Canvas 渲染，无需 Node.js、无需构建、无 CDN 依赖。
+- **曲面环抱驾驶舱**：左翼双通道液态吞吐波形、中枢 3D 极光能量地形台与万能直投舱、右翼实时任务雷达，下方四大带独立 3D 动态画布的实体操控台（Aria2 超光速隧道 / qBittorrent 3D P2P 球网 / Magnet 3D 磁感力场 / YT-DLP 声光频谱）。
 
-### 环境变量（一键配置自动写入）
+### 2. 万能极速直投舱 & 实时任务队列
+- **粘贴即下**：在中枢输入框粘贴 HTTP/HTTPS 直链、`magnet:?`、纯 40 位 Hex / 32 位 Base32 InfoHash、或视频平台链接，自动识别并分流投递。
+- **全栈任务管理**：顶部切换 **「⚡ 任务队列」** 即可实时查看并暂停 / 继续 / 移除 Aria2 与 qBittorrent 全部任务。
 
-| 变量 | 值 | 作用 |
+### 3. 内置同源 AriaNg（免端口冲突）
+- `panel.py` 直接在 `/ariang/` 挂载本地 `ariaNg/index.html` 并自动 Base64 注入 `rpc-secret`，不再依赖额外的 16800/16801 静态 HTTP 进程。
+- 支持顶部 **「🌐 内置 AriaNg」** 全屏嵌入使用，或点击 **「↗ 跳转 AriaNg」** 前台弹出独立窗口。
+
+### 4. 磁力 / DHT 增强工坊（`magnet_tools.py`）
+- **秒解元数据**：投递磁力时自动尝试预取公共 `.torrent` 并做 **SHA1 InfoHash 严格校验**，跳过 `[METADATA]` 卡顿。
+- **Tracker 热更新**：多镜像拉取公共高速 Tracker（支持自动代理回退与内置保底），一键热写入运行中的 Aria2 与 qBittorrent。
+- **DHT 一键修复**：自动发现携带合法 `token` 的真实 KRPC DHT 节点并写入 `aria2.conf`，实时展示 qBittorrent DHT 节点数。
+
+### 5. 安全调度与维护
+- **PID 隔离**：停止 / 重启 / 一键全停（按 Aria2 → qBittorrent → YT 壳顺序）仅操作本面板记录的 PID 或官方 API 优雅关闭，**绝不全局 `taskkill`**。
+- **一键自检 & 备份**：检查端口、核心文件、目录可写性与 RPC/WebUI 连通性；一键备份全套配置至 `backups/`。
+- **敏感信息防泄漏**：提交前可运行 `python scripts/scan_secrets.py .` 扫描凭据与绝对用户路径。
+
+---
+
+## 🔌 默认端口与环境变量
+
+| 端口 / 变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `DOWNLOADSTACK_ROOT` | 安装根目录 | 面板/脚本定位 aria2、qB、tools |
-| `DOWNLOADSTACK_DOWNLOADS` | 下载根目录 | 成品去处 |
-| `VIDEO2X_PATH` | video2x 可执行文件（检测到才写） | 超分用 |
-| `PATH` | 追加 `<ROOT>/tools/ffmpeg/bin` | 让 yt-dlp 能找到 ffmpeg |
-
-Linux/macOS 写到 `~/.config/downloadstack/env.sh` 并自动挂进 `~/.bashrc`。
-
-### 安装器会做的事
-
-```
-[0/9] 环境体检      Python / pip / flet / requests / ffmpeg / tar / curl / winget
-[1/9] 复用检测      发现已有安装就直接复用，不重复下载
-[2/9] 选盘符        列出可用盘，回车=默认，可自定目录（绝对路径校验）
-[3/9] 确认位置      程序目录 / 下载目录
-[4/9] 建目录        aria2 · ariaNg · qBittorrent · ControlPanel · logs · cache · backups · tools
-[5/9] aria2c        官方 release + SHA256 校验
-[6/9] AriaNg        官方 AllInOne + SHA256 校验
-[7/9] yt-dlp        官方 latest（失败自动 pip 兜底）
-[8/9] 写配置        aria2.conf（随机 64 位密钥）+ config.json + 4 个启停脚本 + GUI 启动器
-[9/9] 自检          逐项打 [OK]/[缺失]，弹窗总结
-```
+| `DOWNLOADSTACK_WEB_PORT` | `18550`（被占自动顺延至 `18569`） | 3D 控制台本地服务端口（同时直出 `/ariang/`） |
+| `aria2.port` | `6800` | aria2 JSON-RPC 端口（带 `rpc-secret` 认证） |
+| `qbit.port` | `8080` | qBittorrent WebUI 端口（支持密码登录与本机免密） |
+| `DOWNLOADSTACK_ROOT` | 自动探测 | 安装根目录（定位 aria2、ariaNg、qBittorrent、tools） |
+| `DOWNLOADSTACK_DOWNLOADS` | `<同盘>\Downloads` 或 `~/Downloads` | 总下载成品根目录 |
+| `VIDEO2X_PATH` | 自动探测（可选） | Video2X 可执行文件路径（2x 超分用） |
 
 ---
 
-## 🧭 使用教程
+## 🏗 架构与目录结构
 
-### 1. 普通文件 / 直链（aria2）
-
-1. 面板点 **启动 Aria2 + AriaNg** → 灯变绿，浏览器自动打开 `http://127.0.0.1:16800`
-2. AriaNg 左上「新建」→ 粘贴直链 → 开始
-3. 成品在 `<下载根>/aria2`（默认 `D:\Downloads\aria2`）
-4. 支持断点续传；暂停后继续即可；取消会删 `.aria2` 控制文件
-
-### 2. 平台视频（内置 GUI）
-
-1. 面板点 **启动 YT 下载壳**（默认就是 `ytdl_gui.py`），或双击 `ControlPanel/yt-download.cmd`
-2. 粘贴链接 → 选清晰度 → 开始下载
-3. 成品在 `<下载根>/yt-dlp`
-4. 要超分就勾 **下载后 2x 超分**（检测到 Video2X 才可点）
-
-### 3. BT / PT（qBittorrent）
-
-1. 安装器会问要不要用 winget 装 qB；或自己装到 `<程序目录>/qBittorrent`
-2. 面板点 **启动 qBittorrent** → **打开 WebUI**（`127.0.0.1:8080`）
-3. 拖 `.torrent` 进窗口，或「添加 Torrent 链接」
-4. 成品在 `<下载根>/qBittorrent`
-
-### 4. 出差错怎么看
-
-| 现象 | 看哪里 |
-|---|---|
-| 灯是灰的 | 服务没启动，点「启动」 |
-| 灯是红的 | 装了但认证/接口失败 → 点「测试」按钮，日志区有具体原因 |
-| 面板打不开 | 跑 `diag.bat` / `sh diag.sh`，生成 `diag-report.txt` |
-| qB 红灯 | 在设置页填 WebUI 密码；面板已做 30 秒失败退避，避免自己把 IP 封了 |
-
----
-
-## 🏗 它实现了什么（架构）
-
-```
-panel.py（Flet 单文件 UI）────────────────────────────────┐
+```text
+panel.py（3D 控制台后端服务 + 平台差异层 + 实时轮询 + 同源 AriaNg 挂载）
   ├─ 平台差异层   IS_WIN / pid_alive / kill_tree / shell_run / open_path
-  ├─ Probe         aria2 JSON-RPC 轮询 · qB WebUI 登录+maindata · yt pid 探测
-  ├─ 动作层        start/stop/restart · 备份 · 自检 · 清理 · 原厂重置
-  └─ 渲染层        状态灯 · 数字 · 波形 · 环形表 · 日志 · 卡片
+  ├─ Probe         aria2 JSON-RPC + 任务队列 · qB WebUI 免密/登录 + DHT 节点 · yt PID
+  ├─ ControlBackend 启停 · 万能投递 · 磁力增强 · 任务控制 · 自检 · 备份 · 清理 · 开机自启
+  └─ HTTP Server   127.0.0.1:18550  (/ · /api/state · /api/action · /ariang/)
 
-setup_wizard.py（tkinter 引导）
-  └─ scan() 逐项探测 → 缺失清单 → 一次确认 → 调 install.bat/.sh → 复扫 → 启动
-
-install.bat / install.sh（真正的安装器）
-  └─ 体检 · 复用 · 盘符/目录 · 下载+SHA256 · 生成配置与启停脚本 · 自检
+panel_ui.html      零外链离线曲面 3D 空间控制台前端
+magnet_tools.py    磁力解析 · Tracker 拉取热更 · DHT token 节点发现 · SHA1 种子预取校验
+ytdl_gui.py        独立视频下载器 GUI（支持画质/Cookies/2x 超分）
+setup_wizard.py    图形/文本配置引导（--auto / --text / --scan）
+install.bat / .sh  三平台组件安装器（目录初始化 + 官方包 SHA256 校验 + 启停脚本生成）
 ```
 
-**关键实现点**
-
-| 点 | 做法 |
-|---|---|
-| 只读状态 | 全部走 aria2 JSON-RPC / qB WebUI，超时 2s，失败不崩溃只变灯 |
-| 只管自己的进程 | PID 记在 `state/pids.json`，停止只杀这些；没有全局 kill |
-| 凭据本机 | qB 密码、aria2 密钥存在本地 JSON/文本，`.gitignore` 排除 |
-| 端口不冲突 | 安装时探测 6800..6805 / 16800..16803，取第一个空闲并写入配置 |
-| 跨平台 | 差异全部收敛到文件顶部 ~90 行平台层，业务代码零 if-win |
-
----
-
-## ⚙️ 配置说明（`config.json`）
-
-| 键 | 说明 | 默认 |
-|---|---|---|
-| `aria2.host/port` | RPC 地址 | `127.0.0.1:6800` |
-| `aria2.exe/conf/secret` | 程序、配置、密钥文件路径 | 安装目录下 |
-| `qbit.host/port` | WebUI 地址 | `127.0.0.1:8080` |
-| `qbit.user/pass` | WebUI 账号密码（本机明文存储） | `admin` / 空 |
-| `qbit.save_dir` | 种子保存目录 | `<下载根>/qBittorrent` |
-| `ariang.port/dir/script` | AriaNg 静态服务 | `16800` + 安装目录 |
-| `yt.bat` | 外部视频脚本（留空=不启用） | 安装器填 GUI 启动器 |
-| `scripts.start/stop/qbit` | 启停脚本路径 | 安装器生成 |
-| `ui.upscale` | 超分开关 | `false` |
-
-环境变量覆盖：`DOWNLOADSTACK_ROOT`、`DOWNLOADSTACK_DOWNLOADS`、`DOWNLOADSTACK_YTBAT`、
-`DOWNLOADSTACK_YTSHELL_INI`、`PYTHON_EXE`、`VIDEO2X_PATH`。
-
----
-
-## 📁 目录结构
-
-```
+```text
 downloadstack-control/
 ├─ panel.py              面板主程序（3D 控制台后端服务 + 探测 + 动作 + 平台差异层）
 ├─ panel_ui.html         曲面 3D 空间控制台前端（零外链离线运行 + 内置 AriaNg / 磁力工坊 / 任务队列）
 ├─ magnet_tools.py       磁力解析 / Tracker 热更新 / DHT 修复 / 种子预取校验模块
-├─ ytdl_gui.py           视频下载器 GUI
+├─ ytdl_gui.py           独立视频下载器 GUI
 ├─ setup_wizard.py       图形/文本引导（--auto / --text / --scan）
 ├─ 一键配置.bat / .sh     一键配置（依赖 + 组件 + 环境变量）
-├─ 启动面板.bat / .sh     启动器（先体检 → 缺就问你 → 启动）
+├─ 启动面板.bat / .sh     启动器（先体检 → 缺就问你 → 启动 3D 控制台）
 ├─ install.bat / .sh     安装向导（盘符自选、端口避让、SHA256 校验）
-├─ diag.bat / diag.sh    诊断 → diag-report.txt
+├─ diag.bat / diag.sh    环境与端口诊断 → diag-report.txt
 ├─ config.example.json   配置模板
-├─ requirements.txt      flet==1.1.3 / requests
+├─ requirements.txt      requests（必装） / flet（ytdl_gui.py 可选）
 ├─ scripts/
 │  ├─ scan_secrets.py    提交前敏感信息扫描
-│  └─ build.ps1          PyInstaller 打包脚本（可选）
-├─ LICENSE / NOTICE / SECURITY.md / CONTRIBUTING.md / README.md
+│  └─ build.ps1          PyInstaller 单文件打包脚本（可选）
+├─ tests/test_core.py    核心与磁力模块单元测试
+└─ LICENSE / NOTICE / SECURITY.md / CONTRIBUTING.md / README.md
 ```
-
-## ❓ 已知问题
-
-1. **磁力 / DHT**：部分网络下 magnet 取不到元数据、DHT 长期 0 节点；用 `.torrent` 文件即可绕过。属网络环境问题。
-2. **AriaNg 连不上 aria2**：需要 aria2 开 `rpc-allow-origin-all=true`（安装器默认写入），否则浏览器跨源拦截。
-3. **qB WebUI 登录失败会封 IP**：面板已做 30 秒退避，建议先配好密码再启动。
-4. **qBittorrent 静默安装**：官方只给安装包，向导用 winget 代装，失败时给手动命令。
-5. **macOS**：代码已做平台适配，未在真机验证。
 
 ---
 
+## 🆘 常见问题排错
 
-## 🆘 用户常遇到的问题（照着做即可）
+### 1. qBittorrent 状态灯为红 / 登录失败
+- 点击右上角 **「⚙ 设置」** 填写 qBittorrent WebUI 账号密码并保存；如果你在 qBittorrent 中勾选了「对本地主机上的客户端跳过身份验证（`LocalHostAuth=false`）」，面板会自动免密直连，密码留空即可。
+- 面板内置 30 秒失败退避保护，避免密码填错触发 qB 封禁本机 IP。
 
-### 1. 抖音/小红书 403 Forbidden、提示 Fresh cookies are needed
+### 2. 磁力链接卡在「获取元数据」或 DHT 为 0 节点
+- 进入顶部 **「🧲 磁力工坊」** → 点 **「🔧 一键修复 DHT/磁力」** 与 **「🌐 更新并热载 Tracker」**。
+- 直接在「磁力工坊」或中枢「万能直投舱」粘贴 `magnet:?` 或 40 位 InfoHash，系统会自动补全高速 Tracker 并优先预取 `.torrent`（带 SHA1 校验）。
 
-这些站点要登录态。视频下载器里中间那行 **「登录状态 / Cookies」**：
+### 3. 抖音 / 小红书视频提示 403 或需要 Cookies
+- 打开视频下载器 GUI（`ytdl_gui.py`），在 **「登录状态 / Cookies」** 选择已登录该站点的 Firefox / Chrome 或指定导出的 `cookies.txt`（选择会自动保存）。
 
-| 你的情况 | 选择 |
-| --- | --- |
-| Linux/Windows 里用 Firefox 登录过该站 | `用 Firefox 登录态` |
-| 用 Chrome 登录过 | `用 Chrome 登录态` |
-| 有导出的 cookies.txt | 填进「cookies.txt 路径」 |
+### 4. Linux / Ubuntu 24.04 报 `externally-managed-environment`
+- 一键安装器默认创建独立 `.venv` 避开 PEP 668；若手动安装请先执行：
+  ```bash
+  sudo apt install -y python3-venv python3-pip
+  python3 -m venv .venv && .venv/bin/pip install requests
+  .venv/bin/python panel.py
+  ```
 
-> 选择会**记住**（写在 `ControlPanel/ytdl_settings.json`），下次不用再选。
+### 5. 导出诊断报告
+- Windows 双击 `diag.bat`，Linux/macOS 执行 `sh diag.sh`，会生成 `diag-report.txt`（包含系统、Python、核心文件、18550/6800/8080 端口与日志）。
 
-### 2. AriaNg 打开报「认证失败」
-
-aria2 是带 `rpc-secret` 启动的，AriaNg 必须带密钥。新版面板打开时会自动拼：
-
-```
-http://127.0.0.1:16800/?rpc=127.0.0.1:6800&secret=<你的密钥>
-```
-
-如果还是认证失败：面板 → 设置 → 确认「密钥文件」指向 `aria2/rpc-secret.txt`，保存后重开。
-
-### 3. AriaNg 页面「无法访问 / 拒绝连接」
-
-AriaNg 是个静态页，需要一个本地 HTTP 服务（端口 16800）。检查：
-
-```bash
-ss -ltn | grep 16800        # 有输出=在跑
-sh ~/DownloadStack/start_ariang.sh &   # 没跑就手动起
-```
-
-新版面板点「打开 AriaNg 网页」会自动拉起并**等待最多 10 秒**。
-
-### 4. 面板窗口不弹出来（SSH / 无桌面）
-
-```bash
-DOWNLOADSTACK_WEB=1 sh ~/DownloadStack/ControlPanel/启动面板.sh
-# 然后浏览器打开 http://127.0.0.1:8550
-```
-
-### 5. 点「启动 YT 下载壳」没反应
-
-```bash
-ls -l ~/DownloadStack/ControlPanel/yt-download.sh
-```
-不存在就补：
-
-```bash
-cat > ~/DownloadStack/ControlPanel/yt-download.sh <<'EOF'
-#!/bin/sh
-exec "$HOME/DownloadStack/.venv/bin/python" -B "$HOME/DownloadStack/ControlPanel/ytdl_gui.py"
-EOF
-chmod +x ~/DownloadStack/ControlPanel/yt-download.sh
-```
-
-### 6. 安装时报 `externally-managed-environment`
-
-Ubuntu 24.04 的 PEP 668 限制。安装器已经自动建 `venv` 规避；如果仍报错：
-
-```bash
-sudo apt install -y python3-venv python3-pip
-rm -rf ~/DownloadStack/.venv
-sh install.sh
-```
-
-### 7. 导出诊断
-
-```bash
-sh diag.sh        # 生成 diag-report.txt
-```
-里面包含系统、Python、依赖、组件、端口、日志，排错时先看这个。
+---
 
 ## 🛣 Roadmap
 
-- [ ] 下载队列可视化（aria2 多任务进度条）
-- [ ] 托盘图标 + 最小化到托盘
+- [x] 下载队列可视化（Aria2 + qBittorrent 多任务进度条与暂停/继续/移除）
+- [x] 磁力 / DHT 增强工坊（Tracker 热更新、DHT 节点修复、SHA1 预取 `.torrent`）
+- [x] 同源内置 AriaNg 挂载（零端口冲突 + 自动注入 RPC Token）
+- [ ] 系统托盘图标 + 最小化到托盘
 - [ ] 定时任务（夜间限速、定时备份）
-- [ ] 主题商店（更多赛博配色）
 - [ ] 打包为单文件 exe（Release 附件 + SHA256）
 
 ---
 
-## 🤝 贡献
+## 🤝 贡献与验证
 
-欢迎 PR。提交前请跑：
+提交 PR 前请运行本地自检（与 GitHub Actions CI 一致）：
 
 ```bash
 python scripts/scan_secrets.py .
+python -m py_compile panel.py magnet_tools.py ytdl_gui.py setup_wizard.py scripts/scan_secrets.py
+python -m unittest discover -s tests -v
 ```
-
-**Commit 规范（Conventional Commits）**
-
-```
-feat(panel): 支持 qB 认证失败提示
-fix(installer): 修正 AriaNg 哈希校验
-docs(readme): 补三平台安装说明
-refactor(platform): 抽出 kill_tree 到平台层
-chore(deps): 锁定 flet==1.1.3
-```
-
-**分支**：`feat/xxx`、`fix/xxx`；**PR** 请描述「改了什么 / 怎么验证」。
 
 ---
 
 ## 📄 License
 
-MIT © DownloadStack Control contributors
-第三方组件（aria2 GPL-2.0 / AriaNg MIT / qBittorrent GPL-2.0 / yt-dlp Unlicense / flet Apache-2.0 / requests Apache-2.0）见 [NOTICE](NOTICE)。
-
-> 本仓库只包含自有源码，**不打包任何第三方二进制**；安装器只从官方发布地址下载。
-> 请仅下载你有权获取的内容，遵守所在地法律与各站点服务条款。
+MIT © DownloadStack Control contributors  
+第三方组件许可见 [NOTICE](NOTICE)。本仓库只包含自有源码，不打包任何第三方二进制；请仅下载你有权获取的内容。

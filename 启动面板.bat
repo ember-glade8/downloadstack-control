@@ -101,7 +101,8 @@ if errorlevel 1 (
   echo   [OK] qBittorrent
 )
 
-if exist "%APP%panel.py" (echo   [OK] 面板文件) else (set "MISS=%MISS% panel.py"& echo   [缺] 面板文件 panel.py)
+if exist "%APP%panel.py" (echo   [OK] panel.py) else (set "MISS=%MISS% panel.py"& echo   [缺] 面板文件 panel.py)
+if exist "%APP%panel_ui.html" (echo   [OK] panel_ui.html) else (set "MISS=%MISS% panel_ui.html"& echo   [缺] 3D 界面文件 panel_ui.html)
 
 echo.
 echo [2/3] 结论

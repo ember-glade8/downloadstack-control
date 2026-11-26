@@ -14,7 +14,7 @@ if [ -f "$REC_PY" ]; then
   CAND="$(cat "$REC_PY" 2>/dev/null)"
   if [ -n "$CAND" ] && [ -x "$CAND" ]; then PY="$CAND"; fi
 fi
-if [ -z "${PY:-}" ] && [ -x "$VENV_PY" ] && "$VENV_PY" -c "import flet" >/dev/null 2>&1; then
+if [ -z "${PY:-}" ] && [ -x "$VENV_PY" ] && "$VENV_PY" -c "import requests" >/dev/null 2>&1; then
   PY="$VENV_PY"
 fi
 for c in python3 python; do
@@ -30,15 +30,16 @@ MISS=""
 echo "==== DownloadStack 环境自检 ===="
 if [ -n "$PY" ]; then
   echo "  [OK] $PY $("$PY" -c 'import sys;print(sys.version.split()[0])')"
-  "$PY" -c "import flet" >/dev/null 2>&1 && echo "  [OK] flet" || { echo "  [缺] flet"; MISS="$MISS flet"; }
   "$PY" -c "import requests" >/dev/null 2>&1 && echo "  [OK] requests" || { echo "  [缺] requests"; MISS="$MISS requests"; }
+  "$PY" -c "import flet" >/dev/null 2>&1 && echo "  [OK] flet (视频下载器 GUI)" || echo "  [可选] flet 未装（仅 ytdl_gui.py 需要，不影响 3D 主面板）"
 else
   echo "  [缺] Python 3.10+"; MISS="$MISS python3"
 fi
 command -v aria2c >/dev/null 2>&1 && echo "  [OK] aria2c" || { [ -f "$ROOT/aria2/aria2c" ] && echo "  [OK] aria2c(自带)" || { echo "  [缺] aria2c"; MISS="$MISS aria2"; }; }
-[ -f "$ROOT/ariaNg/index.html" ] && echo "  [OK] AriaNg" || { echo "  [缺] AriaNg"; MISS="$MISS AriaNg"; }
+[ -f "$ROOT/ariaNg/index.html" ] || [ -f "$ROOT/ariang/index.html" ] && echo "  [OK] AriaNg" || { echo "  [缺] AriaNg"; MISS="$MISS AriaNg"; }
 command -v ffmpeg >/dev/null 2>&1 && echo "  [OK] ffmpeg" || { [ -x "$ROOT/tools/ffmpeg/bin/ffmpeg" ] && echo "  [OK] ffmpeg(自带)" || { echo "  [缺] ffmpeg"; MISS="$MISS ffmpeg"; }; }
-[ -f "$APP/panel.py" ] && echo "  [OK] 面板文件" || { echo "  [缺] panel.py"; MISS="$MISS panel.py"; }
+[ -f "$APP/panel.py" ] && echo "  [OK] panel.py" || { echo "  [缺] panel.py"; MISS="$MISS panel.py"; }
+[ -f "$APP/panel_ui.html" ] && echo "  [OK] panel_ui.html" || { echo "  [缺] panel_ui.html"; MISS="$MISS panel_ui.html"; }
 
 if [ -n "$MISS" ]; then
   echo
@@ -54,9 +55,9 @@ if [ -n "$MISS" ]; then
   fi
 fi
 
-if ! "$PY" -c "import flet" >/dev/null 2>&1; then
-  echo "  [缺] flet / flet-desktop，正在安装 ..."
-  PKGS="flet==1.1.3 flet-desktop==1.1.3 flet-web==1.1.3 requests>=2.31"
+if ! "$PY" -c "import requests" >/dev/null 2>&1; then
+  echo "  [缺] requests，正在安装 ..."
+  PKGS="requests>=2.31"
   ok_install=0
   if [ -x "$VENV_PY" ] && "$VENV_PY" -m pip --version >/dev/null 2>&1; then
     "$VENV_PY" -m pip install $PKGS && ok_install=1
@@ -69,9 +70,8 @@ if ! "$PY" -c "import flet" >/dev/null 2>&1; then
     done
   fi
   if [ "$ok_install" = 0 ]; then
-    echo "  [失败] 依赖装不上。请手动执行其一："
-    echo "     sudo apt install -y python3-venv python3-pip"
-    echo "     然后重跑： sh $ROOT_DIR/install.sh"
+    echo "  [失败] 依赖装不上。请手动执行："
+    echo "     python3 -m pip install requests"
     exit 1
   fi
 fi
@@ -79,16 +79,10 @@ fi
 echo
 LOGDIR="$ROOT_DIR/logs"
 mkdir -p "$LOGDIR" 2>/dev/null || true
+PORT="${DOWNLOADSTACK_WEB_PORT:-18550}"
 if [ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
   echo "  [注意] 当前没有图形环境（SSH / 无桌面）"
-  if [ -e /tmp/.X11-unix/X0 ]; then
-    echo "  [提示] 检测到本机桌面 :0，尝试复用 DISPLAY=:0"
-    export DISPLAY=:0
-    [ -f "$HOME/.Xauthority" ] && export XAUTHORITY="$HOME/.Xauthority"
-  else
-    echo "  [提示] 改用 Web 模式：浏览器打开 http://127.0.0.1:8550"
-    export DOWNLOADSTACK_WEB=1
-  fi
+  echo "  [提示] 3D 控制台将以纯服务模式运行，浏览器打开 http://127.0.0.1:${PORT}/"
 fi
 echo "正在启动面板 ...（日志: $LOGDIR/panel-launch.log）"
 "$PY" -B "$APP/panel.py" 2>&1 | tee "$LOGDIR/panel-launch.log"

@@ -38,14 +38,16 @@ echo [3/6] components
 if exist "%APP%..\aria2\aria2c.exe" (>> "%REPORT%" echo   YES aria2c) else (>> "%REPORT%" echo   NO  aria2c)
 if exist "%APP%..\ariaNg\index.html" (>> "%REPORT%" echo   YES ariaNg) else (>> "%REPORT%" echo   NO  ariaNg)
 if exist "%APP%panel.py" (>> "%REPORT%" echo   YES panel.py) else (>> "%REPORT%" echo   NO  panel.py)
+if exist "%APP%panel_ui.html" (>> "%REPORT%" echo   YES panel_ui.html) else (>> "%REPORT%" echo   NO  panel_ui.html)
+if exist "%APP%magnet_tools.py" (>> "%REPORT%" echo   YES magnet_tools.py) else (>> "%REPORT%" echo   NO  magnet_tools.py)
 if exist "%APP%config.json" (>> "%REPORT%" echo   YES config.json) else (>> "%REPORT%" echo   NO  config.json)
 if exist "%APP%ytdl_gui.py" (>> "%REPORT%" echo   YES ytdl_gui.py) else (>> "%REPORT%" echo   NO  ytdl_gui.py)
 
 echo [4/6] ports
 >> "%REPORT%" echo.
 >> "%REPORT%" echo [ports]
+netstat -ano | findstr ":18550" >> "%REPORT%" 2>&1
 netstat -ano | findstr ":6800" >> "%REPORT%" 2>&1
-netstat -ano | findstr ":16800" >> "%REPORT%" 2>&1
 netstat -ano | findstr ":8080" >> "%REPORT%" 2>&1
 
 echo [5/6] launcher log

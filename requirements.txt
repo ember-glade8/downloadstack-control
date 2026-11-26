@@ -1,4 +1,7 @@
+# 必装（3D 主控制台 panel.py 仅需此依赖 + Python 标准库）
+requests>=2.31
+
+# 可选（仅内置图形视频下载器 ytdl_gui.py 需要）
 flet==1.1.3
 flet-desktop==1.1.3
 flet-web==1.1.3
-requests>=2.31
