@@ -64,7 +64,9 @@ def kill_tree(pid):
         return False
     try:
         if IS_WIN:
-            kill_tree(pid)
+            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                           capture_output=True, timeout=5,
+                           creationflags=0x08000000)
         else:
             import signal
             try:
@@ -89,7 +91,7 @@ def script_cmd(script) -> list:
     return ["/bin/sh", s]
 
 
-def shell_run(script, cwd=None):
+def shell_run(script, cwd=None, env=None):
     """执行外部脚本：Windows 走 cmd，POSIX 走 bash/sh。"""
     s = str(script)
     if IS_WIN:
@@ -97,7 +99,7 @@ def shell_run(script, cwd=None):
     else:
         shell = "/bin/bash" if s.lower().endswith(".sh") else "/bin/sh"
         args = [shell, s]
-    return subprocess.Popen(args, cwd=cwd or str(ROOT), **_popen_kwargs())
+    return subprocess.Popen(args, cwd=cwd or str(ROOT), env=env, **_popen_kwargs())
 
 
 def open_path(path):
@@ -230,10 +232,10 @@ BTN_DESC = {
     "⚙ 设置": "显示设置页（连接参数、路径、启动项、主题）",
 }
 
-DAFAULT = {
+DEFAULT_CFG = {
     "aria2": {
         "host": "127.0.0.1", "port": 6800,
-        "exe": str(ROOT / "aria2" / "aria2c.exe"),
+        "exe": str(ROOT / "aria2" / ("aria2c.exe" if IS_WIN else "aria2c")),
         "conf": str(ROOT / "aria2" / "aria2.conf"),
         "secret": str(ROOT / "aria2" / "rpc-secret.txt"),
         "logdir": str(ROOT / "logs"),
@@ -290,7 +292,7 @@ def A(color, alpha="CC"):
 
 # ------------------------------------------------------------------ 配置（原样）
 def load_cfg():
-    cfg = json.loads(json.dumps(DAFAULT))
+    cfg = json.loads(json.dumps(DEFAULT_CFG))
     if CONFIG.exists():
         try:
             user = json.loads(CONFIG.read_text(encoding="utf-8"))
@@ -354,10 +356,18 @@ def pid_alive(pid):
     if not pid:
         return False
     try:
-        out = subprocess.run(["tasklist", "/FI", "PID eq %d" % int(pid), "/NH"],
-                             capture_output=True, text=True, timeout=5,
-                             creationflags=0x08000000)
-        return str(pid) in (out.stdout or "")
+        pid = int(pid)
+        if IS_WIN:
+            out = subprocess.run(["tasklist", "/FI", "PID eq %d" % pid, "/NH"],
+                                 capture_output=True, text=True, timeout=5,
+                                 creationflags=0x08000000)
+            return str(pid) in (out.stdout or "")
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
     except Exception:
         return False
 
@@ -845,8 +855,8 @@ class Panel:
                 info("RPC", "http://%s:%d  (token 已启用)" % (cfg["aria2"]["host"], cfg["aria2"]["port"]), MINT),
                 info("配置", cfg["aria2"]["conf"]),
                 info("日志", cfg["aria2"]["logdir"]),
-                info("成品", cfg["paths"]["downloads"] + r"\aria2"),
-                info("面板", "http://127.0.0.1:16800  (AriaNg)", CYAN),
+                info("成品", str(Path(cfg["paths"]["downloads"]) / "aria2")),
+                info("面板", "http://127.0.0.1:%d  (AriaNg)" % int((cfg.get("ariang") or {}).get("port") or 16800), CYAN),
             ], MINT),
         ], MINT, badge=(HA.HEXBADGE if HA else None), zone="下载区 · aria2")
 
@@ -915,31 +925,26 @@ class Panel:
         # ================= 右侧：状态提示 + 详细教程 =================
         magnet_banner = ft.Container(
             bgcolor="#CC1A0F14",
-            border=ft.Border.all(1, A(ERR, "77")),
+            border=ft.Border.all(1, A(WARN, "77")),
             border_radius=8,
             padding=12,
-            shadow=self.glow(ERR, blur=8),
+            shadow=self.glow(WARN, blur=8),
             content=ft.Column([
-                ft.Row([ft.Container(width=9, height=9, border_radius=5, bgcolor=ERR,
-                                     shadow=self.glow(ERR, blur=8)),
-                        ft.Text("磁力 / DHT 不可用", size=14, weight=ft.FontWeight.BOLD,
-                                color=ERR, font_family="Microsoft YaHei UI"),
+                ft.Row([ft.Container(width=9, height=9, border_radius=5, bgcolor=WARN,
+                                     shadow=self.glow(WARN, blur=8)),
+                        ft.Text("磁力 / DHT 提示", size=14, weight=ft.FontWeight.BOLD,
+                                color=WARN, font_family="Microsoft YaHei UI"),
                         ft.Container(expand=True),
-                        ft.Container(content=ft.Text("状态提示区", size=10, color=A(ERR, "DD"),
+                        ft.Container(content=ft.Text("网络提示区", size=10, color=A(WARN, "DD"),
                                                      font_family="Microsoft YaHei UI"),
                                      padding=ft.Padding.symmetric(horizontal=6, vertical=2),
-                                     border=ft.Border.all(1, A(ERR, "55")), border_radius=3)],
+                                     border=ft.Border.all(1, A(WARN, "55")), border_radius=3)],
                        spacing=8),
-                ft.Text("现状（已实测）", size=11, color=WARN, weight=ft.FontWeight.BOLD),
-                ft.Text("· tracker 接受汇报，但磁力自行取元数据未成功", size=10, color=TXT),
-                ft.Text("· DHT 节点数长期为 0，UDP 对真实 IP 是通的", size=10, color=TXT),
-                ft.Text("· 换节点/换出口都试过，不是单点问题", size=10, color=TXT),
-                ft.Text("现在怎么下 BT", size=11, color=MINT, weight=ft.FontWeight.BOLD),
-                ft.Text("· 有 .torrent：直接拖进 qBittorrent，正常下", size=10, color=TXT),
-                ft.Text("· 只有磁力：先找同资源种子文件，或等修好", size=10, color=TXT),
-                ft.Text("后续修复（要你点头再动）", size=11, color=CYAN, weight=ft.FontWeight.BOLD),
-                ft.Text("· 换可用 DHT 引导节点 / 清理假 IP 路由", size=10, color=TXT),
-                ft.Text("· 给 DHT 单独走直连出口，绕开代理假 IP 段", size=10, color=TXT),
+                ft.Text("常见现象", size=11, color=WARN, weight=ft.FontWeight.BOLD),
+                ft.Text("· 部分代理/NAT 环境下磁力取元数据慢或 DHT 长期为 0 节点", size=10, color=TXT),
+                ft.Text("建议做法", size=11, color=MINT, weight=ft.FontWeight.BOLD),
+                ft.Text("· 优先使用 .torrent 种子文件拖进 qBittorrent", size=10, color=TXT),
+                ft.Text("· 如需用磁力，请确保 BT/DHT 端口走直连出口", size=10, color=TXT),
             ], spacing=3),
         )
 
@@ -956,6 +961,7 @@ class Panel:
                         font_family="Microsoft YaHei UI"),
             ], spacing=6)
 
+        dl_base = Path(cfg["paths"]["downloads"])
         tutorial = ft.Container(
             bgcolor="#CC0A1222",
             border=ft.Border.all(1, A(CYAN, "55")),
@@ -981,49 +987,46 @@ class Panel:
                 tt("① 点“启动 Aria2 + AriaNg”，灯变绿"),
                 tt("② 点“打开 AriaNg 网页”，会出现 AriaNg 管理界面"),
                 tt("③ 左上“新建” → 粘贴直链 → 开始下载"),
-                tt("④ 成品在 D:\\Downloads\\aria2，进度/速度看顶部数字或 AriaNg"),
+                tt("④ 成品在 %s，进度/速度看顶部数字或 AriaNg" % (dl_base / "aria2")),
                 tt("⑤ 支持断点续传；暂停后点继续即可；取消会删 .aria2 控制文件", SUB),
 
                 th("2 · 平台视频（YT 下载壳）", MINT),
-                tt("① 点“启动 YT 下载壳”（会弹黑窗口，属于正常）"),
-                tt("② 在黑窗口里粘贴视频链接 → 回车"),
-                tt("③ 按提示选清晰度/是否只要音频；播放列表会问你范围"),
-                tt("④ 下完点“打开视频输出目录”看成品：D:\\Downloads\\yt-dlp"),
-                tt("⑤ 关掉壳：点“关闭 YT 壳进程”，只结束本面板启动的那个", SUB),
+                tt("① 点“启动 YT 下载壳”打开内置视频下载器或外部脚本"),
+                tt("② 粘贴视频链接 → 选清晰度 / Cookies → 开始下载"),
+                tt("③ 下完点“打开视频输出目录”看成品：%s" % (dl_base / "yt-dlp")),
+                tt("④ 关掉壳：点“关闭 YT 壳进程”，只结束本面板启动的那个", SUB),
 
                 th("3 · 需要 2 倍超分（可选）", MINT),
-                tt("① 视频下好后，找到你自己的超分脚本（bat/cmd）"),
-                tt("② 双击它，按提示选文件（本面板不内置超分）"),
+                tt("① 检测到 Video2X 时可开启上方“超分 2x”开关"),
+                tt("② 未安装 Video2X 时会自动跳过超分，不影响正常下载"),
                 tt("③ 超分吃显卡，跑的时候别同时压测；默认不超分"),
 
                 th("4 · 种子 / PT（qBittorrent）", MINT),
                 tt("① 点“启动 qBittorrent”，灯变绿"),
-                tt("② 点“打开 WebUI”，浏览器进 127.0.0.1:8080"),
+                tt("② 点“打开 WebUI”，浏览器进 http://%s:%d" % (cfg["qbit"]["host"], int(cfg["qbit"]["port"]))),
                 tt("③ 拖 .torrent 进窗口，或“添加 Torrent 链接”"),
-                tt("④ 保存目录默认 D:\\Downloads\\qBittorrent"),
+                tt("④ 保存目录默认 %s" % cfg["qbit"]["save_dir"]),
                 tt("⑤ PT 站务必保持做种，别乱删任务，会被标记", SUB),
 
-                th("5 · 磁力（当前不可用）", ERR),
-                tt("现状：磁力自行取元数据失败，DHT 长期 0 节点（已记录）", ERR),
-                tt("替代：找到同资源的 .torrent 文件，拖进 qBittorrent 即可"),
-                tt("修复方向：换引导节点 / DHT 走直连出口（等你确认）", WARN),
+                th("5 · 磁力 / DHT 说明", WARN),
+                tt("如遇磁力取元数据超时或 DHT 为 0，可改用 .torrent 文件", SUB),
+                tt("或检查代理/防火墙设置，让 BT 端口直连", SUB),
 
                 th("6 · 出错了怎么查（三步）", WARN),
                 tt("① 看灯：灰=没开，红=认证或接口错"),
-                tt("② 看日志区：ERROR 那行写了原因，紧跟“下一步”提示"),
-                tt("③ 还不够：点“导出”，把 logs\\export-*.log 发我"),
-                tt("更细的现场在 .diagnose\\errors-*.log"),
+                tt("② 看日志区：ERROR 那行写了具体原因"),
+                tt("③ 提 Issue 时可点“导出”并脱敏，或附 diag-report.txt"),
 
                 th("7 · 文件都在哪", CYAN),
-                tt("aria2 成品　D:\\Downloads\\aria2", SUB),
-                tt("视频成品　　D:\\Downloads\\yt-dlp", SUB),
-                tt("种子成品　　D:\\Downloads\\qBittorrent", SUB),
-                tt("面板配置　　D:\\Tools\\DownloadStack\\ControlPanel\\config.json", SUB),
-                tt("备份　　　　D:\\Tools\\DownloadStack\\ControlPanel\\backups", SUB),
-                tt("日志　　　　D:\\Tools\\DownloadStack\\ControlPanel\\logs", SUB),
+                tt("aria2 成品　%s" % (dl_base / "aria2"), SUB),
+                tt("视频成品　　%s" % (dl_base / "yt-dlp"), SUB),
+                tt("种子成品　　%s" % cfg["qbit"]["save_dir"], SUB),
+                tt("面板配置　　%s" % CONFIG, SUB),
+                tt("备份　　　　%s" % BACKUPS, SUB),
+                tt("日志　　　　%s" % LOGS, SUB),
 
                 th("8 · 常见问答", WARN),
-                tt("Q 速度慢？　先看是不是单线程源；aria2 可加 -x16 多连"),
+                tt("Q 速度慢？　先看是不是单线程源；aria2 可调大 split / max-connection"),
                 tt("Q 点了没反应？　看日志区有没有 ERROR；重复点会被自动跳过"),
                 tt("Q 端口被占？　点“查看端口占用”，再看是不是旧进程没退"),
                 tt("Q 改端口？　设置页改完点“保存设置”，立即按新值重连"),
@@ -1218,14 +1221,17 @@ class Panel:
             except Exception:
                 pass
 
-    # ---------------------------------------------------------- 刷新（原逻辑）
+    # ---------------------------------------------------------- 刷新（异步线程池，避免阻塞 UI）
+    def _poll_all(self):
+        self.pr.poll_a()
+        self.pr.poll_q()
+        self.pr.poll_y()
+
     async def _tick(self):
         import asyncio
         while True:
             try:
-                self.pr.poll_a()
-                self.pr.poll_q()
-                self.pr.poll_y()
+                await asyncio.to_thread(self._poll_all)
                 self.render()
             except Exception as ex:
                 self.log("轮询异常 %s" % type(ex).__name__, "ERROR")
@@ -1324,8 +1330,6 @@ class Panel:
         self.v_qup.value = hspeed(q["up"])
         try:
             peak = 10 * 1024 * 1024
-            self.bar_a.width = max(4, min(112, int(112 * min(1.0, a["dn"] / peak))))
-            self.bar_q.width = max(4, min(112, int(112 * min(1.0, q["dn"] / peak))))
             self.ring_a.value = min(1.0, (a["dn"] or 0) / peak)
             self.ring_q.value = min(1.0, (q["dn"] or 0) / peak)
             for arr, val, col in ((self.spark_a, a["dn"], MINT), (self.spark_q, q["dn"], CYAN)):
@@ -1365,7 +1369,7 @@ class Panel:
         if not path or not Path(path).exists():
             self.log("路径不存在 %s" % path, "WARN")
             return
-        open_any(path)
+        open_path(path)
         self.log("打开 %s" % path)
 
     def on_start_a(self, e=None):
@@ -1416,12 +1420,17 @@ class Panel:
                     token = tok_path.read_text(encoding="utf-8", errors="ignore").strip()
             except Exception:
                 token = ""
-            rpc_host = "127.0.0.1:%s" % (self.cfg["aria2"].get("port") or 6800)
-            url = "http://127.0.0.1:%d/?rpc=%s" % (port, rpc_host)
+            rpc_host = self.cfg["aria2"].get("host") or "127.0.0.1"
+            rpc_port = int(self.cfg["aria2"].get("port") or 6800)
+            base_url = "http://127.0.0.1:%d/" % port
             if token:
-                url += "&secret=" + token
+                import base64
+                b64 = base64.b64encode(token.encode("utf-8")).decode("ascii")
+                url = "%s#!/settings/rpc/set/http/%s/%d/jsonrpc/%s" % (base_url, rpc_host, rpc_port, b64)
+            else:
+                url = base_url
             webbrowser.open(url)
-            self.log("打开 AriaNg：%s" % url)
+            self.log("打开 AriaNg：%s%s" % (base_url, "（已自动注入 RPC 配置）" if token else ""))
         except Exception as ex:
             self.log("打开 AriaNg 失败 %s" % ex, "ERROR")
 
@@ -1587,7 +1596,7 @@ class Panel:
                 for k in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
                           "http_proxy", "https_proxy", "all_proxy"):
                     env.pop(k, None)
-            proc = shell_run(bat, cwd=str(bat.parent))
+            proc = subprocess.Popen(cmd_override, cwd=str(bat.parent), env=env, **_popen_kwargs())
             self.pids["yt"] = proc.pid
             save_pids(self.pids)
             self.log("启动 YT 下载壳 PID %s（超分：%s｜代理：%s）"
@@ -1646,9 +1655,9 @@ class Panel:
             t = CACHE / "_w.tmp"
             t.write_text("x", encoding="utf-8")
             t.unlink(missing_ok=True)
-            self.log("  D 盘可写", "OK")
+            self.log("  缓存目录可写 (%s)" % CACHE, "OK")
         except Exception as ex:
-            self.log("  D 盘不可写 %s" % ex, "ERROR")
+            self.log("  缓存目录不可写 %s" % ex, "ERROR")
         self.on_test_a()
         self.on_test_q()
 
@@ -1765,7 +1774,7 @@ class Panel:
             self.log("保存失败 %s" % ex, "ERROR")
 
     def on_reset(self, e=None):
-        self.cfg = json.loads(json.dumps(DAFAULT))
+        self.cfg = json.loads(json.dumps(DEFAULT_CFG))
         save_cfg(self.cfg)
         self.pr.cfg = self.cfg
         self.log("已恢复默认（重启面板后界面同步）", "WARN")
@@ -1842,7 +1851,9 @@ class Panel:
         v = bool(e.control.value)
         self.cfg["ui"]["autostart_aria2"] = v
         save_cfg(self.cfg)
-        self.run_key("DownloadStackAria2", 'cmd /c "%s"' % self.cfg["scripts"]["start"], v)
+        start_script = self.cfg["scripts"]["start"]
+        cmd = ('cmd /c "%s"' % start_script) if IS_WIN else ('/bin/sh "%s"' % start_script)
+        self.run_key("DownloadStackAria2", cmd, v)
         self.log("开机拉起 Aria2 %s" % ("开" if v else "关"))
 
 

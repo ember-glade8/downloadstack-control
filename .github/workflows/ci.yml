@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Secret scan
+        run: python scripts/scan_secrets.py .
+
+      - name: Syntax check (py_compile)
+        run: python -m py_compile panel.py ytdl_gui.py setup_wizard.py hud_assets.py scripts/scan_secrets.py
+
+      - name: Lint with ruff (fatal errors / undefined names)
+        run: |
+          python -m pip install --quiet ruff
+          ruff check --select F,E9 .
+
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v

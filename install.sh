@@ -278,7 +278,7 @@ exec "$ARIA_BIN" --conf-path="$ROOT/aria2/aria2.conf"
 EOF
 cat > "$ROOT/stop_aria2.sh" <<EOF
 #!/bin/sh
-pkill -f "$ROOT/aria2/aria2.conf" 2>/dev/null || pkill -x aria2c 2>/dev/null || true
+pkill -f "$ROOT/aria2/aria2.conf" 2>/dev/null || true
 EOF
 cat > "$ROOT/start_ariang.sh" <<EOF
 #!/bin/sh

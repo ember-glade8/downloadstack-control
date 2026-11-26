@@ -18,7 +18,7 @@ python scripts/scan_secrets.py .
 
 必须输出 `[OK] 未发现敏感串`。会检查：
 
-- Windows 用户目录绝对路径（`C:\Users\xxx\...`）
+- Windows 用户目录绝对路径（`C:\Users\<user>\...`）
 - qB 密码字段（`pass` 键）里出现真实值
 - `rpc-secret=<32+ hex>`
 - 内网 IP / 本机代理端口

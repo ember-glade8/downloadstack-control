@@ -92,7 +92,7 @@ def find_video2x() -> str:
     if env and Path(env).is_file():
         return env
     for cand in (ROOT / "tools" / "video2x" / "video2x.exe",
-                 Path("D:/Video2X/video2x.exe")):
+                 ROOT / "tools" / "video2x" / "video2x"):
         if cand.is_file():
             return str(cand)
     which = shutil.which("video2x")
@@ -174,7 +174,9 @@ class App:
                                     value=_st.get("cookies", ""),
                                     bgcolor="#0A1222", color=TXT, dense=True,
                                     border=ft.InputBorder.OUTLINE, text_size=12, expand=True)
-        self.upscale = ft.Switch(label="下载后 2x 超分", value=bool(_st.get("upscale", False)),
+        _env_up = os.environ.get("UPSCALE")
+        _default_up = (_env_up == "1") if _env_up in ("0", "1") else bool(_st.get("upscale", False))
+        self.upscale = ft.Switch(label="下载后 2x 超分", value=_default_up,
                                  active_color=MINT,
                                  disabled=(not self.v2x))
         self.btn_start = ft.FilledButton(content=ft.Text("开始下载", color="#04121A"),
@@ -329,9 +331,13 @@ class App:
         self.say("超分: " + src.name)
         try:
             p = run_cmd(cmd, cwd=str(Path(self.v2x).parent))
-            for line in p.stdout:
+            for _line in p.stdout:
                 pass
-            p.wait()
+            rc = p.wait()
+            if rc == 0 and dst.is_file():
+                self.say("2x 超分完成: " + dst.name, MINT)
+            else:
+                self.say("2x 超分结束，退出码: %s" % rc, ERR)
         except Exception as ex:
             self.say("超分失败: %s" % ex, ERR)
 

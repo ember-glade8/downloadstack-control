@@ -106,8 +106,11 @@ def _qbit():
 
 
 def _video2x():
+    env = (os.environ.get("VIDEO2X_PATH") or "").strip()
+    if env and Path(env).is_file():
+        return env
     cands = [ROOT / "tools" / "video2x" / "video2x.exe",
-             Path("D:/Video2X/video2x.exe")]
+             ROOT / "tools" / "video2x" / "video2x"]
     for p in cands:
         if p.is_file():
             return str(p)
@@ -663,6 +666,9 @@ def gui():
                     step_lbl.config(text="安装结束")
                     bar["value"] = 100
                     continue
+                if msg == "__AFTER__":
+                    after_install()
+                    continue
                 append(msg)
         except queue.Empty:
             pass
@@ -699,8 +705,8 @@ def gui():
             except Exception as ex:
                 q.put("安装异常: %s" % ex)
             q.put("__DONE__")
+            q.put("__AFTER__")
             state["busy"] = False
-            root.after(200, after_install)
 
         threading.Thread(target=worker, daemon=True).start()
         poll()
@@ -708,13 +714,13 @@ def gui():
     def after_install():
         fill()
         btn_install.config(state="normal")
+        btn_full.config(state="normal")
         still = missing()
         if still:
             append("仍有缺失：%s" % "、".join(x[0] for x in still))
         else:
             append("全部就绪，可以启动控制台")
         btn_launch.config(state="normal")
-        root.after(600, lambda: None)
 
     def do_full():
         if state["busy"]:
@@ -735,8 +741,9 @@ def gui():
                 q.put("=== 一键配置结束，剩余缺失: %s ===" % ("、".join(still) if still else "无"))
             except Exception as ex:
                 q.put("一键配置异常: %s" % ex)
+            q.put("__DONE__")
+            q.put("__AFTER__")
             state["busy"] = False
-            root.after(200, after_install)
 
         threading.Thread(target=worker, daemon=True).start()
         poll()
@@ -854,7 +861,7 @@ def auto_mode():
     print("剩余缺失:", "、".join(still) if still else "无")
     if (APP / "panel.py").is_file():
         print("下一步: 双击 启动面板.bat（Windows）/ sh 启动面板.sh（Linux/macOS）")
-    return 0 if not still else 0
+    return 0 if not still else 1
 
 
 def main():

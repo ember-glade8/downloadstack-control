@@ -11,12 +11,12 @@ SKIP_DIRS = {".git", "__pycache__", "state", "logs", "cache", "backups", "build"
 SKIP_FILES = {"config.json", "pw.txt", "scan_secrets.py"}  # 扫描器自身的规则串不算泄露
 
 PATTERNS = [
-    (r"[A-Za-z]:\\\\Users\\\\[^\\\\\s\"']+", "Windows 用户目录绝对路径"),
+    (r"[A-Za-z]:\\{1,2}Users\\{1,2}(?!<[^>]+>)[^\\\s\"']+", "Windows 用户目录绝对路径"),
     (r"\"pass\"\s*:\s*\"[^\"]+\"", "明文密码"),
     (r"rpc-secret=[0-9a-f]{32,}", "明文 RPC 密钥"),
     (r"127\.0\.0\.1:7\d{3}", "本机代理端口"),
     (r"\b(下载体系|YT下载壳|yt_dlp壳)\b", "个人化命名"),
-    (r"[A-Za-z]:\\\\YTShell|[A-Za-z]:\\\\Video2X", "个人化工具路径"),
+    (r"[A-Za-z]:\\{1,2}YTShell|[A-Za-z]:\\{1,2}Video2X", "个人化工具路径"),
     (r"192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.", "内网 IP"),
 ]
 
@@ -28,7 +28,7 @@ def scan(root: Path):
             continue
         if any(p in SKIP_DIRS for p in f.parts) or f.name in SKIP_FILES:
             continue
-        if f.suffix.lower() not in {".py", ".md", ".txt", ".bat", ".json", ".ps1", ".yml", ".yaml"}:
+        if f.suffix.lower() not in {".py", ".md", ".txt", ".bat", ".sh", ".json", ".ps1", ".yml", ".yaml"}:
             continue
         try:
             text = f.read_text(encoding="utf-8", errors="ignore")

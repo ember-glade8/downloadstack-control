@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions
 chcp 936 >nul
-title DownloadStack °²×°Ïòµ¼
+title DownloadStack å®‰è£…å‘å¯¼
 color 0B
 set "DRYRUN=0"
 set "FAILED=0"
@@ -15,13 +15,13 @@ if /I "%~1"=="--envcheck" goto :envcheck
 
 echo.
 echo ============================================================
-echo    DownloadStack ÏÂÔØµ÷¶ÈÕ» ¡¤ °²×°Ïòµ¼
-echo    ×°µ½ÄÄ¸öÅÌ¡¢ÏÂÔØµ½ÄÄ£¬¶¼ÓÉÄã¾ö¶¨
+echo    DownloadStack ä¸‹è½½è°ƒåº¦æ ˆ Â· å®‰è£…å‘å¯¼
+echo    è£…åˆ°å“ªä¸ªç›˜ã€ä¸‹è½½åˆ°å“ªï¼Œéƒ½ç”±ä½ å†³å®š
 echo ============================================================
 echo.
 
-rem ================= 0. »·¾³Ìå¼ì =================
-echo [0/9] »·¾³Ìå¼ì
+rem ================= 0. çŽ¯å¢ƒä½“æ£€ =================
+echo [0/9] çŽ¯å¢ƒä½“æ£€
 echo       Windows:
 ver
 for %%C in (powershell tar certutil curl winget) do call :ec_one %%C
@@ -37,77 +37,52 @@ if exist "%PYVF%" del "%PYVF%" >nul 2>&1
 for /f "tokens=1,2" %%A in ('type "%PYVF%" 2^>nul') do (set "PYMAJ=%%A"& set "PYMIN=%%B")
 set "PYOK=0"
 if defined PYMIN if "%PYMAJ%"=="3" if not "%PYMIN%"=="0" if not "%PYMIN%"=="1" if not "%PYMIN%"=="2" if not "%PYMIN%"=="3" if not "%PYMIN%"=="4" if not "%PYMIN%"=="5" if not "%PYMIN%"=="6" if not "%PYMIN%"=="7" if not "%PYMIN%"=="8" if not "%PYMIN%"=="9" set "PYOK=1"
-if "%PYOK%"=="1" (echo   [OK] Python %PYMAJ%.%PYMIN%  %PYEXE%) else (echo   [È±] Python °æ±¾¹ýµÍ£¨Ðè 3.10+£©: %PYEXE%& set "NEED_PY=1")
+if "%PYOK%"=="1" (echo   [OK] Python %PYMAJ%.%PYMIN%  %PYEXE%) else (echo   [ç¼º] Python ç‰ˆæœ¬è¿‡ä½Žï¼ˆéœ€ 3.10+ï¼‰: %PYEXE%& set "NEED_PY=1")
 if "%PYOK%"=="1" goto :env_pip
 goto :env_ff
 :env_no_py
-echo   [È±] Python£¨3.10+£©
+echo   [ç¼º] Pythonï¼ˆ3.10+ï¼‰
 set "NEED_PY=1"
 goto :env_ff
 
 :env_pip
 "%PYEXE%" -c "import importlib.util as u;raise SystemExit(0 if (u.find_spec('flet') and u.find_spec('requests')) else 1)" >nul 2>&1
-if errorlevel 1 (echo   [È±] pip °ü flet / requests& set "NEED_PIP=1") else (echo   [OK] pip °ü flet + requests)
+if errorlevel 1 (echo   [ç¼º] pip åŒ… flet / requests& set "NEED_PIP=1") else (echo   [OK] pip åŒ… flet + requests)
 
 :env_ff
 where ffmpeg >nul 2>&1
-if errorlevel 1 (echo   [È±] ffmpeg£¨yt-dlp ºÏ²¢ÒôÊÓÆµÓÃ£©& set "NEED_FFMPEG=1") else (echo   [OK] ffmpeg)
+if errorlevel 1 (echo   [ç¼º] ffmpegï¼ˆyt-dlp åˆå¹¶éŸ³è§†é¢‘ç”¨ï¼‰& set "NEED_FFMPEG=1") else (echo   [OK] ffmpeg)
 echo.
 set "MISSENV="
 if "%NEED_PY%"=="1" set "MISSENV=%MISSENV% Python"
 if "%NEED_PIP%"=="1" set "MISSENV=%MISSENV% flet+requests"
 if "%NEED_FFMPEG%"=="1" set "MISSENV=%MISSENV% ffmpeg"
 if defined MISSENV (
-  echo   È±ÉÙÒÀÀµ:%MISSENV%
-  echo   ÏÂÃæ»áÖðÏîÎÊÄã£¬Ñ¡ Y ¾ÍÖ±½Ó×°ºÃ
+  echo   ç¼ºå°‘ä¾èµ–:%MISSENV%
+  echo   ä¸‹é¢ç¡®å®šç›®å½•åŽä¼šé€é¡¹è¯¢é—®å®‰è£…
 ) else (
-  echo   ÒÀÀµÆëÈ«£¬ÎÞÐè°²×°
+  echo   ä¾èµ–é½å…¨ï¼Œæ— éœ€å®‰è£…
 )
 echo.
 
-goto :env_end
-:env_end
-if "%DS_AUTO%"=="1" goto :env_auto
-if "%NEED_PY%"=="0" goto :env_ask_pip
-choice /c YN /n /m "      Python È±Ê§£¬ÏÖÔÚ×Ô¶¯°²×°Âð£¿(Y/N): "
-if errorlevel 2 (echo       ÒÑÌø¹ý Python) else (call :install_python)
-
-:env_ask_pip
-if "%NEED_PIP%"=="0" goto :env_ask_ff
-choice /c YN /n /m "      pip ÒÀÀµÈ±Ê§£¬ÏÖÔÚ×° flet + requests Âð£¿(Y/N): "
-if errorlevel 2 (echo       ÒÑÌø¹ý pip ÒÀÀµ) else (call :install_pip)
-
-:env_ask_ff
-if "%NEED_FFMPEG%"=="0" goto :env_end
-choice /c YN /n /m "      ffmpeg È±Ê§£¬ÏÖÔÚ°²×°Âð£¨Ô¼ 80MB£©£¿(Y/N): "
-if errorlevel 2 (echo       ÒÑÌø¹ý ffmpeg£º²»×°Ò²ÄÜÏÂÔØ£¬µ«ÒôÊÓÆµ¿ÉÄÜ²»ºÏ²¢) else (call :install_ffmpeg)
-goto :env_end
-
-:env_auto
-if "%NEED_PY%"=="1" call :install_python
-if "%NEED_PIP%"=="1" (if defined PYEXE call :install_pip)
-if "%NEED_FFMPEG%"=="1" if not exist "%BASE%\tools\ffmpeg\bin\ffmpeg.exe" call :install_ffmpeg
-:env_end
-echo.
-
-rem ================= 1. ¸´ÓÃ¼ì²â =================
+rem ================= 1. å¤ç”¨æ£€æµ‹ =================
 set "EXIST_ROOT="
 for /f "usebackq delims=" %%R in (`powershell -NoProfile -Command "$c=@(); if($env:DOWNLOADSTACK_ROOT){$c+=$env:DOWNLOADSTACK_ROOT}; $c+='D:\Tools\DownloadStack','C:\Tools\DownloadStack','E:\Tools\DownloadStack'; foreach($d in 'C','D','E','F'){ $c+=($d + ':\Tools\DownloadStack') }; $seen=@{}; foreach($p in $c){ if($p -and -not $seen[$p]){ $seen[$p]=1; if(Test-Path (Join-Path $p 'aria2\aria2c.exe')){ Write-Output $p; exit 0 } } }; exit 1"`) do set "EXIST_ROOT=%%R"
 if not defined EXIST_ROOT goto :ask_drive
-echo [1/9] ¼ì²âµ½±¾»úÒÑ°²×°: %EXIST_ROOT%
-echo       Ö±½Ó¸´ÓÃËü£¨²»ÖØ¸´ÏÂÔØ£©£»»Ø³µ¼ÌÐø£¬»òÊäÈë N ×°µ½±ð´¦¡£
+echo [1/9] æ£€æµ‹åˆ°æœ¬æœºå·²å®‰è£…: %EXIST_ROOT%
+echo       ç›´æŽ¥å¤ç”¨å®ƒï¼ˆä¸é‡å¤ä¸‹è½½ï¼‰ï¼›å›žè½¦ç»§ç»­ï¼Œæˆ–è¾“å…¥ N è£…åˆ°åˆ«å¤„ã€‚
 set "REUSE="
-if not "%DS_AUTO%"=="1" set /p "REUSE=      ¸´ÓÃÒÑÓÐ°²×°£¿»Ø³µ=¸´ÓÃ£¬N=Áí×°: "
+if not "%DS_AUTO%"=="1" set /p "REUSE=      å¤ç”¨å·²æœ‰å®‰è£…ï¼Ÿå›žè½¦=å¤ç”¨ï¼ŒN=å¦è£…: "
 if /I not "%REUSE%"=="N" goto :use_existing
 
 :ask_drive
 echo.
-echo [2/9] Ñ¡Ôñ°²×°ÅÌ·û£¨ÏÂÃæÕâÐ©¿ÉÓÃ£©
+echo [2/9] é€‰æ‹©å®‰è£…ç›˜ç¬¦ï¼ˆä¸‹é¢è¿™äº›å¯ç”¨ï¼‰
 for %%d in (C D E F G H I J) do if exist "%%d:\" echo        %%d:
 echo.
 set "DRV="
 if /I "%DS_AUTO%"=="1" set "DRV=D"
-if not defined DRV set /p "DRV=      ÇëÊäÈëÅÌ·û£¨»Ø³µ = D£©: "
+if not defined DRV set /p "DRV=      è¯·è¾“å…¥ç›˜ç¬¦ï¼ˆå›žè½¦ = Dï¼‰: "
 if "%DRV%"=="" set "DRV=D"
 for /f "tokens=1 delims= " %%A in ("%DRV%") do set "DRV=%%A"
 set "DRIVE=%DRV%:"
@@ -119,62 +94,62 @@ goto :path_confirm
 :use_existing
 set "BASE=%EXIST_ROOT%"
 for %%d in ("%BASE%") do set "DL=%%~dd\Downloads"
-echo       ¸´ÓÃÂ·¾¶: %BASE%
+echo       å¤ç”¨è·¯å¾„: %BASE%
 
 :path_confirm
 if defined DS_BASE set "BASE=%DS_BASE%"
 if defined DS_DL set "DL=%DS_DL%"
 echo.
-echo [3/9] °²×°Î»ÖÃÈ·ÈÏ
-echo       ³ÌÐòÄ¿Â¼: %BASE%
-echo       ÏÂÔØÄ¿Â¼: %DL%
+echo [3/9] å®‰è£…ä½ç½®ç¡®è®¤
+echo       ç¨‹åºç›®å½•: %BASE%
+echo       ä¸‹è½½ç›®å½•: %DL%
 echo.
 if "%DS_AUTO%"=="1" goto :dir_ok
 
 :ask_confirm
 set "ANS="
-set /p "ANS=      È·ÈÏ£¿»Ø³µ=¿ÉÒÔ£¬ÊäÈë N ×Ô¼º¸Ä: "
+set /p "ANS=      ç¡®è®¤ï¼Ÿå›žè½¦=å¯ä»¥ï¼Œè¾“å…¥ N è‡ªå·±æ”¹: "
 if "%ANS%"=="" goto :dir_ok
 if /I "%ANS%"=="N" goto :ask_paths
-echo       Ö»ÈÏ»Ø³µ»ò N£¬ÆäËûÊäÈëÎÞÐ§£¬ÇëÖØÊä¡£
+echo       åªè®¤å›žè½¦æˆ– Nï¼Œå…¶ä»–è¾“å…¥æ— æ•ˆï¼Œè¯·é‡è¾“ã€‚
 goto :ask_confirm
 
 :ask_paths
 set "BASE="
-set /p "BASE=      ³ÌÐòÄ¿Â¼£¨±ØÐëÏñ D:\Tools\DownloadStack ÕâÖÖ¾ø¶ÔÂ·¾¶£©: "
+set /p "BASE=      ç¨‹åºç›®å½•ï¼ˆå¿…é¡»åƒ D:\Tools\DownloadStack è¿™ç§ç»å¯¹è·¯å¾„ï¼‰: "
 call :check_abs "%BASE%"
 if errorlevel 1 goto :bad_base
 set "DL="
-set /p "DL=      ÏÂÔØÄ¿Â¼£¨±ØÐëÏñ D:\Downloads ÕâÖÖ¾ø¶ÔÂ·¾¶£©: "
+set /p "DL=      ä¸‹è½½ç›®å½•ï¼ˆå¿…é¡»åƒ D:\Downloads è¿™ç§ç»å¯¹è·¯å¾„ï¼‰: "
 call :check_abs "%DL%"
 if errorlevel 1 goto :bad_dl
 if /I "%BASE%\"=="%DL%\" goto :same_dir
 goto :dir_ok
 :bad_base
-echo       [²»ÐÐ] ³ÌÐòÄ¿Â¼ÒªÐ´³É ÅÌ·û:\Â·¾¶£¬²»ÄÜÖ»Ð´Ò»¸ö×ÖÄ¸»òÏà¶ÔÂ·¾¶¡£
+echo       [ä¸è¡Œ] ç¨‹åºç›®å½•è¦å†™æˆ ç›˜ç¬¦:\è·¯å¾„ï¼Œä¸èƒ½åªå†™ä¸€ä¸ªå­—æ¯æˆ–ç›¸å¯¹è·¯å¾„ã€‚
 goto :ask_paths
 :bad_dl
-echo       [²»ÐÐ] ÏÂÔØÄ¿Â¼ÒªÐ´³É ÅÌ·û:\Â·¾¶£¬ÇÒÅÌ·ûÒªÕæÊµ´æÔÚ¡£
+echo       [ä¸è¡Œ] ä¸‹è½½ç›®å½•è¦å†™æˆ ç›˜ç¬¦:\è·¯å¾„ï¼Œä¸”ç›˜ç¬¦è¦çœŸå®žå­˜åœ¨ã€‚
 goto :ask_paths
 :same_dir
-echo       [²»ÐÐ] ³ÌÐòÄ¿Â¼ºÍÏÂÔØÄ¿Â¼²»ÄÜÊÇÍ¬Ò»¸ö¡£
+echo       [ä¸è¡Œ] ç¨‹åºç›®å½•å’Œä¸‹è½½ç›®å½•ä¸èƒ½æ˜¯åŒä¸€ä¸ªã€‚
 goto :ask_paths
 
 :dir_ok
 set "TMPD=%BASE%\cache\_dl"
 
-rem ---- ¶Ë¿Ú×Ô¶¯±ÜÈÃ ----
+rem ---- ç«¯å£è‡ªåŠ¨é¿è®© ----
 set "ARIA_PORT="
 set "ARIANG_PORT="
 for /f "usebackq delims=" %%P in (`powershell -NoProfile -Command "$u=(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue).LocalPort; $f=6800; foreach($p in 6800,6801,6802,6803,6804,6805){ if($u -notcontains $p){ $f=$p; break } }; $f"`) do set "ARIA_PORT=%%P"
 for /f "usebackq delims=" %%P in (`powershell -NoProfile -Command "$u=(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue).LocalPort; $f=16800; foreach($p in 16800,16801,16802,16803){ if($u -notcontains $p){ $f=$p; break } }; $f"`) do set "ARIANG_PORT=%%P"
 if "%ARIA_PORT%"=="" set "ARIA_PORT=6800"
 if "%ARIANG_PORT%"=="" set "ARIANG_PORT=16800"
-echo       ¶Ë¿Ú: aria2=%ARIA_PORT%  AriaNg=%ARIANG_PORT%£¨Õ¼ÓÃ»á×Ô¶¯»»£©
+echo       ç«¯å£: aria2=%ARIA_PORT%  AriaNg=%ARIANG_PORT%ï¼ˆå ç”¨ä¼šè‡ªåŠ¨æ¢ï¼‰
 
-rem ================= 4. ½¨Ä¿Â¼ =================
+rem ================= 4. å»ºç›®å½• =================
 echo.
-echo [4/9] ´´½¨Ä¿Â¼
+echo [4/9] åˆ›å»ºç›®å½•
 if "%DRYRUN%"=="1" goto :dirs_done
 for %%P in (
   "%BASE%\aria2"
@@ -192,21 +167,21 @@ for %%P in (
 ) do if not exist "%%~P" mkdir "%%~P" >nul 2>&1
 if not exist "%BASE%\aria2\session.txt" type nul > "%BASE%\aria2\session.txt"
 :dirs_done
-echo [OK] Ä¿Â¼¾ÍÐ÷
+echo [OK] ç›®å½•å°±ç»ª
 
-rem ---- °´Ðè°²×°È±Ê§ÒÀÀµ£¨´ËÊ± BASE ÒÑÈ·¶¨£©----
+rem ---- æŒ‰éœ€å®‰è£…ç¼ºå¤±ä¾èµ–ï¼ˆæ­¤æ—¶ BASE å·²ç¡®å®šï¼‰----
 if "%DRYRUN%"=="1" goto :after_install
 if "%DS_AUTO%"=="1" goto :auto_install
 if "%NEED_PY%"=="1" (
-  choice /c YN /n /m "      Python È±Ê§£¬ÏÖÔÚ×Ô¶¯°²×°Âð£¿(Y/N): "
+  choice /c YN /n /m "      Python ç¼ºå¤±ï¼ŒçŽ°åœ¨è‡ªåŠ¨å®‰è£…å—ï¼Ÿ(Y/N): "
   if not errorlevel 2 call :install_python
 )
 if "%NEED_PIP%"=="1" (
-  choice /c YN /n /m "      pip ÒÀÀµÈ±Ê§£¬ÏÖÔÚ×° flet + requests Âð£¿(Y/N): "
+  choice /c YN /n /m "      pip ä¾èµ–ç¼ºå¤±ï¼ŒçŽ°åœ¨è£… flet + requests å—ï¼Ÿ(Y/N): "
   if not errorlevel 2 call :install_pip
 )
 if "%NEED_FFMPEG%"=="1" if not exist "%BASE%\tools\ffmpeg\bin\ffmpeg.exe" (
-  choice /c YN /n /m "      ffmpeg È±Ê§£¬ÏÖÔÚ×°Âð£¨Ô¼ 120MB£©£¿(Y/N): "
+  choice /c YN /n /m "      ffmpeg ç¼ºå¤±ï¼ŒçŽ°åœ¨è£…å—ï¼ˆçº¦ 120MBï¼‰ï¼Ÿ(Y/N): "
   if not errorlevel 2 call :install_ffmpeg
 )
 goto :after_install
@@ -232,11 +207,11 @@ if errorlevel 1 goto :a2_bad
 for /r "%TMPD%\aria2x" %%F in (aria2c.exe) do call :take "%%F" "%BASE%\aria2"
 if not exist "%BASE%\aria2\aria2c.exe" goto :a2_bad
 :a2_ok
-echo [OK] aria2c.exe ¾ÍÎ»
+echo [OK] aria2c.exe å°±ä½
 goto :step6
 :a2_bad
 color 0E
-echo [¾¯¸æ] aria2 Ã»À­ÏÂÀ´£¬¿ÉÉÔºóÊÖ¶¯·Å½ø %BASE%\aria2\
+echo [è­¦å‘Š] aria2 æ²¡æ‹‰ä¸‹æ¥ï¼Œå¯ç¨åŽæ‰‹åŠ¨æ”¾è¿› %BASE%\aria2\
 set "FAILED=1"
 color 0B
 
@@ -257,11 +232,11 @@ xcopy /e /i /y /q "%TMPD%\ariangx\*" "%BASE%\ariaNg\" >nul 2>&1
 if not exist "%BASE%\ariaNg\index.html" for /d %%D in ("%TMPD%\ariangx\*") do if exist "%%D\index.html" xcopy /e /i /y /q "%%D\*" "%BASE%\ariaNg\" >nul 2>&1
 if not exist "%BASE%\ariaNg\index.html" goto :an_bad
 :an_ok
-echo [OK] AriaNg ¾ÍÎ»
+echo [OK] AriaNg å°±ä½
 goto :step7
 :an_bad
 color 0E
-echo [¾¯¸æ] AriaNg Ã»À­ÏÂÀ´£¬¿ÉÊÖ¶¯½âÑ¹µ½ %BASE%\ariaNg\
+echo [è­¦å‘Š] AriaNg æ²¡æ‹‰ä¸‹æ¥ï¼Œå¯æ‰‹åŠ¨è§£åŽ‹åˆ° %BASE%\ariaNg\
 set "FAILED=1"
 color 0B
 
@@ -275,51 +250,51 @@ call :download "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp
 if errorlevel 1 goto :yt_fallback
 if not exist "%DL%\ytdlp\yt-dlp.exe" goto :yt_fallback
 :yt_ok
-echo [OK] yt-dlp.exe ¾ÍÎ»
+echo [OK] yt-dlp.exe å°±ä½
 goto :step8
 :yt_fallback
-echo       Ö±½ÓÏÂÔØÊ§°Ü£¬¸ÄÓÃ pip ×° yt-dlp Ä£¿é + °ü×°½Å±¾ ...
+echo       ç›´æŽ¥ä¸‹è½½å¤±è´¥ï¼Œæ”¹ç”¨ pip è£… yt-dlp æ¨¡å— + åŒ…è£…è„šæœ¬ ...
 if "%NEED_PY%"=="1" goto :yt_bad
 if not defined PYEXE goto :yt_bad
 "%PYEXE%" -m pip install -U yt-dlp >nul 2>&1
 if errorlevel 1 goto :yt_bad
 > "%DL%\ytdlp\yt-dlp.cmd" echo @echo off
 >> "%DL%\ytdlp\yt-dlp.cmd" echo "%PYEXE%" -m yt_dlp %%*
-echo [OK] ÒÑÉú³É %DL%\ytdlp\yt-dlp.cmd£¨µÈ¼ÛÓÚ yt-dlp.exe£©
+echo [OK] å·²ç”Ÿæˆ %DL%\ytdlp\yt-dlp.cmdï¼ˆç­‰ä»·äºŽ yt-dlp.exeï¼‰
 goto :step8
 :yt_bad
 color 0E
-echo [¾¯¸æ] yt-dlp Ã»×°³É£¨ÍøÂçÔ­Òò£©£¬¿ÉÊÖ¶¯·Å½ø %DL%\ytdlp
+echo [è­¦å‘Š] yt-dlp æ²¡è£…æˆï¼ˆç½‘ç»œåŽŸå› ï¼‰ï¼Œå¯æ‰‹åŠ¨æ”¾è¿› %DL%\ytdlp
 set "FAILED=1"
 color 0B
 
-rem ================= 7.5 qBittorrent£¨¿ÉÑ¡£©=================
+rem ================= 7.5 qBittorrentï¼ˆå¯é€‰ï¼‰=================
 echo.
 echo [7.5/9] qBittorrent
-if "%DS_NO_QB%"=="1" (echo       ÒÑ°´²ÎÊýÌø¹ý qBittorrent^£¨DS_NO_QB=1^£©& goto :qb_ok)
+if "%DS_NO_QB%"=="1" (echo       å·²æŒ‰å‚æ•°è·³è¿‡ qBittorrent^ï¼ˆDS_NO_QB=1^ï¼‰& goto :qb_ok)
 if exist "%BASE%\qBittorrent\qbittorrent.exe" goto :qb_ok
 if "%DRYRUN%"=="1" goto :qb_ok
 where winget >nul 2>&1
 if errorlevel 1 goto :qb_manual
 if "%DS_AUTO%"=="1" goto :qb_install
-choice /c YN /n /m "      Ã»¼ì²âµ½ qBittorrent£¬ÏÖÔÚÓÃ winget ×°Âð£¿(Y/N): "
+choice /c YN /n /m "      æ²¡æ£€æµ‹åˆ° qBittorrentï¼ŒçŽ°åœ¨ç”¨ winget è£…å—ï¼Ÿ(Y/N): "
 if errorlevel 2 goto :qb_skip
 :qb_install
 winget install --id qBittorrent.qBittorrent -e --silent --accept-package-agreements --accept-source-agreements
-if exist "%BASE%\qBittorrent\qbittorrent.exe" (echo [OK] qBittorrent ¾ÍÎ») else (echo [ÌáÊ¾] winget ×°ºÃÁËµ«²»ÔÚ±¾Ä¿Â¼£¬Ãæ°å¿ÉÓÃÏµÍ³ÀïµÄ qB)
+if exist "%BASE%\qBittorrent\qbittorrent.exe" (echo [OK] qBittorrent å°±ä½) else (echo [æç¤º] winget è£…å¥½äº†ä½†ä¸åœ¨æœ¬ç›®å½•ï¼Œé¢æ¿å¯ç”¨ç³»ç»Ÿé‡Œçš„ qB)
 goto :qb_ok
 :qb_manual
-echo [ÌáÊ¾] Ã»ÓÐ winget£¬Çë×Ô¼º×° qBittorrent£¨Ä¿±êÄ¿Â¼: %BASE%\qBittorrent£©
+echo [æç¤º] æ²¡æœ‰ wingetï¼Œè¯·è‡ªå·±è£… qBittorrentï¼ˆç›®æ ‡ç›®å½•: %BASE%\qBittorrentï¼‰
 goto :qb_ok
 :qb_skip
-echo       ÒÑÌø¹ý qBittorrent£¨BT/PT ¹¦ÄÜÐèÒªËü£©
+echo       å·²è·³è¿‡ qBittorrentï¼ˆBT/PT åŠŸèƒ½éœ€è¦å®ƒï¼‰
 :qb_ok
 echo.
 
-rem ================= 8. ÅäÖÃ / ½Å±¾ / Ãæ°å / ¿ì½Ý·½Ê½ =================
+rem ================= 8. é…ç½® / è„šæœ¬ / é¢æ¿ / å¿«æ·æ–¹å¼ =================
 :step8
 echo.
-echo [8/9] Ð´ÅäÖÃÓëÆôÍ£½Å±¾
+echo [8/9] å†™é…ç½®ä¸Žå¯åœè„šæœ¬
 if "%DRYRUN%"=="1" goto :cfg_done
 
 set "SECRET="
@@ -328,7 +303,7 @@ if "%SECRET%"=="" set "SECRET=00000000000000000000000000000000000000000000000000
 if exist "%BASE%\aria2\rpc-secret.txt" if not "%DS_FORCE%"=="1" goto :skip_conf
 > "%BASE%\aria2\rpc-secret.txt" echo %SECRET%
 
-if exist "%BASE%\aria2\aria2.conf" if not "%DS_FORCE%"=="1" (echo       [±£Áô] ÒÑÓÐ aria2.conf£¬²»¸²¸Ç& goto :after_conf)
+if exist "%BASE%\aria2\aria2.conf" if not "%DS_FORCE%"=="1" (echo       [ä¿ç•™] å·²æœ‰ aria2.confï¼Œä¸è¦†ç›–& goto :after_conf)
 > "%BASE%\aria2\aria2.conf" echo continue=true
 >> "%BASE%\aria2\aria2.conf" echo dir=%DL%\aria2
 >> "%BASE%\aria2\aria2.conf" echo input-file=%BASE%\aria2\session.txt
@@ -373,21 +348,20 @@ if exist "%BASE%\aria2\aria2.conf" if not "%DS_FORCE%"=="1" (echo       [±£Áô] Ò
 
 > "%BASE%\start_qbit.cmd" echo @echo off
 >> "%BASE%\start_qbit.cmd" echo if exist "%%~dp0qBittorrent\qbittorrent.exe" start "" "%%~dp0qBittorrent\qbittorrent.exe" --profile="%%~dp0qBittorrent\profile"
->> "%BASE%\start_qbit.cmd" echo if not exist "%%~dp0qBittorrent\qbittorrent.exe" echo Ã»×° qBittorrent£¬Çë×°µ½ %%~dp0qBittorrent
+>> "%BASE%\start_qbit.cmd" echo if not exist "%%~dp0qBittorrent\qbittorrent.exe" echo æ²¡è£… qBittorrentï¼Œè¯·è£…åˆ° %%~dp0qBittorrent
 >> "%BASE%\start_qbit.cmd" echo exit /b 0
 
-rem ---- ÊÓÆµÏÂÔØÐ¡¹¤¾ß£¨Ã»ÓÐ¶îÍâÍâ¿ÇÒ²ÄÜÓÃ£©----
+rem ---- è§†é¢‘ä¸‹è½½å°å·¥å…·ï¼ˆæ²¡æœ‰é¢å¤–å¤–å£³ä¹Ÿèƒ½ç”¨ï¼‰----
 > "%BASE%\ControlPanel\yt-download.cmd" echo @echo off
 >> "%BASE%\ControlPanel\yt-download.cmd" echo chcp 936 ^>nul
 >> "%BASE%\ControlPanel\yt-download.cmd" echo set "DOWNLOADSTACK_ROOT=%BASE%"
 >> "%BASE%\ControlPanel\yt-download.cmd" echo set "DOWNLOADSTACK_DOWNLOADS=%DL%"
 >> "%BASE%\ControlPanel\yt-download.cmd" echo set "YTDLP_PATH=%DL%\ytdlp\yt-dlp.exe"
 >> "%BASE%\ControlPanel\yt-download.cmd" echo if exist "%BASE%\tools\video2x\video2x.exe" set "VIDEO2X_PATH=%BASE%\tools\video2x\video2x.exe"
->> "%BASE%\ControlPanel\yt-download.cmd" echo if not defined VIDEO2X_PATH if exist "D:\Video2X\video2x.exe" set "VIDEO2X_PATH=D:\Video2X\video2x.exe"
 >> "%BASE%\ControlPanel\yt-download.cmd" echo start "" "%PYEXE%" -B "%BASE%\ControlPanel\ytdl_gui.py"
 >> "%BASE%\ControlPanel\yt-download.cmd" echo exit /b 0
 set "CS=%BASE%\ControlPanel\config.json"
-if exist "%CS%" if not "%DS_FORCE%"=="1" (echo       [±£Áô] ÒÑÓÐ config.json£¬²»¸²¸Ç& goto :after_cfg)
+if exist "%CS%" if not "%DS_FORCE%"=="1" (echo       [ä¿ç•™] å·²æœ‰ config.jsonï¼Œä¸è¦†ç›–& goto :after_cfg)
 > "%CS%" echo {
 >> "%CS%" echo   "aria2": {
 >> "%CS%" echo     "host": "127.0.0.1", "port": %ARIA_PORT%,
@@ -417,76 +391,76 @@ if exist "%CS%" if not "%DS_FORCE%"=="1" (echo       [±£Áô] ÒÑÓÐ config.json£¬²»
 if exist "%~dp0panel.py" copy /y "%~dp0panel.py" "%BASE%\ControlPanel\" >nul 2>&1
 if exist "%~dp0hud_assets.py" copy /y "%~dp0hud_assets.py" "%BASE%\ControlPanel\" >nul 2>&1
 if exist "%~dp0ytdl_gui.py" copy /y "%~dp0ytdl_gui.py" "%BASE%\ControlPanel\" >nul 2>&1
-if exist "%~dp0Æô¶¯Ãæ°å.bat" copy /y "%~dp0Æô¶¯Ãæ°å.bat" "%BASE%\ControlPanel\" >nul 2>&1
+if exist "%~dp0å¯åŠ¨é¢æ¿.bat" copy /y "%~dp0å¯åŠ¨é¢æ¿.bat" "%BASE%\ControlPanel\" >nul 2>&1
 if exist "%~dp0requirements.txt" copy /y "%~dp0requirements.txt" "%BASE%\ControlPanel\" >nul 2>&1
 if exist "%~dp0DownloadStackControl.exe" copy /y "%~dp0DownloadStackControl.exe" "%BASE%\ControlPanel\" >nul 2>&1
 if exist "%~dp0ControlPanel\DownloadStackControl.exe" copy /y "%~dp0ControlPanel\DownloadStackControl.exe" "%BASE%\ControlPanel\" >nul 2>&1
 if not exist "%BASE%\ControlPanel\DownloadStackControl.exe" goto :cfg_done
 
 set "LNKNAME=%TMPD%\lnkname.txt"
-> "%LNKNAME%" echo DownloadStack ÏÂÔØ¿ØÖÆÌ¨
+> "%LNKNAME%" echo DownloadStack ä¸‹è½½æŽ§åˆ¶å°
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$n=[IO.File]::ReadAllText('%LNKNAME%',[Text.Encoding]::GetEncoding(936)).Trim(); $d=[Environment]::GetFolderPath('Desktop'); $p=Join-Path $d ($n+'.lnk'); $w=New-Object -ComObject WScript.Shell; $s=$w.CreateShortcut($p); $s.TargetPath='%BASE%\ControlPanel\DownloadStackControl.exe'; $s.WorkingDirectory='%BASE%\ControlPanel'; $s.IconLocation='%BASE%\ControlPanel\DownloadStackControl.exe,0'; $s.Description=$n; $s.Save()"
-echo [OK] ×ÀÃæ¿ì½Ý·½Ê½ÒÑ´´½¨
+echo [OK] æ¡Œé¢å¿«æ·æ–¹å¼å·²åˆ›å»º
 :after_cfg
 :cfg_done
-echo [OK] aria2.conf / config.json / ÆôÍ£½Å±¾ / Ëæ»úÃÜÔ¿ ÒÑ´¦Àí£¨ÒÑÓÐµÄ²»»á¸²¸Ç£©
+echo [OK] aria2.conf / config.json / å¯åœè„šæœ¬ / éšæœºå¯†é’¥ å·²å¤„ç†ï¼ˆå·²æœ‰çš„ä¸ä¼šè¦†ç›–ï¼‰
 
-rem ================= 9. ×Ô¼ì =================
+rem ================= 9. è‡ªæ£€ =================
 echo.
-echo [9/9] ×Ô¼ì
+echo [9/9] è‡ªæ£€
 set "MISS=0"
-if exist "%BASE%\aria2\aria2c.exe" (echo   [OK] aria2c.exe) else (echo   [È±Ê§] aria2c.exe& set "MISS=1")
-if exist "%BASE%\ariaNg\index.html" (echo   [OK] ariaNg\index.html) else (echo   [È±Ê§] ariaNg& set "MISS=1")
-if exist "%DL%\ytdlp\yt-dlp.exe" (echo   [OK] yt-dlp.exe) else (if exist "%DL%\ytdlp\yt-dlp.cmd" (echo   [OK] yt-dlp.cmd^(pip °æ^)) else (echo   [È±Ê§] yt-dlp& set "MISS=1"))
-if exist "%BASE%\ControlPanel\panel.py" (echo   [OK] Ãæ°åÔ´Âë) else (echo   [ÌáÊ¾] Ãæ°åÎ´¾ÍÎ»)
-if exist "%BASE%\qBittorrent\qbittorrent.exe" (echo   [OK] qBittorrent) else (echo   [ÌáÊ¾] qBittorrent Çë×Ô¼º×°µ½ %BASE%\qBittorrent)
-echo       ·þÎñ¶Ë¿Ú: aria2=%ARIA_PORT%  AriaNg=%ARIANG_PORT%
+if exist "%BASE%\aria2\aria2c.exe" (echo   [OK] aria2c.exe) else (echo   [ç¼ºå¤±] aria2c.exe& set "MISS=1")
+if exist "%BASE%\ariaNg\index.html" (echo   [OK] ariaNg\index.html) else (echo   [ç¼ºå¤±] ariaNg& set "MISS=1")
+if exist "%DL%\ytdlp\yt-dlp.exe" (echo   [OK] yt-dlp.exe) else (if exist "%DL%\ytdlp\yt-dlp.cmd" (echo   [OK] yt-dlp.cmd^(pip ç‰ˆ^)) else (echo   [ç¼ºå¤±] yt-dlp& set "MISS=1"))
+if exist "%BASE%\ControlPanel\panel.py" (echo   [OK] é¢æ¿æºç ) else (echo   [æç¤º] é¢æ¿æœªå°±ä½)
+if exist "%BASE%\qBittorrent\qbittorrent.exe" (echo   [OK] qBittorrent) else (echo   [æç¤º] qBittorrent è¯·è‡ªå·±è£…åˆ° %BASE%\qBittorrent)
+echo       æœåŠ¡ç«¯å£: aria2=%ARIA_PORT%  AriaNg=%ARIANG_PORT%
 
 if "%DRYRUN%"=="1" goto :final
 set "MSGF=%TMPD%\msg.txt"
 if "%MISS%"=="0" (
-  > "%MSGF%" echo °²×°Íê³É
+  > "%MSGF%" echo å®‰è£…å®Œæˆ
   >> "%MSGF%" echo.
-  >> "%MSGF%" echo ³ÌÐò: %BASE%
-  >> "%MSGF%" echo ÏÂÔØ: %DL%
-  >> "%MSGF%" echo ¶Ë¿Ú: aria2 %ARIA_PORT% / AriaNg %ARIANG_PORT%
+  >> "%MSGF%" echo ç¨‹åº: %BASE%
+  >> "%MSGF%" echo ä¸‹è½½: %DL%
+  >> "%MSGF%" echo ç«¯å£: aria2 %ARIA_PORT% / AriaNg %ARIANG_PORT%
 ) else (
-  > "%MSGF%" echo °²×°Íê³É£¬µ«ÓÐ×é¼þÈ±Ê§
+  > "%MSGF%" echo å®‰è£…å®Œæˆï¼Œä½†æœ‰ç»„ä»¶ç¼ºå¤±
   >> "%MSGF%" echo.
-  >> "%MSGF%" echo ¿´´°¿ÚÀïµÄ [È±Ê§]/[ÌáÊ¾] ÐÐ²¹ÆëºóÖØÅÜ
+  >> "%MSGF%" echo çœ‹çª—å£é‡Œçš„ [ç¼ºå¤±]/[æç¤º] è¡Œè¡¥é½åŽé‡è·‘
 )
-call :msgbox "%MSGF%" "DownloadStack °²×°½á¹û"
+call :msgbox "%MSGF%" "DownloadStack å®‰è£…ç»“æžœ"
 
 if "%DS_AUTO%"=="1" goto :final
 echo.
-echo ÉèÖÃ¿ª»ú×ÔÆô£¿£¨Y/N£¬Ä¬ÈÏ N£©
+echo è®¾ç½®å¼€æœºè‡ªå¯ï¼Ÿï¼ˆY/Nï¼Œé»˜è®¤ Nï¼‰
 choice /c YN /n /m "  "
 if errorlevel 2 goto :final
 reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v DownloadStackControl /t REG_SZ /d "\"%BASE%\ControlPanel\DownloadStackControl.exe\"" /f >nul 2>&1
-echo [OK] ÒÑ¼ÓÈë¿ª»ú×ÔÆô
+echo [OK] å·²åŠ å…¥å¼€æœºè‡ªå¯
 
 :final
 echo.
 echo ============================================================
-echo   °²×°Î»ÖÃ
-echo     ³ÌÐò: %BASE%
-echo     ÏÂÔØ: %DL%
-echo     ¶Ë¿Ú: aria2 %ARIA_PORT% / AriaNg %ARIANG_PORT%
-echo   ÏÂÒ»²½
-echo     1) Ë«»÷ "%BASE%\ControlPanel\Æô¶¯Ãæ°å.bat"
-echo     2) Ãæ°åµã¡¸Æô¶¯ Aria2 + AriaNg¡¹
+echo   å®‰è£…ä½ç½®
+echo     ç¨‹åº: %BASE%
+echo     ä¸‹è½½: %DL%
+echo     ç«¯å£: aria2 %ARIA_PORT% / AriaNg %ARIANG_PORT%
+echo   ä¸‹ä¸€æ­¥
+echo     1) åŒå‡» "%BASE%\ControlPanel\å¯åŠ¨é¢æ¿.bat"
+echo     2) é¢æ¿ç‚¹ã€Œå¯åŠ¨ Aria2 + AriaNgã€
 echo ============================================================
 if "%FAILED%"=="1" color 0E
 if "%FAILED%"=="0" color 0A
-echo  Íê³É¡£
+echo  å®Œæˆã€‚
 color 0B
 echo.
 if not "%DS_AUTO%"=="1" if not "%DRYRUN%"=="1" pause
 exit /b 0
 
-rem ==================== ×Ó¹ý³Ì ====================
+rem ==================== å­è¿‡ç¨‹ ====================
 :envcheck
-echo ==== »·¾³Ìå¼ì ====
+echo ==== çŽ¯å¢ƒä½“æ£€ ====
 ver
 for %%C in (powershell tar certutil curl winget python pip ffmpeg) do call :ec_one %%C
 for /f "delims=" %%P in ('where python 2^>nul') do echo   python: %%P
@@ -496,15 +470,15 @@ exit /b 0
 
 :ec_one
 where %1 >nul 2>&1
-if errorlevel 1 (echo   [È±] %1) else (echo   [OK] %1)
+if errorlevel 1 (echo   [ç¼º] %1) else (echo   [OK] %1)
 goto :eof
 
 :detect
-for /f "usebackq delims=" %%R in (`powershell -NoProfile -Command "$c=@(); if($env:DOWNLOADSTACK_ROOT){$c+=$env:DOWNLOADSTACK_ROOT}; $c+='D:\Tools\DownloadStack','C:\Tools\DownloadStack','E:\Tools\DownloadStack'; foreach($d in 'C','D','E','F'){ $c+=($d + ':\Tools\DownloadStack') }; $seen=@{}; foreach($p in $c){ if($p -and -not $seen[$p]){ $seen[$p]=1; if(Test-Path (Join-Path $p 'aria2\aria2c.exe')){ Write-Output $p; exit 0 } } }; exit 1"`) do echo ÒÑ°²×°: %%R
+for /f "usebackq delims=" %%R in (`powershell -NoProfile -Command "$c=@(); if($env:DOWNLOADSTACK_ROOT){$c+=$env:DOWNLOADSTACK_ROOT}; $c+='D:\Tools\DownloadStack','C:\Tools\DownloadStack','E:\Tools\DownloadStack'; foreach($d in 'C','D','E','F'){ $c+=($d + ':\Tools\DownloadStack') }; $seen=@{}; foreach($p in $c){ if($p -and -not $seen[$p]){ $seen[$p]=1; if(Test-Path (Join-Path $p 'aria2\aria2c.exe')){ Write-Output $p; exit 0 } } }; exit 1"`) do echo å·²å®‰è£…: %%R
 exit /b 0
 
 :selftest
-echo [×Ô¼ì] Â·¾¶Ð£Ñé
+echo [è‡ªæ£€] è·¯å¾„æ ¡éªŒ
 call :st_case "n" FAIL
 call :st_case "c" FAIL
 call :st_case "abc\def" FAIL
@@ -512,16 +486,16 @@ call :st_case "D:\Tools\DownloadStack" PASS
 call :st_case "E:\Apps\DS" PASS
 call :st_case "D:\a b\c" PASS
 call :st_case "D:\bad|name" FAIL
-echo [×Ô¼ì] Íê±Ï
+echo [è‡ªæ£€] å®Œæ¯•
 exit /b 0
 
 :st_case
 call :check_abs "%~1"
 set "RC=%errorlevel%"
-if "%~2"=="PASS" if "%RC%"=="0" echo   [OK]   "%~1" ½ÓÊÜ
-if "%~2"=="PASS" if not "%RC%"=="0" echo   [BAD]  "%~1" Ó¦½ÓÊÜÈ´±»¾Ü
-if "%~2"=="FAIL" if not "%RC%"=="0" echo   [OK]   "%~1" ¾Ü¾ø
-if "%~2"=="FAIL" if "%RC%"=="0" echo   [BAD]  "%~1" Ó¦¾Ü¾øÈ´±»½ÓÊÜ
+if "%~2"=="PASS" if "%RC%"=="0" echo   [OK]   "%~1" æŽ¥å—
+if "%~2"=="PASS" if not "%RC%"=="0" echo   [BAD]  "%~1" åº”æŽ¥å—å´è¢«æ‹’
+if "%~2"=="FAIL" if not "%RC%"=="0" echo   [OK]   "%~1" æ‹’ç»
+if "%~2"=="FAIL" if "%RC%"=="0" echo   [BAD]  "%~1" åº”æ‹’ç»å´è¢«æŽ¥å—
 goto :eof
 
 :check_abs
@@ -532,39 +506,39 @@ if "%CHK%"=="OK" exit /b 0
 exit /b 1
 
 :install_python
-echo       [°²×°] Python ...
+echo       [å®‰è£…] Python ...
 where winget >nul 2>&1
 if errorlevel 1 goto :ip_manual
 winget install --id Python.Python.3.12 -e --silent --accept-package-agreements --accept-source-agreements
 if errorlevel 1 goto :ip_manual
-echo       [OK] Python ÒÑ°²×°£¨ÖØ¿ª´°¿ÚºóÉúÐ§£©
+echo       [OK] Python å·²å®‰è£…ï¼ˆé‡å¼€çª—å£åŽç”Ÿæ•ˆï¼‰
 goto :eof
 :ip_manual
 set "PYINS=%TEMP%\python-installer.exe"
 powershell -NoProfile -Command "$ProgressPreference='SilentlyContinue'; try { Invoke-WebRequest 'https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe' -OutFile '%PYINS%' -UseBasicParsing -TimeoutSec 900; exit 0 } catch { exit 1 }"
-if errorlevel 1 (echo       [Ê§°Ü] ÏÂÔØÊ§°Ü£¬ÇëÊÖ¶¯×° Python 3.10+) & goto :eof
+if errorlevel 1 (echo       [å¤±è´¥] ä¸‹è½½å¤±è´¥ï¼Œè¯·æ‰‹åŠ¨è£… Python 3.10+) & goto :eof
 "%PYINS%" /quiet InstallAllUsers=0 PrependPath=1 Include_pip=1
-echo       [OK] Python ÒÑ°²×°£¨ÖØ¿ª´°¿ÚºóÉúÐ§£©
+echo       [OK] Python å·²å®‰è£…ï¼ˆé‡å¼€çª—å£åŽç”Ÿæ•ˆï¼‰
 goto :eof
 
 :install_pip
 if not defined PYEXE goto :eof
-echo       [°²×°] pip ÒÀÀµ ...
+echo       [å®‰è£…] pip ä¾èµ– ...
 "%PYEXE%" -m pip install --upgrade pip
 "%PYEXE%" -m pip install "flet==1.1.3" "requests>=2.31"
 if errorlevel 1 (
-  echo       [ÖØÊÔ] »»Çå»ª¾µÏñ ...
+  echo       [é‡è¯•] æ¢æ¸…åŽé•œåƒ ...
   "%PYEXE%" -m pip install -i https://pypi.tuna.tsinghua.edu.cn/simple "flet==1.1.3" "requests>=2.31"
 )
 goto :eof
 
 :install_ffmpeg
-echo       [°²×°] ffmpeg ...
+echo       [å®‰è£…] ffmpeg ...
 set "FFZIP=%TEMP%\ds_ffmpeg.zip"
 set "FFTMP=%TEMP%\ds_ff"
 set "FFDST=%BASE%\tools\ffmpeg"
 powershell -NoProfile -Command "$ProgressPreference='SilentlyContinue'; try { Invoke-WebRequest 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip' -OutFile '%FFZIP%' -UseBasicParsing -TimeoutSec 1800; exit 0 } catch { exit 1 }"
-if errorlevel 1 (echo       [Ê§°Ü] ffmpeg ÏÂÔØÊ§°Ü) & goto :eof
+if errorlevel 1 (echo       [å¤±è´¥] ffmpeg ä¸‹è½½å¤±è´¥) & goto :eof
 if exist "%FFTMP%" rd /s /q "%FFTMP%" >nul 2>&1
 mkdir "%FFTMP%" >nul 2>&1
 tar -xf "%FFZIP%" -C "%FFTMP%" >nul 2>&1
@@ -574,19 +548,19 @@ if not defined FFSRC goto :ff_bad
 if exist "%FFDST%" rd /s /q "%FFDST%" >nul 2>&1
 mkdir "%FFDST%" >nul 2>&1
 xcopy /e /i /y /q "%FFSRC%" "%FFDST%\bin" >nul 2>&1
-if exist "%FFDST%\bin\ffmpeg.exe" (echo       [OK] ffmpeg ÒÑ·Åµ½ %FFDST%\bin) else (goto :ff_bad)
+if exist "%FFDST%\bin\ffmpeg.exe" (echo       [OK] ffmpeg å·²æ”¾åˆ° %FFDST%\bin) else (goto :ff_bad)
 rd /s /q "%FFTMP%" >nul 2>&1
 if exist "%FFZIP%" del "%FFZIP%" >nul 2>&1
 goto :eof
 :ff_bad
-echo       [Ê§°Ü] ffmpeg ½âÑ¹ºóÃ»ÕÒµ½ ffmpeg.exe
+echo       [å¤±è´¥] ffmpeg è§£åŽ‹åŽæ²¡æ‰¾åˆ° ffmpeg.exe
 rd /s /q "%FFTMP%" >nul 2>&1
 if exist "%FFZIP%" del "%FFZIP%" >nul 2>&1
 goto :eof
 
 :bad_drive
 color 0C
-echo [Ê§°Ü] ÅÌ·û %DRIVE% ²»´æÔÚ£¬ÇëÖØÅÜ²¢Ñ¡Ò»¸öÕæÊµ´æÔÚµÄÅÌ
+echo [å¤±è´¥] ç›˜ç¬¦ %DRIVE% ä¸å­˜åœ¨ï¼Œè¯·é‡è·‘å¹¶é€‰ä¸€ä¸ªçœŸå®žå­˜åœ¨çš„ç›˜
 color 0B
 if not "%DS_AUTO%"=="1" pause
 exit /b 1
@@ -602,7 +576,7 @@ copy /y "%~dp1*.dll" "%~2" >nul 2>&1
 goto :eof
 
 :download
-echo       ÏÂÔØ %~nx2 ...
+echo       ä¸‹è½½ %~nx2 ...
 if "%DRYRUN%"=="1" goto :eof
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; try { Invoke-WebRequest -Uri '%~1' -OutFile '%~2' -UseBasicParsing -TimeoutSec 1800; exit 0 } catch { exit 1 }"
 if errorlevel 1 exit /b 1
@@ -613,8 +587,8 @@ if "%~2"=="" goto :eof
 set "GOT="
 for /f "tokens=* delims=" %%H in ('certutil -hashfile "%~1" SHA256 ^| findstr /v ":"') do if not defined GOT set "GOT=%%H"
 set "GOT=%GOT: =%"
-if /I "%GOT%"=="%~2" echo       [Ð£Ñé] SHA256 Ò»ÖÂ
-if /I not "%GOT%"=="%~2" echo       [Ð£ÑéÊ§°Ü] %GOT%
+if /I "%GOT%"=="%~2" echo       [æ ¡éªŒ] SHA256 ä¸€è‡´
+if /I not "%GOT%"=="%~2" echo       [æ ¡éªŒå¤±è´¥] %GOT%
 if /I not "%GOT%"=="%~2" exit /b 1
 goto :eof
 

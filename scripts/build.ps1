@@ -1,6 +1,6 @@
 param([string]$Out = "dist")
 $ErrorActionPreference = "Stop"
-Set-Location $PSScriptRoot
+Set-Location (Split-Path -Parent $PSScriptRoot)
 python -m pip install -r requirements.txt
 python -m pip install pyinstaller
 python -m PyInstaller --noconfirm --clean --windowed --onefile `
