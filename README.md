@@ -218,10 +218,11 @@ install.bat / install.sh（真正的安装器）
 
 ```
 downloadstack-control/
-├─ panel.py              面板主程序（UI + 探测 + 动作，含平台差异层）
+├─ panel.py              面板主程序（3D 控制台后端服务 + 探测 + 动作 + 平台差异层）
+├─ panel_ui.html         曲面 3D 空间控制台前端（零外链离线运行 + 内置 AriaNg / 磁力工坊 / 任务队列）
+├─ magnet_tools.py       磁力解析 / Tracker 热更新 / DHT 修复 / 种子预取校验模块
 ├─ ytdl_gui.py           视频下载器 GUI
 ├─ setup_wizard.py       图形/文本引导（--auto / --text / --scan）
-├─ hud_assets.py         内嵌 HUD 图片（base64 PNG，无外部资源）
 ├─ 一键配置.bat / .sh     一键配置（依赖 + 组件 + 环境变量）
 ├─ 启动面板.bat / .sh     启动器（先体检 → 缺就问你 → 启动）
 ├─ install.bat / .sh     安装向导（盘符自选、端口避让、SHA256 校验）

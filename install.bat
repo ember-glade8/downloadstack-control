@@ -389,7 +389,8 @@ if exist "%CS%" if not "%DS_FORCE%"=="1" (echo       [保留] 已有 config.json
 >> "%CS%" echo }
 
 if exist "%~dp0panel.py" copy /y "%~dp0panel.py" "%BASE%\ControlPanel\" >nul 2>&1
-if exist "%~dp0hud_assets.py" copy /y "%~dp0hud_assets.py" "%BASE%\ControlPanel\" >nul 2>&1
+if exist "%~dp0panel_ui.html" copy /y "%~dp0panel_ui.html" "%BASE%\ControlPanel\" >nul 2>&1
+if exist "%~dp0magnet_tools.py" copy /y "%~dp0magnet_tools.py" "%BASE%\ControlPanel\" >nul 2>&1
 if exist "%~dp0ytdl_gui.py" copy /y "%~dp0ytdl_gui.py" "%BASE%\ControlPanel\" >nul 2>&1
 if exist "%~dp0启动面板.bat" copy /y "%~dp0启动面板.bat" "%BASE%\ControlPanel\" >nul 2>&1
 if exist "%~dp0requirements.txt" copy /y "%~dp0requirements.txt" "%BASE%\ControlPanel\" >nul 2>&1

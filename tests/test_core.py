@@ -105,9 +105,19 @@ class TestScanSecrets(unittest.TestCase):
             self.assertEqual(hits[0][0], "leak.sh")
 
 
+class TestMagnetTools(unittest.TestCase):
+    def test_parse_magnet_hex_and_uri(self):
+        import magnet_tools
+        ih = "a" * 40
+        res = magnet_tools.parse_magnet(ih)
+        self.assertTrue(res["valid"])
+        self.assertEqual(res["infohash"], ih)
+        self.assertEqual(res["uri"], "magnet:?xt=urn:btih:" + ih)
+
+
 class TestSyntaxAll(unittest.TestCase):
     def test_all_python_files_parse(self):
-        for name in ("panel.py", "ytdl_gui.py", "setup_wizard.py", "hud_assets.py", "scripts/scan_secrets.py"):
+        for name in ("panel.py", "magnet_tools.py", "ytdl_gui.py", "setup_wizard.py", "scripts/scan_secrets.py"):
             src = (ROOT / name).read_text(encoding="utf-8")
             ast.parse(src, filename=name)
 
