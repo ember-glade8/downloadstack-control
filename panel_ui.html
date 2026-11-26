@@ -3,601 +3,1035 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DownloadStack // Control 3D</title>
+  <title>DownloadStack // Spatial 3D Command Console</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
       width: 100%; height: 100%; overflow: hidden;
-      background: #020308; color: #f0f7ff;
+      background: #02040a; color: #eef6ff;
       font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", "Microsoft YaHei UI", sans-serif;
       user-select: none; -webkit-font-smoothing: antialiased;
     }
-    button, input { font-family: inherit; }
-
-    #scene3d { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 0; cursor: grab; }
-    #scene3d:active { cursor: grabbing; }
-
+    button, input, textarea { font-family: inherit; }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
     .hidden { display: none !important; }
 
-    .hud-glass {
-      background: linear-gradient(145deg, rgba(12, 20, 38, 0.58), rgba(5, 9, 20, 0.74));
-      backdrop-filter: blur(24px) saturate(170%);
-      -webkit-backdrop-filter: blur(24px) saturate(170%);
-      border: 1px solid rgba(160, 220, 255, 0.14);
-      box-shadow: 0 24px 60px -18px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+    /* Fullscreen 3D Perspective Environment */
+    #bgCanvas { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 0; pointer-events: none; }
+
+    /* Silky Fluid Mouse Aura & Soft Magnetic Ring */
+    #cursorGlow {
+      position: fixed; width: 380px; height: 380px; border-radius: 999px; pointer-events: none; z-index: 1;
+      transform: translate(-50%, -50%);
+      background: radial-gradient(circle, var(--cur-glow, rgba(0,229,184,0.15)) 0%, transparent 66%);
+      transition: background 0.35s ease; will-change: left, top;
+    }
+    #cursorRing {
+      position: fixed; width: 24px; height: 24px; border-radius: 999px; pointer-events: none; z-index: 99;
+      transform: translate(-50%, -50%);
+      border: 1.5px solid var(--cur-ring, rgba(0,245,184,0.58));
+      box-shadow: 0 0 16px var(--cur-glow, rgba(0,245,184,0.38));
+      transition: width 0.24s cubic-bezier(0.22,1,0.36,1), height 0.24s cubic-bezier(0.22,1,0.36,1), border-color 0.25s ease;
+      will-change: left, top;
+    }
+    #cursorRing.hover { width: 40px; height: 40px; background: rgba(255,255,255,0.035); }
+    #cursorRing.down { width: 16px; height: 16px; }
+
+    /* Extruded 3D Glass Console Surface */
+    .console-glass {
+      background: linear-gradient(155deg, rgba(14, 23, 44, 0.72), rgba(5, 9, 22, 0.86));
+      backdrop-filter: blur(24px) saturate(175%);
+      -webkit-backdrop-filter: blur(24px) saturate(175%);
+      border: 1px solid rgba(165, 220, 255, 0.15);
+      box-shadow:
+        0 26px 56px -18px rgba(0, 0, 0, 0.88),
+        0 6px 0 -1px rgba(10, 18, 36, 0.85),
+        0 7px 0 0 rgba(0, 212, 255, 0.14),
+        inset 0 1px 0 rgba(255, 255, 255, 0.18),
+        inset 0 -1px 0 rgba(0, 212, 255, 0.08);
     }
 
-    /* Overlay Layout */
-    .hud-layer {
-      position: fixed; inset: 0; z-index: 10; pointer-events: none;
-      display: flex; flex-direction: column; justify-content: space-between;
-      padding: 16px 20px;
+    /* Main 3D Perspective Viewport */
+    .shell {
+      position: relative; z-index: 10; height: 100vh; width: 100vw;
+      display: flex; flex-direction: column; gap: 11px;
+      padding: 12px 18px 14px; max-width: 1680px; margin: 0 auto;
+      perspective: 1800px;
     }
 
-    /* Top Bar */
+    /* ==================== TOP FLOATING COMMAND HEADER ==================== */
     .topbar {
-      pointer-events: auto; max-width: 1440px; width: 100%; margin: 0 auto;
-      border-radius: 999px; padding: 8px 16px;
+      border-radius: 999px; padding: 7px 14px; flex-shrink: 0;
       display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      box-shadow: 0 18px 44px -14px rgba(0,0,0,0.85), inset 0 1px 0 rgba(255,255,255,0.18);
     }
-    .brand { display: flex; align-items: center; gap: 12px; }
-    .brand-icon {
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand-gem {
       width: 34px; height: 34px; border-radius: 999px;
-      background: linear-gradient(135deg, rgba(0,245,184,0.34), rgba(0,212,255,0.34));
-      border: 1px solid rgba(0,245,184,0.58);
-      box-shadow: 0 0 20px rgba(0,245,184,0.45);
-      display: flex; align-items: center; justify-content: center; color: #b8ffec;
+      background: conic-gradient(from 0deg, rgba(0,245,184,0.42), rgba(0,212,255,0.42), rgba(168,85,247,0.48), rgba(0,245,184,0.42));
+      border: 1px solid rgba(180,255,235,0.6);
+      box-shadow: 0 0 22px rgba(0,245,184,0.45);
+      display: flex; align-items: center; justify-content: center; color: #fff;
     }
-    .brand-title { font-size: 13px; font-weight: 700; letter-spacing: 0.1em; color: #fff; }
-    .brand-title span { color: #67e8f9; font-weight: 400; }
-    .brand-sub { font-size: 10px; color: #94a3b8; margin-top: 1px; }
+    .brand-t { font-size: 13px; font-weight: 800; letter-spacing: 0.09em; }
+    .brand-t span { color: #67e8f9; font-weight: 400; }
+    .brand-s { font-size: 10px; color: #94a3b8; }
 
-    .top-stats {
-      display: flex; align-items: center; gap: 18px;
-      padding: 5px 18px; border-radius: 999px;
-      background: rgba(2, 6, 16, 0.62); border: 1px solid rgba(255,255,255,0.10);
+    /* Sliding Nav Pills */
+    .nav-track {
+      position: relative; display: flex; align-items: center; gap: 2px;
+      padding: 3px; border-radius: 999px;
+      background: rgba(2, 6, 16, 0.68); border: 1px solid rgba(255,255,255,0.10);
     }
-    .stat-item { display: flex; align-items: center; gap: 8px; }
-    .stat-lbl { font-size: 10px; color: #94a3b8; }
-    .stat-dn {
-      font-size: 14px; font-weight: 700;
-      background: linear-gradient(90deg, #6ee7b7, #a5f3fc, #fff);
-      -webkit-background-clip: text; background-clip: text; color: transparent;
+    #navPill {
+      position: absolute; top: 3px; bottom: 3px; border-radius: 999px; z-index: 0;
+      background: linear-gradient(90deg, rgba(0,245,184,0.30), rgba(0,212,255,0.30));
+      border: 1px solid rgba(0,245,184,0.52);
+      box-shadow: 0 0 20px -4px rgba(0,212,255,0.6);
+      transition: left 0.36s cubic-bezier(0.34,1.56,0.64,1), width 0.36s cubic-bezier(0.34,1.56,0.64,1);
     }
-    .stat-up { font-size: 12px; font-weight: 600; color: #67e8f9; }
-    .stat-div { width: 1px; height: 14px; background: rgba(255,255,255,0.14); }
-    .top-actions { display: flex; align-items: center; gap: 6px; }
-
-    /* Center Reticle */
-    .center-stage { flex: 1; position: relative; pointer-events: none; }
-    .focus-pill {
-      position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
-      display: flex; align-items: center; gap: 8px;
-      padding: 5px 14px; border-radius: 999px;
-      background: rgba(2, 6, 16, 0.48); border: 1px solid rgba(255,255,255,0.10);
-      backdrop-filter: blur(12px); font-size: 10.5px; color: #cbd5e1; white-space: nowrap;
+    .nav-btn {
+      position: relative; z-index: 1; padding: 6px 14px; border-radius: 999px; border: none;
+      background: transparent; color: #8da5c4; font-size: 12px; font-weight: 600;
+      cursor: pointer; transition: color 0.22s; white-space: nowrap; display: flex; align-items: center; gap: 6px;
     }
-    .focus-dot { width: 6px; height: 6px; border-radius: 999px; background: #00f5b8; box-shadow: 0 0 8px #00f5b8; }
-
-    /* Bottom Container */
-    .bottom-wrap { max-width: 1440px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
-    .pods-grid {
-      pointer-events: auto; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px;
+    .nav-btn.active, .nav-btn:hover { color: #fff; }
+    .badge-cnt {
+      padding: 1px 6px; border-radius: 999px; font-size: 10px;
+      background: rgba(0,245,184,0.22); color: #a7f3d0; border: 1px solid rgba(0,245,184,0.38);
     }
 
-    /* 3D Engine Pod */
-    .pod-wrap { perspective: 1100px; }
-    .pod {
-      position: relative; border-radius: 22px; padding: 1.5px;
-      background: linear-gradient(135deg, rgba(255,255,255,0.18), rgba(255,255,255,0.03) 50%, var(--c1, #00f5b8));
+    .top-right { display: flex; align-items: center; gap: 7px; }
+    .top-speed {
+      display: flex; align-items: center; gap: 10px; padding: 5px 14px; border-radius: 999px;
+      background: rgba(2,6,16,0.65); border: 1px solid rgba(255,255,255,0.10); font-size: 12px;
+    }
+    .spd-dn { font-weight: 800; background: linear-gradient(90deg, #6ee7b7, #67e8f9, #fff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+    /* ==================== 3D CURVED SPATIAL COCKPIT ==================== */
+    .view { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; transform-style: preserve-3d; }
+
+    /* Entire Curved 3D Console Stage tilts subtly with mouse! */
+    #cockpitRig {
+      flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 14px;
       transform-style: preserve-3d; will-change: transform;
+    }
+
+    /* UPPER CURVED 3-WING CONSOLE BAND */
+    .upper-wings {
+      flex: 1.08; min-height: 0; display: grid;
+      grid-template-columns: 1.02fr 1.46fr 1.02fr; gap: 16px;
+      transform-style: preserve-3d;
+    }
+    .wing-left {
+      transform: rotateY(8.5deg) translateZ(6px);
+      transform-origin: right center;
+      transition: transform 0.35s cubic-bezier(0.22,1,0.36,1), border-color 0.25s;
+    }
+    .wing-left:hover { transform: rotateY(3deg) translateZ(18px); border-color: rgba(0,245,184,0.42); }
+
+    .wing-center {
+      transform: translateZ(20px);
+      transition: transform 0.35s cubic-bezier(0.22,1,0.36,1), border-color 0.25s;
+    }
+    .wing-center:hover { border-color: rgba(0,212,255,0.45); }
+
+    .wing-right {
+      transform: rotateY(-8.5deg) translateZ(6px);
+      transform-origin: left center;
+      transition: transform 0.35s cubic-bezier(0.22,1,0.36,1), border-color 0.25s;
+    }
+    .wing-right:hover { transform: rotateY(-3deg) translateZ(18px); border-color: rgba(192,132,252,0.45); }
+
+    /* Panel Interiors */
+    .panel-box {
+      border-radius: 22px; padding: 14px; display: flex; flex-direction: column; gap: 10px;
+      min-height: 0; position: relative; overflow: hidden;
+    }
+    .box-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; position: relative; z-index: 2; }
+    .box-title { font-size: 12px; font-weight: 700; letter-spacing: 0.04em; color: #e2f1ff; display: flex; align-items: center; gap: 7px; }
+    .box-sub { font-size: 10.5px; color: #7e96b4; }
+
+    .wave-wrap {
+      flex: 1; min-height: 92px; border-radius: 14px; position: relative; overflow: hidden;
+      background: rgba(2, 6, 15, 0.74); border: 1px solid rgba(255,255,255,0.08);
+    }
+    #c-wave { width: 100%; height: 100%; display: block; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+    .kpi-tile {
+      border-radius: 12px; padding: 8px 10px;
+      background: rgba(3, 8, 20, 0.76); border: 1px solid rgba(255,255,255,0.08);
+    }
+    .kpi-lbl { font-size: 10px; color: #7e96b4; }
+    .kpi-val { font-size: 13px; font-weight: 700; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* CENTER CONSOLE: 3D AURORA TERRAIN WAVE DECK (NO BORING CUBE!) */
+    .center-deck {
+      border-radius: 24px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between;
+      gap: 10px; min-height: 0; position: relative; overflow: hidden;
+    }
+    .terrain-stage {
+      flex: 1; min-height: 150px; border-radius: 16px; position: relative; overflow: hidden;
+      background: radial-gradient(ellipse 90% 80% at 50% 85%, rgba(0,212,255,0.16), rgba(3,7,18,0.92) 70%);
+      border: 1px solid rgba(0, 212, 255, 0.20);
+      box-shadow: inset 0 0 40px rgba(0, 212, 255, 0.08);
+    }
+    #c-terrain { width: 100%; height: 100%; display: block; }
+
+    /* Floating Center Telemetry Overlay inside 3D Terrain Deck */
+    .deck-overlay {
+      position: absolute; inset: 0; padding: 12px 14px; pointer-events: none;
+      display: flex; flex-direction: column; justify-content: space-between;
+    }
+    .deck-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .deck-big-speed {
+      font-size: 32px; font-weight: 900; line-height: 1; letter-spacing: -0.02em;
+      background: linear-gradient(180deg, #ffffff 15%, #7dd3fc 65%, #00f5b8 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      filter: drop-shadow(0 0 18px rgba(0, 212, 255, 0.45));
+    }
+    .deck-pills { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+    .status-chip {
+      display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
+      background: rgba(2, 6, 16, 0.72); border: 1px solid rgba(255,255,255,0.12);
+      font-size: 10.5px; font-weight: 700; backdrop-filter: blur(8px);
+    }
+
+    /* Quantum Omni-Drop Bar */
+    .omni-bar {
+      position: relative; border-radius: 15px; padding: 1.5px;
+      background: linear-gradient(90deg, #00f5b8, #00d4ff, #a855f7, #00f5b8);
+      background-size: 220% 100%; animation: flowGrad 6s linear infinite;
+      box-shadow: 0 10px 28px -10px rgba(0,212,255,0.45);
+    }
+    @keyframes flowGrad { 0%{background-position:0% 50%} 100%{background-position:220% 50%} }
+    .omni-inner {
+      border-radius: 13.5px; background: rgba(4, 8, 20, 0.94);
+      padding: 6px 8px; display: flex; align-items: center; gap: 7px;
+    }
+    .omni-tag {
+      font-size: 10px; font-weight: 700; padding: 4px 9px; border-radius: 8px; white-space: nowrap;
+      background: rgba(0,245,184,0.16); color: #a7f3d0; border: 1px solid rgba(0,245,184,0.38);
+    }
+    .omni-inp { flex: 1; min-width: 0; background: transparent; border: none; outline: none; color: #fff; font-size: 12px; }
+    .omni-inp::placeholder { color: #64748b; }
+
+    /* Right Wing: Live Task Radar */
+    .radar-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 7px; padding-right: 2px; }
+    .task-mini {
+      border-radius: 12px; padding: 8px 10px;
+      background: rgba(3, 8, 20, 0.76); border: 1px solid rgba(255,255,255,0.08);
+      display: flex; flex-direction: column; gap: 5px; transition: border-color 0.2s, transform 0.2s;
+    }
+    .task-mini:hover { border-color: rgba(0,212,255,0.42); transform: translateX(3px); }
+    .task-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .task-name { font-size: 11.5px; font-weight: 600; color: #e6f2ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .prog-track { height: 4px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden; }
+    .prog-fill { height: 100%; border-radius: 999px; transition: width 0.4s ease; }
+
+    /* ==================== LOWER 4 EXTRUDED 3D HARDWARE CONSOLE MODULES ==================== */
+    .modules-deck {
+      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; flex-shrink: 0;
+      transform: rotateX(6deg) translateZ(14px);
+      transform-origin: center bottom;
+      transform-style: preserve-3d;
+    }
+    .mod-wrap { perspective: 1200px; transform-style: preserve-3d; }
+    .mod-card {
+      position: relative; border-radius: 22px; padding: 1.5px; height: 204px;
+      background: linear-gradient(145deg, rgba(255,255,255,0.22), rgba(255,255,255,0.04) 48%, var(--c1));
+      transform-style: preserve-3d; will-change: transform;
+      /* Real 3D extruded console thickness + underglow */
+      box-shadow:
+        0 9px 0 -1px rgba(8, 13, 28, 0.94),
+        0 10px 0 0 var(--edge),
+        0 26px 52px -14px rgba(0,0,0,0.92),
+        0 20px 34px -16px var(--glow);
       transition: box-shadow 0.3s ease;
-      box-shadow: 0 24px 54px -18px rgba(0,0,0,0.88);
     }
-    .pod::before {
-      content: ""; position: absolute; inset: -1px; border-radius: inherit;
-      background: conic-gradient(from var(--ang, 0deg), transparent 0deg, transparent 210deg, var(--c1, #00f5b8) 295deg, var(--c2, #00d4ff) 335deg, transparent 360deg);
-      opacity: 0.25; transition: opacity 0.3s; animation: spin 4.2s linear infinite; z-index: 0;
+    .mod-card::before {
+      content: ""; position: absolute; inset: -1px; border-radius: inherit; z-index: 0;
+      background: conic-gradient(from var(--ang, 0deg), transparent 0deg, transparent 200deg, var(--c1) 290deg, var(--c2) 335deg, transparent 360deg);
+      opacity: 0.35; transition: opacity 0.3s; animation: spin 3.8s linear infinite;
     }
-    .pod:hover::before { opacity: 1; }
-    .pod:hover { box-shadow: 0 32px 70px -15px rgba(0,0,0,0.95), 0 0 38px -8px var(--glow, rgba(0,245,184,0.45)); }
+    .mod-card:hover::before { opacity: 1; }
+    .mod-card:hover {
+      box-shadow:
+        0 12px 0 -1px rgba(10, 17, 36, 0.96),
+        0 13px 0 0 var(--c1),
+        0 38px 72px -14px rgba(0,0,0,0.96),
+        0 0 46px -8px var(--glow);
+    }
     @keyframes spin { to { --ang: 360deg; } }
     @property --ang { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
 
-    .pod-inner {
-      position: relative; z-index: 1; border-radius: 20.5px; padding: 16px;
-      background: linear-gradient(160deg, rgba(10, 17, 34, 0.80), rgba(4, 7, 16, 0.90));
-      backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px);
+    .mod-surface {
+      position: relative; z-index: 1; height: 100%; border-radius: 20.5px;
+      background: linear-gradient(160deg, rgba(10, 17, 36, 0.86), rgba(4, 7, 16, 0.95));
       overflow: hidden; transform-style: preserve-3d;
-      display: flex; flex-direction: column; gap: 12px;
+      padding: 14px; display: flex; flex-direction: column; justify-content: space-between;
     }
-    .pod-glare {
-      position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.25s;
-      background: radial-gradient(280px circle at var(--gx, 50%) var(--gy, 50%), var(--glare, rgba(0,245,184,0.2)), transparent 60%);
+    .mod-canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+    .mod-glare {
+      position: absolute; inset: 0; z-index: 1; pointer-events: none; opacity: 0; transition: opacity 0.25s;
+      background: radial-gradient(250px circle at var(--gx,50%) var(--gy,50%), var(--glare), transparent 60%);
     }
-    .pod:hover .pod-glare { opacity: 1; }
-    .z-pop { transform: translateZ(20px); position: relative; z-index: 2; }
+    .mod-card:hover .mod-glare { opacity: 1; }
+    .mod-z { position: relative; z-index: 2; transform: translateZ(26px); }
 
-    .pod-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-    .pod-id { display: flex; align-items: center; gap: 10px; min-width: 0; }
-    .pod-name { font-size: 14px; font-weight: 700; color: #fff; letter-spacing: 0.02em; }
-    .pod-port { font-size: 10px; font-weight: 400; margin-left: 4px; opacity: 0.85; }
-    .pod-meta { font-size: 10.5px; color: #94a3b8; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .pod-speed { text-align: right; flex-shrink: 0; }
-    .pod-speed-val { font-size: 15px; font-weight: 700; }
-    .pod-speed-st { font-size: 9.5px; letter-spacing: 0.06em; margin-top: 1px; }
-    .pod-btns { display: flex; align-items: center; gap: 6px; }
-    .flex-1 { flex: 1; }
+    .mod-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+    .mod-id { display: flex; align-items: center; gap: 9px; min-width: 0; }
+    .mod-name { font-size: 14px; font-weight: 800; color: #fff; letter-spacing: 0.02em; text-shadow: 0 2px 12px rgba(0,0,0,0.6); }
+    .mod-desc { font-size: 10.5px; color: #94a3b8; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .mod-stat { text-align: right; flex-shrink: 0; }
+    .mod-val { font-size: 14.5px; font-weight: 800; }
+    .mod-st { font-size: 9.5px; letter-spacing: 0.06em; margin-top: 1px; }
+    .mod-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 
     /* LED Sonar */
     .led { position: relative; width: 10px; height: 10px; border-radius: 999px; flex-shrink: 0; }
-    .led-on::after {
-      content: ""; position: absolute; inset: 0; border-radius: 999px;
-      background: currentColor; animation: sonar 1.8s ease-out infinite;
-    }
+    .led-on::after { content: ""; position: absolute; inset: 0; border-radius: 999px; background: currentColor; animation: sonar 1.8s ease-out infinite; }
     @keyframes sonar { 0% { transform: scale(1); opacity: 0.85; } 100% { transform: scale(2.8); opacity: 0; } }
 
-    /* Tactile Buttons */
-    .cbtn {
+    /* Extruded 3D Tactile Console Buttons */
+    .btn {
       position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
-      padding: 7px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;
-      border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.06); color: #eaf4ff;
-      cursor: pointer; transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); white-space: nowrap;
+      padding: 6px 11px; border-radius: 10px; font-size: 11.5px; font-weight: 600;
+      border: 1px solid rgba(255,255,255,0.14); background: rgba(15,24,45,0.78); color: #e8f3ff;
+      cursor: pointer; white-space: nowrap;
+      box-shadow: 0 3px 0 rgba(2,5,14,0.85), inset 0 1px 0 rgba(255,255,255,0.16);
+      transition: transform 0.18s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.2s, border-color 0.2s;
     }
-    .cbtn:hover { transform: translateY(-2px) scale(1.03); border-color: var(--br, #00d4ff); box-shadow: 0 0 18px -3px var(--bg, rgba(0,212,255,0.5)); color: #fff; }
-    .cbtn:active { transform: scale(0.95); }
-    .cbtn-pill { border-radius: 999px; padding: 6px 12px; font-size: 11.5px; }
-    .cbtn-icon { padding: 7px 9px; }
-    .cbtn-mint { --br:#00f5b8; --bg:rgba(0,245,184,0.55); background: linear-gradient(135deg, rgba(0,245,184,0.26), rgba(0,212,255,0.12)); border-color: rgba(0,245,184,0.45); color: #b8ffec; }
-    .cbtn-cyan { --br:#00d4ff; --bg:rgba(0,212,255,0.55); background: linear-gradient(135deg, rgba(0,212,255,0.22), rgba(99,102,241,0.12)); border-color: rgba(0,212,255,0.4); color: #c4f4ff; }
-    .cbtn-amber { --br:#ffb347; --bg:rgba(255,179,71,0.55); background: linear-gradient(135deg, rgba(255,179,71,0.24), rgba(255,90,95,0.1)); border-color: rgba(255,179,71,0.42); color: #ffe4b5; }
-    .cbtn-rose { --br:#ff3d71; --bg:rgba(255,61,113,0.6); background: linear-gradient(135deg, rgba(255,61,113,0.28), rgba(168,85,247,0.12)); border-color: rgba(255,61,113,0.48); color: #ffc8d6; }
+    .btn:hover {
+      transform: translateY(-2.5px) scale(1.03);
+      border-color: var(--br, #00d4ff);
+      box-shadow: 0 5px 0 rgba(2,5,14,0.9), 0 0 18px -3px var(--bg, rgba(0,212,255,0.6)), inset 0 1px 0 rgba(255,255,255,0.28);
+      color: #fff;
+    }
+    .btn:active { transform: translateY(1.5px) scale(0.96); box-shadow: 0 1px 0 rgba(2,5,14,0.9); }
+    .btn-pill { border-radius: 999px; padding: 6px 12px; }
+    .btn-mint { --br:#00f5b8; --bg:rgba(0,245,184,0.58); background: linear-gradient(135deg, rgba(0,245,184,0.28), rgba(0,212,255,0.14)); border-color: rgba(0,245,184,0.5); color: #b8ffec; }
+    .btn-cyan { --br:#00d4ff; --bg:rgba(0,212,255,0.58); background: linear-gradient(135deg, rgba(0,212,255,0.25), rgba(99,102,241,0.14)); border-color: rgba(0,212,255,0.48); color: #c4f4ff; }
+    .btn-violet { --br:#c084fc; --bg:rgba(168,85,247,0.6); background: linear-gradient(135deg, rgba(168,85,247,0.30), rgba(236,72,153,0.16)); border-color: rgba(192,132,252,0.52); color: #f3d5ff; }
+    .btn-amber { --br:#ffb347; --bg:rgba(255,179,71,0.58); background: linear-gradient(135deg, rgba(255,179,71,0.28), rgba(255,90,95,0.14)); border-color: rgba(255,179,71,0.5); color: #ffe4b5; }
+    .btn-rose { --br:#ff3d71; --bg:rgba(255,61,113,0.62); background: linear-gradient(135deg, rgba(255,61,113,0.30), rgba(168,85,247,0.14)); border-color: rgba(255,61,113,0.52); color: #ffc8d6; }
+    .flex-1 { flex: 1; }
 
-    /* Upscale Pill & Switch */
-    .up-pill {
-      display: flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 999px;
-      background: rgba(255,179,71,0.10); border: 1px solid rgba(255,179,71,0.28);
-      font-size: 10.5px; font-weight: 600; color: #fde68a; flex-shrink: 0;
-    }
-    .sw { width: 36px; height: 19px; border-radius: 999px; background: rgba(255,255,255,0.13); border: 1px solid rgba(255,255,255,0.18); position: relative; cursor: pointer; transition: all 0.25s; }
-    .sw i { display: block; width: 13px; height: 13px; border-radius: 999px; background: #cbd5e1; position: absolute; top: 2px; left: 2px; transition: transform 0.28s cubic-bezier(0.34,1.56,0.64,1), background 0.2s; }
-    .sw.on { background: linear-gradient(90deg, #ff9f1c, #ffb347); box-shadow: 0 0 14px rgba(255,179,71,0.6); }
-    .sw.on i { transform: translateX(17px); background: #fff; }
+    /* Mechanical Glow Switch */
+    .sw { width: 38px; height: 20px; border-radius: 999px; background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.2); position: relative; cursor: pointer; transition: all 0.25s; flex-shrink: 0; }
+    .sw i { display: block; width: 14px; height: 14px; border-radius: 999px; background: #cbd5e1; position: absolute; top: 2px; left: 2px; transition: transform 0.28s cubic-bezier(0.34,1.56,0.64,1), background 0.2s; }
+    .sw.on { background: linear-gradient(90deg, #ff9f1c, #ff3d71); box-shadow: 0 0 18px rgba(255,159,28,0.7); }
+    .sw.on i { transform: translateX(18px); background: #fff; }
 
-    /* Bottom Slim Log Strip */
-    .log-bar {
-      pointer-events: auto; border-radius: 16px; padding: 8px 14px;
-      display: flex; flex-direction: column; gap: 8px;
-    }
-    .log-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-    .log-left { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; cursor: pointer; }
-    #miniWave { width: 128px; height: 24px; flex-shrink: 0; border-radius: 6px; background: rgba(2,6,16,0.65); border: 1px solid rgba(255,255,255,0.10); }
-    .ticker { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .log-sheet { max-height: 0; opacity: 0; transition: max-height 0.32s cubic-bezier(0.22,1,0.36,1), opacity 0.25s ease; overflow: hidden; }
-    .log-sheet.open { max-height: 170px; opacity: 1; }
-    .log-list {
-      height: 155px; overflow-y: auto; border-radius: 12px; padding: 10px 12px;
-      background: rgba(2, 5, 14, 0.88); border: 1px solid rgba(255,255,255,0.08);
-      font-size: 11px; line-height: 1.55; user-select: text;
-    }
+    /* Bottom Slim Terminal */
+    .log-bar { border-radius: 14px; padding: 6px 12px; flex-shrink: 0; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 14px 36px -14px rgba(0,0,0,0.85); }
+    .log-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .log-sheet { max-height: 0; opacity: 0; overflow: hidden; transition: max-height 0.3s ease, opacity 0.25s; }
+    .log-sheet.open { max-height: 155px; opacity: 1; }
+    .log-list { height: 145px; overflow-y: auto; border-radius: 10px; padding: 8px 10px; background: rgba(2,5,14,0.92); border: 1px solid rgba(255,255,255,0.08); font-size: 11px; line-height: 1.5; user-select: text; }
 
-    /* Slide-over Drawer */
-    .mask { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,0.56); backdrop-filter: blur(4px); }
+    /* Sub-Views (Tasks / AriaNg / Magnet Lab) */
+    .sub-card { flex: 1; min-height: 0; border-radius: 24px; padding: 16px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+    .ariang-frame { flex: 1; width: 100%; border: none; border-radius: 16px; background: #0f172a; }
+    .split-2 { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .scroll-col { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; }
+    .task-row { border-radius: 14px; padding: 11px 13px; background: rgba(3,8,20,0.8); border: 1px solid rgba(255,255,255,0.09); display: flex; flex-direction: column; gap: 7px; }
+
+    /* Slide-over Settings Drawer */
+    .mask { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,0.58); backdrop-filter: blur(4px); }
     .drawer {
       position: fixed; top: 12px; right: 12px; bottom: 12px; width: 390px; max-width: 92vw; z-index: 50;
-      border-radius: 26px; padding: 20px; display: flex; flex-direction: column; justify-content: space-between; gap: 16px;
-      overflow-y: auto; transform: translateX(110%); transition: transform 0.36s cubic-bezier(0.22, 1, 0.36, 1);
+      border-radius: 24px; padding: 18px; display: flex; flex-direction: column; justify-content: space-between; gap: 14px;
+      overflow-y: auto; transform: translateX(112%); transition: transform 0.36s cubic-bezier(0.22,1,0.36,1);
     }
     .drawer.open { transform: translateX(0); }
-    .drawer-head { display: flex; align-items: center; justify-content: space-between; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.10); }
-    .sec-title { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; margin-bottom: 8px; }
-    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-    .grid-3 { display: grid; grid-template-columns: 2fr 1fr; gap: 8px; }
-    .inp {
-      width: 100%; border-radius: 10px; padding: 7px 10px; font-size: 11.5px; color: #fff;
-      background: rgba(2, 6, 16, 0.85); border: 1px solid rgba(255,255,255,0.12); outline: none;
-    }
+    .inp { width: 100%; border-radius: 10px; padding: 7px 10px; font-size: 11.5px; color: #fff; background: rgba(2,6,16,0.88); border: 1px solid rgba(255,255,255,0.13); outline: none; }
     .inp:focus { border-color: #00d4ff; }
-    .field-lbl { display: block; font-size: 10.5px; color: #94a3b8; margin-bottom: 3px; }
-    .sw-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #cbd5e1; padding: 4px 0; }
-    .tip-box {
-      border-radius: 14px; padding: 11px 12px; font-size: 11px; line-height: 1.55;
-      background: rgba(255,179,71,0.10); border: 1px solid rgba(255,179,71,0.28); color: #fef3c7;
-    }
+    .lbl { display: block; font-size: 10.5px; color: #94a3b8; margin-bottom: 3px; }
+    .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .g3 { display: grid; grid-template-columns: 2fr 1fr; gap: 8px; }
 
-    /* Confirm Modal */
-    .modal-wrap {
-      position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,0.72); backdrop-filter: blur(6px);
-      display: flex; align-items: center; justify-content: center; padding: 16px;
-    }
-    .modal-box { max-width: 400px; width: 100%; border-radius: 24px; padding: 22px; display: flex; flex-direction: column; gap: 14px; }
+    /* Modal & Toast */
+    .modal-wrap { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,0.72); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .modal-box { max-width: 400px; width: 100%; border-radius: 22px; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+    #toasts { position: fixed; top: 68px; left: 50%; transform: translateX(-50%); z-index: 80; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+    .toast { border-radius: 999px; padding: 7px 16px; font-size: 12px; font-weight: 600; transition: all 0.28s ease; }
 
-    /* Toast */
-    #toasts { position: fixed; top: 74px; left: 50%; transform: translateX(-50%); z-index: 70; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
-    .toast { border-radius: 999px; padding: 7px 16px; font-size: 12px; font-weight: 600; transition: all 0.3s ease; }
-
-    /* Colors */
-    .c-mint { color: #6ee7b7; } .c-cyan { color: #67e8f9; } .c-amber { color: #fcd34d; } .c-rose { color: #fda4af; } .c-dim { color: #64748b; }
+    .c-mint { color: #6ee7b7; } .c-cyan { color: #67e8f9; } .c-violet { color: #d8b4fe; } .c-amber { color: #fcd34d; } .c-rose { color: #fda4af; } .c-dim { color: #64748b; }
     .bg-mint { background: #00f5b8; color: #00f5b8; } .bg-cyan { background: #00d4ff; color: #00d4ff; }
-    .bg-amber { background: #ffb347; color: #ffb347; } .bg-rose { background: #ff3d71; color: #ff3d71; } .bg-off { background: #475569; color: #475569; }
+    .bg-violet { background: #a855f7; color: #a855f7; } .bg-amber { background: #ffb347; color: #ffb347; }
+    .bg-rose { background: #ff3d71; color: #ff3d71; } .bg-off { background: #475569; color: #475569; }
 
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-thumb { background: rgba(0,212,255,0.3); border-radius: 999px; }
 
-    @media (max-width: 960px) {
-      .top-stats { display: none; }
-      .pods-grid { grid-template-columns: 1fr; }
-      .hud-layer { overflow-y: auto; }
+    @media (max-width: 1180px) {
+      html, body { overflow-y: auto; }
+      .shell { height: auto; min-height: 100vh; perspective: none; }
+      .upper-wings { grid-template-columns: 1fr; }
+      .wing-left, .wing-center, .wing-right, .modules-deck { transform: none !important; }
+      .modules-deck { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .split-2 { grid-template-columns: 1fr; }
+      .top-speed { display: none; }
     }
+    @media (max-width: 680px) { .modules-deck { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
 
-  <canvas id="scene3d"></canvas>
+  <canvas id="bgCanvas"></canvas>
+  <div id="cursorGlow"></div>
+  <div id="cursorRing"></div>
   <div id="toasts"></div>
 
-  <div class="hud-layer">
-    <!-- TOP FLOATING BAR -->
-    <header class="topbar hud-glass">
+  <div class="shell">
+    <!-- ==================== TOP COMMAND HEADER ==================== -->
+    <header class="topbar console-glass">
       <div class="brand">
-        <div class="brand-icon">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3">
-            <polygon points="12 2 21 7 21 17 12 22 3 17 3 7 12 2"/>
+        <div class="brand-gem">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
           </svg>
         </div>
         <div>
-          <div class="brand-title">DOWNLOADSTACK <span>// 3D</span></div>
-          <div class="brand-sub mono">拖拽旋转 · 滚轮缩放 · UP <span id="uptime">00:00:00</span></div>
+          <div class="brand-t">DOWNLOADSTACK <span>// 3D CONSOLE</span></div>
+          <div class="brand-s mono">UP <span id="uptime">00:00:00</span> · 曲面空间控制台</div>
         </div>
       </div>
 
-      <div class="top-stats">
-        <div class="stat-item"><span class="stat-lbl mono">总下行</span><span id="top-dn" class="stat-dn mono">0.0 B/s</span></div>
-        <span class="stat-div"></span>
-        <div class="stat-item"><span class="stat-lbl mono">总上行</span><span id="top-up" class="stat-up mono">0.0 B/s</span></div>
-        <span class="stat-div"></span>
-        <div class="stat-item mono" style="font-size:11px;">
-          <span class="c-mint"><b id="top-tasks">0</b> 任务</span>
-          <span style="color:#475569">/</span>
-          <span class="c-amber"><b id="top-seed">0</b> 做种</span>
-        </div>
-      </div>
+      <nav class="nav-track" id="navTrack">
+        <div id="navPill"></div>
+        <button class="nav-btn active" data-view="cockpit" onclick="switchView('cockpit', this)">✦ 3D 控制台</button>
+        <button class="nav-btn" data-view="tasks" onclick="switchView('tasks', this)">⚡ 任务队列 <span id="nav-task-cnt" class="badge-cnt mono">0</span></button>
+        <button class="nav-btn" data-view="ariang" onclick="switchView('ariang', this)">🌐 内置 AriaNg</button>
+        <button class="nav-btn" data-view="magnet" onclick="switchView('magnet', this)">🧲 磁力工坊</button>
+      </nav>
 
-      <div class="top-actions">
-        <button onclick="act('selfcheck')" class="cbtn cbtn-pill" title="一键自检">🩺 自检</button>
-        <button onclick="act('backup')" class="cbtn cbtn-pill" title="一键备份整套配置">💾 备份</button>
-        <button onclick="toggleDrawer()" class="cbtn cbtn-cyan cbtn-pill" title="工具与系统设置">⚙ 设置</button>
-        <button onclick="askConfirm('确认停止全部服务？', '按 Aria2 → qBittorrent → YT 壳 顺序安全停止，仅停止本面板记录的 PID。', () => act('stop_all'))" class="cbtn cbtn-rose cbtn-pill">■ 全停</button>
+      <div class="top-right">
+        <div class="top-speed mono">
+          <span class="c-dim" style="font-size:10px;">↓</span><span id="top-dn" class="spd-dn">0.0 B/s</span>
+          <span style="color:rgba(255,255,255,0.16)">|</span>
+          <span class="c-dim" style="font-size:10px;">↑</span><span id="top-up" class="c-cyan">0.0 B/s</span>
+        </div>
+        <button onclick="act('selfcheck')" class="btn btn-pill">🩺 自检</button>
+        <button onclick="act('backup')" class="btn btn-pill">💾 备份</button>
+        <button onclick="toggleDrawer()" class="btn btn-cyan btn-pill">⚙ 设置</button>
+        <button onclick="askConfirm('确认一键停止全部服务？','按 Aria2 → qBittorrent → YT 壳顺序安全停机，仅停止本面板记录的 PID。',()=>act('stop_all'))" class="btn btn-rose btn-pill">■ 全停</button>
       </div>
     </header>
 
-    <!-- OPEN 3D CENTER STAGE -->
-    <div class="center-stage">
-      <div class="focus-pill mono">
-        <span class="focus-dot"></span>
-        <span id="focus-label">CORE SYNC · 实时连接本地引擎</span>
-      </div>
-    </div>
+    <!-- ==================== VIEW 1: CURVED 3D CONSOLE ==================== -->
+    <section id="view-cockpit" class="view">
+      <div id="cockpitRig">
 
-    <!-- BOTTOM 3 ENGINE PODS + SLIM LOG BAR -->
-    <div class="bottom-wrap">
-      <div class="pods-grid">
+        <!-- UPPER 3-WING CURVED CONSOLE DECK -->
+        <div class="upper-wings">
 
-        <!-- POD 1: ARIA2 -->
-        <div class="pod-wrap" onmouseenter="focusEngine(0)" onmouseleave="focusEngine(-1)">
-          <div class="pod" style="--c1:#00f5b8; --c2:#00d4ff; --glow:rgba(0,245,184,0.42); --glare:rgba(0,245,184,0.2);">
-            <div class="pod-inner">
-              <div class="pod-glare"></div>
-              <div class="pod-head z-pop">
-                <div class="pod-id">
-                  <span id="led-a" class="led bg-off"></span>
-                  <div>
-                    <div class="pod-name">ARIA2 <span id="port-a" class="pod-port mono c-mint">:6800</span></div>
-                    <div class="pod-meta mono" id="a-meta">0 任务 / 0 连接</div>
-                  </div>
-                </div>
-                <div class="pod-speed">
-                  <div id="a-speed" class="pod-speed-val mono c-mint">0.0 B/s</div>
-                  <div id="a-st" class="pod-speed-st mono c-dim">OFFLINE</div>
-                </div>
+          <!-- LEFT WING (+8.5deg Curved Inward): Fluid Dual-Channel Telemetry -->
+          <div class="panel-box console-glass wing-left" data-aura="mint">
+            <div class="box-head">
+              <div class="box-title"><span class="led bg-mint led-on"></span>双通道液态吞吐</div>
+              <span class="box-sub mono">LIVE 1.5s</span>
+            </div>
+            <div class="wave-wrap"><canvas id="c-wave"></canvas></div>
+            <div class="kpi-grid">
+              <div class="kpi-tile">
+                <div class="kpi-lbl mono">ARIA2 ↓ / ↑</div>
+                <div class="kpi-val mono c-mint"><span id="k-adn">0.0 B/s</span> <span id="k-aup" style="font-size:10px;opacity:0.65"></span></div>
               </div>
-              <div class="pod-btns z-pop">
-                <button onclick="toggleA()" id="btn-a" class="cbtn cbtn-mint flex-1">▶ 启动</button>
-                <button onclick="act('ariang')" class="cbtn cbtn-cyan flex-1">↗ AriaNg</button>
-                <button onclick="act('restart_a')" class="cbtn cbtn-icon" title="重启 Aria2">↻</button>
-                <button onclick="act('test_a')" class="cbtn cbtn-icon" title="RPC 连通性测试">⚡</button>
-                <button onclick="act('open_path', {key:'aria2_dl'})" class="cbtn cbtn-icon" title="打开 Aria2 成品目录">📂</button>
+              <div class="kpi-tile">
+                <div class="kpi-lbl mono">qBIT ↓ / ↑</div>
+                <div class="kpi-val mono c-cyan"><span id="k-qdn">0.0 B/s</span> <span id="k-qup" style="font-size:10px;opacity:0.65"></span></div>
+              </div>
+              <div class="kpi-tile">
+                <div class="kpi-lbl mono">直链任务 / 连接</div>
+                <div class="kpi-val mono"><span id="k-atk">0</span> <span class="c-dim" style="font-size:10px">·</span> <span id="k-acn" class="c-mint">0</span></div>
+              </div>
+              <div class="kpi-tile">
+                <div class="kpi-lbl mono">BT 种子 / 做种</div>
+                <div class="kpi-val mono"><span id="k-qto">0</span> <span class="c-dim" style="font-size:10px">·</span> <span id="k-qse" class="c-amber">0</span></div>
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- POD 2: QBITTORRENT -->
-        <div class="pod-wrap" onmouseenter="focusEngine(1)" onmouseleave="focusEngine(-1)">
-          <div class="pod" style="--c1:#00d4ff; --c2:#8b5cf6; --glow:rgba(0,212,255,0.42); --glare:rgba(0,212,255,0.2);">
-            <div class="pod-inner">
-              <div class="pod-glare"></div>
-              <div class="pod-head z-pop">
-                <div class="pod-id">
-                  <span id="led-q" class="led bg-off"></span>
+          <!-- CENTER MAIN BRIDGE: 3D AURORA TERRAIN WAVE DECK + OMNI-DROP -->
+          <div class="center-deck console-glass wing-center" data-aura="cyan">
+            <div class="terrain-stage">
+              <canvas id="c-terrain"></canvas>
+              <div class="deck-overlay">
+                <div class="deck-top">
                   <div>
-                    <div class="pod-name">qBITTORRENT <span id="port-q" class="pod-port mono c-cyan">:8080</span></div>
-                    <div class="pod-meta mono" id="q-meta">0 种子 / 0 做种</div>
+                    <div class="mono c-cyan" style="font-size:10px;letter-spacing:0.12em;">AGGREGATE THROUGHPUT // 实时聚合速率</div>
+                    <div id="hero-dn" class="deck-big-speed mono">0.0 B/s</div>
+                  </div>
+                  <div class="deck-pills">
+                    <span class="status-chip mono"><span id="chip-a" class="led bg-off" style="width:7px;height:7px;"></span>A2</span>
+                    <span class="status-chip mono"><span id="chip-q" class="led bg-off" style="width:7px;height:7px;"></span>qB</span>
+                    <span class="status-chip mono"><span id="chip-m" class="led bg-violet led-on" style="width:7px;height:7px;"></span><span id="chip-tr">TR</span></span>
+                    <span class="status-chip mono"><span id="chip-y" class="led bg-off" style="width:7px;height:7px;"></span>YT</span>
                   </div>
                 </div>
-                <div class="pod-speed">
-                  <div id="q-speed" class="pod-speed-val mono c-cyan">0.0 B/s</div>
-                  <div id="q-st" class="pod-speed-st mono c-dim">OFFLINE</div>
+                <div style="display:flex;align-items:center;justify-content:space-between;font-size:10.5px;" class="mono">
+                  <span id="focus-hint" class="c-cyan" style="opacity:0.9;">3D 空间极光拓扑台 · 随带宽实时涌动</span>
+                  <span class="c-dim">悬停下方操控台触发局部加速</span>
                 </div>
               </div>
-              <div class="pod-btns z-pop">
-                <button onclick="toggleQ()" id="btn-q" class="cbtn cbtn-mint flex-1">▶ 启动</button>
-                <button onclick="act('webui')" class="cbtn cbtn-cyan flex-1">↗ WebUI</button>
-                <button onclick="act('test_q')" class="cbtn cbtn-icon" title="测试 WebUI 登录">⚡</button>
-                <button onclick="act('open_path', {key:'qbit_dl'})" class="cbtn cbtn-icon" title="打开 BT 下载目录">📂</button>
+            </div>
+
+            <!-- Quantum Omni-Drop Bar -->
+            <div class="omni-bar">
+              <div class="omni-inner">
+                <span id="omni-tag" class="omni-tag mono">智能识别</span>
+                <input id="omni-url" class="omni-inp mono" placeholder="粘贴直链 / magnet:? 磁力 / 40位 Hash / 视频链接，回车立即开下…" oninput="detectOmni()" onkeydown="if(event.key==='Enter')submitOmni()" />
+                <button onclick="submitOmni()" class="btn btn-mint" style="padding:6px 14px;">⚡ 极速投递</button>
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- POD 3: YT-DLP -->
-        <div class="pod-wrap" onmouseenter="focusEngine(2)" onmouseleave="focusEngine(-1)">
-          <div class="pod" style="--c1:#ffb347; --c2:#ff3d71; --glow:rgba(255,179,71,0.42); --glare:rgba(255,179,71,0.2);">
-            <div class="pod-inner">
-              <div class="pod-glare"></div>
-              <div class="pod-head z-pop">
-                <div class="pod-id">
-                  <span id="led-y" class="led bg-off"></span>
-                  <div>
-                    <div class="pod-name">YT-DLP 视频壳</div>
-                    <div class="pod-meta mono" id="y-meta">代理自动透传 · 进程树隔离</div>
-                  </div>
-                </div>
-                <div class="up-pill">
-                  <span>2x 超分</span>
-                  <div id="sw-up" class="sw" onclick="act('toggle_upscale')"><i></i></div>
-                </div>
-              </div>
-              <div class="pod-btns z-pop">
-                <button onclick="toggleY()" id="btn-y" class="cbtn cbtn-amber flex-1">▶ 启动下载壳</button>
-                <button onclick="act('open_path', {key:'yt_out'})" class="cbtn flex-1">📂 输出目录</button>
+          <!-- RIGHT WING (-8.5deg Curved Inward): Live Task Radar -->
+          <div class="panel-box console-glass wing-right" data-aura="violet">
+            <div class="box-head">
+              <div class="box-title"><span class="led bg-violet led-on"></span>实时任务雷达</div>
+              <button onclick="switchView('tasks', document.querySelector('[data-view=tasks]'))" class="btn" style="padding:3px 9px;font-size:10.5px;">全部管理 →</button>
+            </div>
+            <div id="radar-list" class="radar-list">
+              <div style="margin:auto;text-align:center;color:#64748b;font-size:12px;line-height:1.8;">
+                暂无活跃下载任务<br/><span style="font-size:10.5px;color:#475569;">在中间投递舱粘贴链接即刻开下</span>
               </div>
             </div>
           </div>
+
         </div>
 
-      </div>
+        <!-- LOWER 4 EXTRUDED 3D HARDWARE CONSOLE MODULES -->
+        <div class="modules-deck">
 
-      <!-- BOTTOM SLIM WAVEFORM + EXPANDABLE TERMINAL -->
-      <div class="log-bar hud-glass">
-        <div class="log-row">
-          <div class="log-left" onclick="toggleLogSheet()">
-            <canvas id="miniWave" width="128" height="24"></canvas>
-            <div id="ticker" class="ticker mono c-mint">正在连接本地控制服务…</div>
+          <!-- MODULE 1: ARIA2 (3D Warp Speed Tunnel) -->
+          <div class="mod-wrap" data-aura="mint" onmouseenter="focusEng(0)" onmouseleave="focusEng(-1)">
+            <div class="mod-card" style="--c1:#00f5b8;--c2:#00d4ff;--edge:rgba(0,245,184,0.38);--glow:rgba(0,245,184,0.45);--glare:rgba(0,245,184,0.24);">
+              <div class="mod-surface">
+                <canvas id="c-aria2" class="mod-canvas"></canvas>
+                <div class="mod-glare"></div>
+                <div class="mod-head mod-z">
+                  <div class="mod-id">
+                    <span id="led-a" class="led bg-off"></span>
+                    <div>
+                      <div class="mod-name">ARIA2 <span id="port-a" class="mono c-mint" style="font-size:10.5px;font-weight:500;">:6800</span></div>
+                      <div class="mod-desc mono" id="desc-a">直链多线程引擎</div>
+                    </div>
+                  </div>
+                  <div class="mod-stat">
+                    <div id="spd-a" class="mod-val mono c-mint">0.0 B/s</div>
+                    <div id="st-a" class="mod-st mono c-dim">OFFLINE</div>
+                  </div>
+                </div>
+                <div class="mod-actions mod-z">
+                  <button onclick="act(S.a.on?'stop_a':'start_a')" id="btn-a" class="btn btn-mint flex-1">▶ 启动</button>
+                  <button onclick="jumpAriaNg()" class="btn btn-cyan flex-1">↗ 跳转 AriaNg</button>
+                  <button onclick="switchView('ariang', document.querySelector('[data-view=ariang]'))" class="btn" title="在控制台内直接打开 AriaNg">内置</button>
+                  <button onclick="act('restart_a')" class="btn" title="重启">↻</button>
+                  <button onclick="act('test_a')" class="btn" title="RPC 测试">⚡</button>
+                  <button onclick="act('open_path',{key:'aria2_dl'})" class="btn" title="打开成品目录">📂</button>
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="top-actions">
-            <button onclick="toggleLogSheet()" id="log-toggle-btn" class="cbtn" style="padding:4px 10px;font-size:11px;">展开日志 ▲</button>
-            <button onclick="act('clear_log')" class="cbtn" style="padding:4px 10px;font-size:11px;">清空</button>
-            <button onclick="act('export_log')" class="cbtn cbtn-cyan" style="padding:4px 10px;font-size:11px;">导出</button>
+
+          <!-- MODULE 2: qBITTORRENT (3D P2P Mesh Globe) -->
+          <div class="mod-wrap" data-aura="cyan" onmouseenter="focusEng(1)" onmouseleave="focusEng(-1)">
+            <div class="mod-card" style="--c1:#00d4ff;--c2:#6366f1;--edge:rgba(0,212,255,0.38);--glow:rgba(0,212,255,0.45);--glare:rgba(0,212,255,0.24);">
+              <div class="mod-surface">
+                <canvas id="c-qbit" class="mod-canvas"></canvas>
+                <div class="mod-glare"></div>
+                <div class="mod-head mod-z">
+                  <div class="mod-id">
+                    <span id="led-q" class="led bg-off"></span>
+                    <div>
+                      <div class="mod-name">qBITTORRENT <span id="port-q" class="mono c-cyan" style="font-size:10.5px;font-weight:500;">:8080</span></div>
+                      <div class="mod-desc mono" id="desc-q">BT / PT 分布式节点</div>
+                    </div>
+                  </div>
+                  <div class="mod-stat">
+                    <div id="spd-q" class="mod-val mono c-cyan">0.0 B/s</div>
+                    <div id="st-q" class="mod-st mono c-dim">OFFLINE</div>
+                  </div>
+                </div>
+                <div class="mod-actions mod-z">
+                  <button onclick="act(S.q.on?'stop_q':'start_q')" id="btn-q" class="btn btn-mint flex-1">▶ 启动</button>
+                  <button onclick="jumpQbit()" class="btn btn-cyan flex-1">↗ 跳转 WebUI</button>
+                  <button onclick="act('test_q')" class="btn" title="测试连通">⚡</button>
+                  <button onclick="act('open_path',{key:'qbit_dl'})" class="btn" title="打开 BT 目录">📂</button>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-        <div id="log-sheet" class="log-sheet">
-          <div id="log-list" class="log-list mono"></div>
+
+          <!-- MODULE 3: MAGNET / DHT (3D Magnetic Dipole Field) -->
+          <div class="mod-wrap" data-aura="violet" onmouseenter="focusEng(2)" onmouseleave="focusEng(-1)">
+            <div class="mod-card" style="--c1:#a855f7;--c2:#ec4899;--edge:rgba(168,85,247,0.42);--glow:rgba(168,85,247,0.48);--glare:rgba(192,132,252,0.24);">
+              <div class="mod-surface">
+                <canvas id="c-magnet" class="mod-canvas"></canvas>
+                <div class="mod-glare"></div>
+                <div class="mod-head mod-z">
+                  <div class="mod-id">
+                    <span id="led-m" class="led bg-violet led-on"></span>
+                    <div>
+                      <div class="mod-name">MAGNET / DHT</div>
+                      <div class="mod-desc mono">磁力增强 · 种子秒解</div>
+                    </div>
+                  </div>
+                  <div class="mod-stat">
+                    <div id="val-m" class="mod-val mono c-violet">-- TR</div>
+                    <div id="st-m" class="mod-st mono c-violet">READY</div>
+                  </div>
+                </div>
+                <div class="mod-actions mod-z">
+                  <button onclick="switchView('magnet', document.querySelector('[data-view=magnet]'))" class="btn btn-violet flex-1">🧲 磁力工坊</button>
+                  <button onclick="act('magnet_update_trackers')" class="btn flex-1">🌐 更 Tracker</button>
+                  <button onclick="act('magnet_repair')" class="btn" title="一键修复 DHT">🔧 修 DHT</button>
+                  <button onclick="act('magnet_probe_dht')" class="btn" title="探测 DHT 节点">📡</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- MODULE 4: YT-DLP & 2x AI UPSCALE (3D Spectrum Deck) -->
+          <div class="mod-wrap" data-aura="amber" onmouseenter="focusEng(3)" onmouseleave="focusEng(-1)">
+            <div class="mod-card" style="--c1:#ffb347;--c2:#ff3d71;--edge:rgba(255,179,71,0.4);--glow:rgba(255,179,71,0.46);--glare:rgba(255,179,71,0.24);">
+              <div class="mod-surface">
+                <canvas id="c-yt" class="mod-canvas"></canvas>
+                <div class="mod-glare"></div>
+                <div class="mod-head mod-z">
+                  <div class="mod-id">
+                    <span id="led-y" class="led bg-off"></span>
+                    <div>
+                      <div class="mod-name">YT-DLP 视频壳</div>
+                      <div class="mod-desc mono">代理透传 · 进程树隔离</div>
+                    </div>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:6px;background:rgba(255,179,71,0.14);border:1px solid rgba(255,179,71,0.34);border-radius:999px;padding:3px 8px;">
+                    <span class="mono c-amber" style="font-size:10px;font-weight:700;">2x超分</span>
+                    <div id="sw-up" class="sw" onclick="act('toggle_upscale')"><i></i></div>
+                  </div>
+                </div>
+                <div class="mod-actions mod-z">
+                  <button onclick="act(S.y.on?'stop_y':'start_y')" id="btn-y" class="btn btn-amber flex-1">▶ 启动视频壳</button>
+                  <button onclick="act('open_path',{key:'yt_out'})" class="btn flex-1">📂 视频成品</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
-    </div>
+    </section>
+
+    <!-- ==================== VIEW 2: FULL LIVE TASK QUEUE ==================== -->
+    <section id="view-tasks" class="view hidden">
+      <div class="sub-card console-glass">
+        <div class="box-head">
+          <div>
+            <div class="box-title" style="font-size:14px;">⚡ 全栈实时下载任务队列（Aria2 + qBittorrent）</div>
+            <div class="box-sub">支持单任务实时暂停、继续、移除，与本地引擎双向同步</div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button onclick="jumpAriaNg()" class="btn btn-cyan">↗ 独立打开 AriaNg</button>
+            <button onclick="jumpQbit()" class="btn btn-cyan">↗ 独立打开 qB WebUI</button>
+          </div>
+        </div>
+        <div class="split-2">
+          <div style="display:flex;flex-direction:column;gap:8px;min-height:0;">
+            <div class="box-title c-mint mono">◤ ARIA2 直链任务 (<span id="cnt-a-tasks">0</span>)</div>
+            <div id="full-a-tasks" class="scroll-col"></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;min-height:0;">
+            <div class="box-title c-cyan mono">◤ qBITTORRENT 种子任务 (<span id="cnt-q-tasks">0</span>)</div>
+            <div id="full-q-tasks" class="scroll-col"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== VIEW 3: EMBEDDED ARIANG ==================== -->
+    <section id="view-ariang" class="view hidden">
+      <div class="sub-card console-glass" style="padding:12px;">
+        <div class="box-head">
+          <div class="box-title">🌐 内置 AriaNg 管理台 <span class="box-sub mono" style="margin-left:6px;">同源免端口冲突 · 自动注入 RPC Token</span></div>
+          <div style="display:flex;gap:8px;">
+            <button onclick="reloadAriaNgFrame()" class="btn">↻ 刷新</button>
+            <button onclick="jumpAriaNg()" class="btn btn-cyan">↗ 独立窗口弹出</button>
+          </div>
+        </div>
+        <iframe id="ariangFrame" class="ariang-frame" src="about:blank"></iframe>
+      </div>
+    </section>
+
+    <!-- ==================== VIEW 4: MAGNET / DHT WORKSHOP ==================== -->
+    <section id="view-magnet" class="view hidden">
+      <div class="sub-card console-glass">
+        <div class="box-head">
+          <div>
+            <div class="box-title" style="font-size:14px;">🧲 磁力增强工坊 &amp; DHT 修复中心</div>
+            <div class="box-sub">支持 magnet:? 与 40 位 InfoHash · 自动补全公共 Tracker · SHA1 校验预取 .torrent 跳过元数据卡顿</div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button onclick="act('magnet_update_trackers')" class="btn btn-violet">🌐 更新并热载 Tracker</button>
+            <button onclick="act('magnet_repair')" class="btn btn-mint">🔧 一键修复 DHT/磁力</button>
+            <button onclick="act('magnet_probe_dht')" class="btn btn-cyan">📡 探测 DHT 节点</button>
+          </div>
+        </div>
+        <div class="split-2">
+          <div class="panel-box" style="background:rgba(3,8,20,0.72);border:1px solid rgba(168,85,247,0.3);">
+            <div class="box-title c-violet mono">◤ 磁力 / InfoHash 解析与直投</div>
+            <textarea id="mag-input" class="inp mono" style="height:110px;resize:none;line-height:1.5;" placeholder="粘贴 magnet:?xt=urn:btih:... 或纯 40 位 InfoHash…"></textarea>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button onclick="parseMagnetUI()" class="btn">🔍 校验解析</button>
+              <button onclick="submitMagnet('qbit')" class="btn btn-cyan flex-1">🧲 增强投递至 qBittorrent</button>
+              <button onclick="submitMagnet('aria2')" class="btn btn-mint flex-1">⚡ 增强投递至 Aria2</button>
+            </div>
+            <div id="mag-result" class="mono" style="flex:1;border-radius:12px;padding:12px;background:rgba(2,5,14,0.88);border:1px solid rgba(255,255,255,0.08);font-size:11.5px;color:#cbd5e1;line-height:1.7;overflow-y:auto;">
+              等待粘贴磁力链接或 InfoHash…
+            </div>
+          </div>
+          <div class="panel-box" style="background:rgba(3,8,20,0.72);border:1px solid rgba(0,212,255,0.24);">
+            <div class="box-title c-cyan mono">◤ 磁力与 DHT 健康遥测</div>
+            <div class="kpi-grid">
+              <div class="kpi-tile"><div class="kpi-lbl">aria2.conf 状态</div><div id="m-conf-ok" class="kpi-val mono c-mint">--</div></div>
+              <div class="kpi-tile"><div class="kpi-lbl">已配置 Tracker 数</div><div id="m-tr-cnt" class="kpi-val mono c-violet">--</div></div>
+              <div class="kpi-tile"><div class="kpi-lbl">本地缓存 Tracker</div><div id="m-cache-cnt" class="kpi-val mono c-cyan">--</div></div>
+              <div class="kpi-tile"><div class="kpi-lbl">dht.dat 节点表</div><div id="m-dht-sz" class="kpi-val mono c-amber">--</div></div>
+            </div>
+            <div style="border-radius:12px;padding:12px;background:rgba(168,85,247,0.10);border:1px solid rgba(168,85,247,0.28);font-size:11.5px;color:#e9d5ff;line-height:1.75;">
+              <b>内置磁力秒下引擎：</b><br/>
+              1. 自动识别 <code class="mono c-cyan">magnet:?</code> 与纯 40 位 Hex / 32 位 Base32 InfoHash。<br/>
+              2. 自动预取公共 <code class="mono c-mint">.torrent</code> 并做 SHA1 InfoHash 严格校验，跳过元数据卡顿。<br/>
+              3. 自动发现携带合法 <code class="mono">token</code> 的真实 DHT 节点，彻底解决 aria2 冷启动 0 节点。
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== BOTTOM SLIM TERMINAL ==================== -->
+    <footer class="log-bar console-glass">
+      <div class="log-row">
+        <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;cursor:pointer;" onclick="toggleLogSheet()">
+          <span class="led bg-mint led-on" style="width:7px;height:7px;"></span>
+          <div id="ticker" class="mono c-mint" style="font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">正在连接本地控制服务…</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0;">
+          <button onclick="toggleLogSheet()" id="log-btn" class="btn" style="padding:3px 9px;font-size:11px;">展开日志 ▲</button>
+          <button onclick="act('clear_log')" class="btn" style="padding:3px 9px;font-size:11px;">清空</button>
+          <button onclick="act('export_log')" class="btn btn-cyan" style="padding:3px 9px;font-size:11px;">导出</button>
+        </div>
+      </div>
+      <div id="log-sheet" class="log-sheet"><div id="log-list" class="log-list mono"></div></div>
+    </footer>
   </div>
 
   <!-- RIGHT SLIDE-OVER SETTINGS & TOOLS DRAWER -->
   <div id="drawer-mask" class="mask hidden" onclick="toggleDrawer()"></div>
-  <aside id="drawer" class="drawer hud-glass">
-    <div style="display:flex;flex-direction:column;gap:16px;">
-      <div class="drawer-head">
-        <div style="font-size:14px;font-weight:700;color:#fff;">⚙ 工具与系统设置</div>
-        <button onclick="toggleDrawer()" class="cbtn cbtn-pill" style="padding:4px 10px;">✕</button>
+  <aside id="drawer" class="drawer console-glass">
+    <div style="display:flex;flex-direction:column;gap:14px;">
+      <div class="box-head" style="padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,0.10);">
+        <div style="font-size:14px;font-weight:700;">⚙ 工具与系统设置</div>
+        <button onclick="toggleDrawer()" class="btn btn-pill" style="padding:4px 10px;">✕</button>
       </div>
-
       <div>
-        <div class="sec-title mono c-cyan">◤ 快捷维护</div>
-        <div class="grid-2">
-          <button onclick="act('ports')" class="cbtn">◎ 端口占用</button>
-          <button onclick="act('open_path', {key:'downloads'})" class="cbtn">📂 总下载目录</button>
-          <button onclick="act('open_path', {key:'aria2_conf'})" class="cbtn">📝 aria2.conf</button>
-          <button onclick="act('open_path', {key:'aria2_logdir'})" class="cbtn">📄 Aria2 日志</button>
-          <button onclick="act('open_path', {key:'qbit_cfg'})" class="cbtn">📁 qB 配置</button>
-          <button onclick="askConfirm('清理 Aria2 日志？', '仅删除 Aria2 日志目录内文件，不触碰配置与任务。', () => act('clean_logs'))" class="cbtn cbtn-amber">🧹 清理日志</button>
-          <button onclick="askConfirm('清理临时缓存？', '仅清理面板 cache 目录，不影响成品与任务。', () => act('clean_cache'))" class="cbtn cbtn-amber" style="grid-column:span 2;">🧹 清理面板临时缓存</button>
+        <div class="mono c-cyan" style="font-size:11px;font-weight:700;margin-bottom:8px;">◤ 快捷维护与本地目录</div>
+        <div class="g2">
+          <button onclick="act('ports')" class="btn">◎ 端口探测</button>
+          <button onclick="act('open_path',{key:'downloads'})" class="btn">📂 总下载目录</button>
+          <button onclick="act('open_path',{key:'aria2_conf'})" class="btn">📝 aria2.conf</button>
+          <button onclick="act('open_path',{key:'aria2_logdir'})" class="btn">📄 Aria2 日志</button>
+          <button onclick="act('open_path',{key:'qbit_cfg'})" class="btn">📁 qB 配置</button>
+          <button onclick="askConfirm('清理 Aria2 日志？','仅删除日志目录文件，不动配置与任务。',()=>act('clean_logs'))" class="btn btn-amber">🧹 清理日志</button>
+          <button onclick="askConfirm('清理临时缓存？','仅清理面板 cache 目录。',()=>act('clean_cache'))" class="btn btn-amber" style="grid-column:span 2;">🧹 清理面板临时缓存</button>
         </div>
       </div>
-
-      <div style="display:flex;flex-direction:column;gap:10px;">
-        <div class="sec-title mono c-mint" style="margin-bottom:0;">◤ 连接参数（config.json）</div>
-        <div class="grid-3">
-          <div><label class="field-lbl">Aria2 RPC 主机</label><input id="f-a-host" class="inp mono" /></div>
-          <div><label class="field-lbl">端口</label><input id="f-a-port" class="inp mono" /></div>
+      <div style="display:flex;flex-direction:column;gap:9px;">
+        <div class="mono c-mint" style="font-size:11px;font-weight:700;">◤ 连接参数（config.json）</div>
+        <div class="g3">
+          <div><label class="lbl">Aria2 主机</label><input id="f-a-host" class="inp mono" /></div>
+          <div><label class="lbl">端口</label><input id="f-a-port" class="inp mono" /></div>
         </div>
-        <div><label class="field-lbl">Aria2 密钥文件</label><input id="f-a-secret" class="inp mono" /></div>
-        <div class="grid-3">
-          <div><label class="field-lbl">qBittorrent 主机</label><input id="f-q-host" class="inp mono" /></div>
-          <div><label class="field-lbl">端口</label><input id="f-q-port" class="inp mono" /></div>
+        <div><label class="lbl">Aria2 密钥文件</label><input id="f-a-secret" class="inp mono" /></div>
+        <div class="g3">
+          <div><label class="lbl">qBittorrent 主机</label><input id="f-q-host" class="inp mono" /></div>
+          <div><label class="lbl">端口</label><input id="f-q-port" class="inp mono" /></div>
         </div>
-        <div class="grid-2">
-          <div><label class="field-lbl">qB 账号</label><input id="f-q-user" class="inp mono" /></div>
-          <div><label class="field-lbl">qB 密码</label><input id="f-q-pass" type="password" class="inp mono" /></div>
+        <div class="g2">
+          <div><label class="lbl">qB 账号</label><input id="f-q-user" class="inp mono" /></div>
+          <div><label class="lbl">qB 密码（免密可留空）</label><input id="f-q-pass" type="password" class="inp mono" /></div>
         </div>
-        <div><label class="field-lbl">qB 保存目录</label><input id="f-q-save" class="inp mono" /></div>
-        <div><label class="field-lbl">外部视频脚本</label><input id="f-yt-bat" class="inp mono" /></div>
-        <div class="sw-row">
-          <span>开机自启本面板</span>
-          <div id="sw-auto-panel" class="sw" onclick="act('toggle_autostart_panel')"><i></i></div>
+        <div><label class="lbl">qB 保存目录</label><input id="f-q-save" class="inp mono" /></div>
+        <div><label class="lbl">外部视频脚本</label><input id="f-yt-bat" class="inp mono" /></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#cbd5e1;padding-top:4px;">
+          <span>开机自启本面板</span><div id="sw-auto-panel" class="sw" onclick="act('toggle_autostart_panel')"><i></i></div>
         </div>
-        <div class="sw-row">
-          <span>开机后台拉起 Aria2</span>
-          <div id="sw-auto-aria2" class="sw" onclick="act('toggle_autostart_aria2')"><i></i></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#cbd5e1;">
+          <span>开机后台拉起 Aria2</span><div id="sw-auto-aria2" class="sw" onclick="act('toggle_autostart_aria2')"><i></i></div>
         </div>
-      </div>
-
-      <div class="tip-box">
-        <b>磁力 / DHT 提示：</b>代理或 NAT 环境下磁力取元数据慢时，优先直接拖入 <code class="mono c-cyan">.torrent</code> 种子文件到 qBittorrent。
       </div>
     </div>
-
-    <div style="display:flex;gap:8px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.10);">
-      <button onclick="saveSettings()" class="cbtn cbtn-mint flex-1">💾 保存并生效</button>
-      <button onclick="askConfirm('恢复默认配置？', '将把 config.json 重置为出厂默认值。', () => act('reset_cfg'))" class="cbtn cbtn-amber">重置</button>
+    <div style="display:flex;gap:8px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.10);">
+      <button onclick="saveSettings()" class="btn btn-mint flex-1">💾 保存并生效</button>
+      <button onclick="askConfirm('恢复默认配置？','将重置 config.json 为出厂默认值。',()=>act('reset_cfg'))" class="btn btn-amber">重置</button>
     </div>
   </aside>
 
   <!-- CONFIRM MODAL -->
   <div id="modal-wrap" class="modal-wrap hidden">
-    <div class="modal-box hud-glass" style="border-color:rgba(255,61,113,0.42);">
-      <div style="display:flex;align-items:center;gap:10px;">
-        <span class="led bg-rose"></span>
-        <div id="modal-title" style="font-size:14px;font-weight:700;color:#fff;">确认操作</div>
-      </div>
+    <div class="modal-box console-glass" style="border-color:rgba(255,61,113,0.48);">
+      <div style="display:flex;align-items:center;gap:10px;"><span class="led bg-rose"></span><div id="modal-title" style="font-size:14px;font-weight:700;">确认操作</div></div>
       <div id="modal-body" style="font-size:12px;color:#cbd5e1;line-height:1.6;"></div>
-      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:4px;">
-        <button onclick="closeConfirm()" class="cbtn cbtn-pill">取消</button>
-        <button id="modal-ok" class="cbtn cbtn-rose cbtn-pill">确认执行</button>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button onclick="closeConfirm()" class="btn btn-pill">取消</button>
+        <button id="modal-ok" class="btn btn-rose btn-pill">确认执行</button>
       </div>
     </div>
   </div>
 
   <script>
     const S = {
-      a: { on: false, err: '', dn: 0, up: 0, task: 0, conn: 0 },
-      q: { on: false, err: '', dn: 0, up: 0, tor: 0, seed: 0 },
-      y: { on: false, upscale: false },
-      cfgLoaded: false,
-      focus: -1,
-      boost: 0,
-      wave: Array(40).fill(0)
+      a: { on:false, err:'', dn:0, up:0, task:0, conn:0 },
+      q: { on:false, err:'', dn:0, up:0, tor:0, seed:0 },
+      y: { on:false, upscale:false },
+      m: { ok:false, tracker_count:0, cached_trackers:0, dht_dat_size:0 },
+      tasks: { aria2:[], qbit:[] },
+      urls: { ariang:'/ariang/index.html', qbit:'http://127.0.0.1:8080/' },
+      waveA: Array(40).fill(0), waveQ: Array(40).fill(0),
+      cfgLoaded: false, ariangLoaded: false, focus: -1, boost: 0, curView: 'cockpit'
     };
 
+    const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     function fmt(bps) {
-      let n = Number(bps) || 0;
-      const units = ['B/s', 'KiB/s', 'MiB/s', 'GiB/s'];
-      let i = 0;
-      while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
-      return n.toFixed(1) + ' ' + units[i];
+      let n = Number(bps) || 0; const u = ['B/s','KiB/s','MiB/s','GiB/s']; let i = 0;
+      while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+      return n.toFixed(1) + ' ' + u[i];
     }
-
-    function toast(msg, tone = 'cyan') {
+    function fmtBytes(b) {
+      let n = Number(b) || 0; const u = ['B','KiB','MiB','GiB','TiB']; let i = 0;
+      while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+      return n.toFixed(1) + ' ' + u[i];
+    }
+    function toast(msg, tone='cyan') {
       const box = document.getElementById('toasts');
-      const border = { mint:'rgba(0,245,184,0.55)', cyan:'rgba(0,212,255,0.55)', amber:'rgba(255,179,71,0.55)', rose:'rgba(255,61,113,0.65)' }[tone] || 'rgba(0,212,255,0.55)';
-      const color = { mint:'#a7f3d0', cyan:'#a5f3fc', amber:'#fde68a', rose:'#fecdd3' }[tone] || '#a5f3fc';
+      const map = { mint:['rgba(0,245,184,0.58)','#a7f3d0'], cyan:['rgba(0,212,255,0.58)','#a5f3fc'], violet:['rgba(192,132,252,0.58)','#f3d5ff'], amber:['rgba(255,179,71,0.58)','#fde68a'], rose:['rgba(255,61,113,0.68)','#fecdd3'] };
+      const [bd, cl] = map[tone] || map.cyan;
       const el = document.createElement('div');
-      el.className = 'toast hud-glass';
-      el.style.borderColor = border; el.style.color = color;
-      el.textContent = msg;
-      box.appendChild(el);
-      S.boost = Math.min(2.2, S.boost + 0.85);
-      setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translateY(-10px)'; setTimeout(() => el.remove(), 300); }, 2200);
+      el.className = 'toast console-glass'; el.style.borderColor = bd; el.style.color = cl; el.textContent = msg;
+      box.appendChild(el); S.boost = Math.min(2.8, S.boost + 0.95);
+      setTimeout(() => { el.style.opacity='0'; el.style.transform='translateY(-10px)'; setTimeout(()=>el.remove(), 280); }, 2300);
     }
 
-    async function act(action, payload = {}) {
-      S.boost = Math.min(2.2, S.boost + 0.7);
+    // ==================== NAVIGATION & REAL FOREGROUND JUMPS ====================
+    function moveNavPill(btn) {
+      const p = document.getElementById('navPill'); if (!btn || !p) return;
+      p.style.left = btn.offsetLeft + 'px'; p.style.width = btn.offsetWidth + 'px';
+    }
+    function switchView(v, btn) {
+      S.curView = v;
+      ['cockpit','tasks','ariang','magnet'].forEach(k => document.getElementById('view-' + k).classList.toggle('hidden', k !== v));
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === v));
+      moveNavPill(btn || document.querySelector(`.nav-btn[data-view="${v}"]`));
+      if (v === 'ariang' && !S.ariangLoaded) { document.getElementById('ariangFrame').src = S.urls.ariang; S.ariangLoaded = true; }
+      if (v === 'cockpit') setTimeout(resizeAllCanvases, 30);
+    }
+    function reloadAriaNgFrame() {
+      const f = document.getElementById('ariangFrame'); f.src = 'about:blank';
+      setTimeout(() => { f.src = S.urls.ariang; }, 40); toast('已刷新内置 AriaNg', 'cyan');
+    }
+    function jumpAriaNg() {
+      window.open(S.urls.ariang || '/ariang/index.html', '_blank');
+      act('ariang', {}, true); toast('已在新窗口打开 AriaNg（同源零延迟）', 'mint');
+    }
+    function jumpQbit() {
+      window.open(S.urls.qbit || 'http://127.0.0.1:8080/', '_blank');
+      act('webui', {}, true); toast('已在新窗口打开 qBittorrent WebUI', 'cyan');
+    }
+
+    async function act(action, payload = {}, silentOpen = false) {
+      S.boost = Math.min(2.8, S.boost + 0.8);
       try {
         const res = await fetch('/api/action', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action, ...payload })
         });
         const j = await res.json();
-        if (j.msg) toast(j.msg, j.ok ? 'mint' : 'rose');
-        await pollState();
-      } catch (e) {
-        toast('请求失败：请确认面板服务正在运行', 'rose');
-      }
+        if (!silentOpen && j.open_url) window.open(j.open_url, '_blank');
+        if (!silentOpen && j.msg) toast(j.msg, j.ok ? 'mint' : 'rose');
+        await pollState(); return j;
+      } catch (e) { toast('通信异常，请确认面板服务运行中', 'rose'); return null; }
     }
 
-    function toggleA() { act(S.a.on ? 'stop_a' : 'start_a'); }
-    function toggleQ() { act(S.q.on ? 'stop_q' : 'start_q'); }
-    function toggleY() { act(S.y.on ? 'stop_y' : 'start_y'); }
-
+    function detectOmni() {
+      const v = (document.getElementById('omni-url').value || '').trim();
+      const tag = document.getElementById('omni-tag');
+      if (!v) { tag.textContent = '智能识别'; tag.style.color='#a7f3d0'; return; }
+      const low = v.toLowerCase();
+      if (low.startsWith('magnet:') || /^[0-9a-f]{40}$/i.test(v) || /^[a-z2-7]{32}$/i.test(v) || low.endsWith('.torrent')) {
+        tag.textContent = '🧲 磁力增强'; tag.style.color = '#f3d5ff';
+      } else if (/(youtube|youtu\.be|bilibili|b23\.tv|douyin|xiaohongshu|tiktok|vimeo|x\.com|twitter)/i.test(low)) {
+        tag.textContent = '🎬 YT 视频'; tag.style.color = '#fde68a';
+      } else { tag.textContent = '⚡ Aria2 直链'; tag.style.color = '#a7f3d0'; }
+    }
+    async function submitOmni() {
+      const inp = document.getElementById('omni-url'), url = (inp.value || '').trim();
+      if (!url) { toast('请先粘贴链接或磁力 Hash', 'amber'); inp.focus(); return; }
+      const j = await act('add_download', { url, engine: 'auto' });
+      if (j && j.ok) { inp.value = ''; detectOmni(); }
+    }
+    async function parseMagnetUI() {
+      const raw = (document.getElementById('mag-input').value || '').trim();
+      const j = await act('magnet_parse', { raw }, true);
+      const box = document.getElementById('mag-result');
+      if (!j || !j.ok) { box.innerHTML = `<span class="c-rose">✘ 解析失败：${esc(j?.msg || '无效磁力或 InfoHash')}</span>`; return; }
+      const info = j.info || {};
+      box.innerHTML = `
+        <div class="c-mint">✔ 磁力校验通过（投递时将自动补全高可用 Tracker 并尝试秒级预取种子）</div>
+        <div><span class="c-dim">InfoHash：</span><span class="c-cyan">${esc(info.infohash)}</span></div>
+        <div><span class="c-dim">资源名称：</span>${esc(info.name || '（待获取元数据）')}</div>
+        <div><span class="c-dim">原链 Tracker：</span>${(info.trackers || []).length} 个 · <span class="c-violet">自动补全公共高速 Tracker</span></div>`;
+    }
+    async function submitMagnet(engine) {
+      const inp = document.getElementById('mag-input'), url = (inp.value || '').trim();
+      if (!url) { toast('请先粘贴磁力链接或 40 位 InfoHash', 'amber'); return; }
+      const j = await act('add_download', { url, engine });
+      if (j && j.ok) inp.value = '';
+    }
     function saveSettings() {
       act('save_cfg', {
-        a_host: document.getElementById('f-a-host').value,
-        a_port: document.getElementById('f-a-port').value,
-        a_secret: document.getElementById('f-a-secret').value,
-        q_host: document.getElementById('f-q-host').value,
-        q_port: document.getElementById('f-q-port').value,
-        q_user: document.getElementById('f-q-user').value,
-        q_pass: document.getElementById('f-q-pass').value,
-        q_save: document.getElementById('f-q-save').value,
+        a_host: document.getElementById('f-a-host').value, a_port: document.getElementById('f-a-port').value,
+        a_secret: document.getElementById('f-a-secret').value, q_host: document.getElementById('f-q-host').value,
+        q_port: document.getElementById('f-q-port').value, q_user: document.getElementById('f-q-user').value,
+        q_pass: document.getElementById('f-q-pass').value, q_save: document.getElementById('f-q-save').value,
         yt_bat: document.getElementById('f-yt-bat').value
-      });
-      toggleDrawer();
+      }); toggleDrawer();
     }
 
-    let modalFn = null;
-    function askConfirm(title, body, fn) {
-      document.getElementById('modal-title').textContent = title;
-      document.getElementById('modal-body').textContent = body;
-      modalFn = fn;
-      document.getElementById('modal-wrap').classList.remove('hidden');
-    }
-    function closeConfirm() { document.getElementById('modal-wrap').classList.add('hidden'); modalFn = null; }
-    document.getElementById('modal-ok').addEventListener('click', () => { if (modalFn) modalFn(); closeConfirm(); });
-
-    function toggleDrawer() {
-      document.getElementById('drawer').classList.toggle('open');
-      document.getElementById('drawer-mask').classList.toggle('hidden');
-    }
+    let modalCb = null;
+    function askConfirm(t, b, fn) { document.getElementById('modal-title').textContent=t; document.getElementById('modal-body').textContent=b; modalCb=fn; document.getElementById('modal-wrap').classList.remove('hidden'); }
+    function closeConfirm() { document.getElementById('modal-wrap').classList.add('hidden'); modalCb=null; }
+    document.getElementById('modal-ok').addEventListener('click', () => { if (modalCb) modalCb(); closeConfirm(); });
+    function toggleDrawer() { document.getElementById('drawer').classList.toggle('open'); document.getElementById('drawer-mask').classList.toggle('hidden'); }
     function toggleLogSheet() {
-      const sh = document.getElementById('log-sheet');
-      sh.classList.toggle('open');
-      document.getElementById('log-toggle-btn').textContent = sh.classList.contains('open') ? '收起日志 ▼' : '展开日志 ▲';
+      const sh = document.getElementById('log-sheet'); sh.classList.toggle('open');
+      document.getElementById('log-btn').textContent = sh.classList.contains('open') ? '收起日志 ▼' : '展开日志 ▲';
     }
-    function focusEngine(i) {
+    function focusEng(i) {
       S.focus = i;
-      const labels = ['ARIA2 直链轨道聚焦', 'qBittorrent BT/PT 轨道聚焦', 'YT-DLP 视频轨道聚焦'];
-      document.getElementById('focus-label').textContent = i >= 0 ? labels[i] : 'CORE SYNC · 实时连接本地引擎';
+      const lbls = ['ARIA2 超光速信道已锁定 · 加速中', 'qBittorrent 分布式节点网络已锁定', 'MAGNET / DHT 磁感力场已锁定', 'YT-DLP 视频声光矩阵已锁定'];
+      document.getElementById('focus-hint').textContent = i >= 0 ? lbls[i] : '3D 空间极光拓扑台 · 随带宽实时涌动';
     }
 
+    // ==================== STATE SYNC ====================
     function applyState(d) {
-      S.a = d.aria2 || S.a;
-      S.q = d.qbit || S.q;
-      S.y = d.yt || S.y;
-      if (Array.isArray(d.wave) && d.wave.length) S.wave = d.wave;
+      S.a = d.aria2 || S.a; S.q = d.qbit || S.q; S.y = d.yt || S.y; S.m = d.magnet || S.m;
+      S.tasks = d.tasks || { aria2:[], qbit:[] };
+      if (d.urls) S.urls = d.urls;
+      S.waveA.push(S.a.dn || 0); if (S.waveA.length > 40) S.waveA.shift();
+      S.waveQ.push(S.q.dn || 0); if (S.waveQ.length > 40) S.waveQ.shift();
 
+      const totDn = (S.a.dn||0) + (S.q.dn||0), totUp = (S.a.up||0) + (S.q.up||0);
       document.getElementById('uptime').textContent = d.uptime || '00:00:00';
-      document.getElementById('top-dn').textContent = fmt((S.a.dn || 0) + (S.q.dn || 0));
-      document.getElementById('top-up').textContent = fmt((S.a.up || 0) + (S.q.up || 0));
-      document.getElementById('top-tasks').textContent = S.a.task || 0;
-      document.getElementById('top-seed').textContent = S.q.seed || 0;
+      document.getElementById('top-dn').textContent = fmt(totDn);
+      document.getElementById('hero-dn').textContent = fmt(totDn);
+      document.getElementById('top-up').textContent = fmt(totUp);
 
-      // Aria2
-      document.getElementById('a-speed').textContent = fmt(S.a.dn);
-      document.getElementById('a-meta').textContent = `${S.a.task || 0} 任务 / ${S.a.conn || 0} 连接`;
-      const ast = S.a.on ? 'ONLINE' : (S.a.err ? 'ERROR' : 'OFFLINE');
-      document.getElementById('a-st').textContent = ast;
-      document.getElementById('a-st').className = 'pod-speed-st mono ' + (S.a.on ? 'c-mint' : (S.a.err ? 'c-rose' : 'c-dim'));
+      document.getElementById('k-adn').textContent = fmt(S.a.dn);
+      document.getElementById('k-aup').textContent = S.a.up > 0 ? ('↑ ' + fmt(S.a.up)) : '';
+      document.getElementById('k-qdn').textContent = fmt(S.q.dn);
+      document.getElementById('k-qup').textContent = S.q.up > 0 ? ('↑ ' + fmt(S.q.up)) : '';
+      document.getElementById('k-atk').textContent = S.a.task || 0;
+      document.getElementById('k-acn').textContent = S.a.conn || 0;
+      document.getElementById('k-qto').textContent = S.q.tor || 0;
+      document.getElementById('k-qse').textContent = S.q.seed || 0;
+
+      // Status Chips + Modules
+      document.getElementById('chip-a').className = 'led ' + (S.a.on ? 'bg-mint led-on' : (S.a.err ? 'bg-rose led-on' : 'bg-off'));
+      document.getElementById('chip-q').className = 'led ' + (S.q.on ? 'bg-cyan led-on' : (S.q.err ? 'bg-rose led-on' : 'bg-off'));
+      document.getElementById('chip-y').className = 'led ' + (S.y.on ? 'bg-amber led-on' : 'bg-off');
+      const trCnt = S.m.tracker_count || S.m.cached_trackers || 0;
+      document.getElementById('chip-tr').textContent = trCnt + ' TR';
+
+      document.getElementById('spd-a').textContent = fmt(S.a.dn);
+      document.getElementById('desc-a').textContent = S.a.on ? `${S.a.task||0} 活跃 · ${S.a.conn||0} 连接` : '直链多线程引擎';
+      document.getElementById('st-a').textContent = S.a.on ? 'ONLINE' : (S.a.err ? 'ERROR' : 'OFFLINE');
+      document.getElementById('st-a').className = 'mod-st mono ' + (S.a.on ? 'c-mint' : (S.a.err ? 'c-rose' : 'c-dim'));
       document.getElementById('led-a').className = 'led ' + (S.a.on ? 'bg-mint led-on' : (S.a.err ? 'bg-rose led-on' : 'bg-off'));
-      const ba = document.getElementById('btn-a');
-      ba.textContent = S.a.on ? '■ 停止' : '▶ 启动';
-      ba.className = 'cbtn flex-1 ' + (S.a.on ? 'cbtn-rose' : 'cbtn-mint');
+      const ba = document.getElementById('btn-a'); ba.textContent = S.a.on ? '■ 停止' : '▶ 启动'; ba.className = 'btn flex-1 ' + (S.a.on ? 'btn-rose' : 'btn-mint');
 
-      // qBit
-      document.getElementById('q-speed').textContent = fmt(S.q.dn);
-      document.getElementById('q-meta').textContent = `${S.q.tor || 0} 种子 / ${S.q.seed || 0} 做种`;
-      const qst = S.q.on ? 'ONLINE' : (S.q.err ? 'ERROR' : 'OFFLINE');
-      document.getElementById('q-st').textContent = qst;
-      document.getElementById('q-st').className = 'pod-speed-st mono ' + (S.q.on ? 'c-cyan' : (S.q.err ? 'c-rose' : 'c-dim'));
+      document.getElementById('spd-q').textContent = fmt(S.q.dn);
+      document.getElementById('desc-q').textContent = S.q.on ? `${S.q.tor||0} 种子 · ${S.q.seed||0} 做种` : 'BT / PT 分布式节点';
+      document.getElementById('st-q').textContent = S.q.on ? 'ONLINE' : (S.q.err ? 'ERROR' : 'OFFLINE');
+      document.getElementById('st-q').className = 'mod-st mono ' + (S.q.on ? 'c-cyan' : (S.q.err ? 'c-rose' : 'c-dim'));
       document.getElementById('led-q').className = 'led ' + (S.q.on ? 'bg-cyan led-on' : (S.q.err ? 'bg-rose led-on' : 'bg-off'));
-      const bq = document.getElementById('btn-q');
-      bq.textContent = S.q.on ? '■ 停止' : '▶ 启动';
-      bq.className = 'cbtn flex-1 ' + (S.q.on ? 'cbtn-rose' : 'cbtn-mint');
+      const bq = document.getElementById('btn-q'); bq.textContent = S.q.on ? '■ 停止' : '▶ 启动'; bq.className = 'btn flex-1 ' + (S.q.on ? 'btn-rose' : 'btn-mint');
 
-      // YT
+      document.getElementById('val-m').textContent = trCnt + ' TR';
+      document.getElementById('st-m').textContent = S.m.ok ? 'DHT OK' : 'NEEDS FIX';
+      document.getElementById('st-m').className = 'mod-st mono ' + (S.m.ok ? 'c-violet' : 'c-amber');
+      document.getElementById('m-conf-ok').textContent = S.m.ok ? '健康 ✔' : ('缺 ' + (S.m.missing||[]).length + ' 项');
+      document.getElementById('m-tr-cnt').textContent = (S.m.tracker_count || 0) + ' 个';
+      document.getElementById('m-cache-cnt').textContent = (S.m.cached_trackers || 0) + ' 个';
+      document.getElementById('m-dht-sz').textContent = S.m.dht_dat_size > 0 ? fmtBytes(S.m.dht_dat_size) : '冷启动';
+
       document.getElementById('led-y').className = 'led ' + (S.y.on ? 'bg-amber led-on' : 'bg-off');
-      const by = document.getElementById('btn-y');
-      by.textContent = S.y.on ? '■ 关闭下载壳' : '▶ 启动下载壳';
-      by.className = 'cbtn flex-1 ' + (S.y.on ? 'cbtn-rose' : 'cbtn-amber');
+      const by = document.getElementById('btn-y'); by.textContent = S.y.on ? '■ 关闭视频壳' : '▶ 启动视频壳'; by.className = 'btn flex-1 ' + (S.y.on ? 'btn-rose' : 'btn-amber');
       document.getElementById('sw-up').classList.toggle('on', !!S.y.upscale);
 
-      // Config sync (only fill inputs when drawer is closed so we never overwrite user typing)
+      // Tasks
+      const aT = S.tasks.aria2 || [], qT = S.tasks.qbit || [];
+      document.getElementById('nav-task-cnt').textContent = aT.length + qT.length;
+      document.getElementById('cnt-a-tasks').textContent = aT.length;
+      document.getElementById('cnt-q-tasks').textContent = qT.length;
+      const all = [
+        ...aT.map(t => ({ src:'A2', id:t.gid, name:t.name, pct:t.pct, speed:t.speed, st:t.status, col:'#00f5b8' })),
+        ...qT.map(t => ({ src:'qB', id:t.hash, name:t.name, pct:t.pct, speed:t.speed, st:t.state, col:'#00d4ff' }))
+      ];
+      const radar = document.getElementById('radar-list');
+      radar.innerHTML = all.length ? all.slice(0, 8).map(t => `
+        <div class="task-mini">
+          <div class="task-top"><span class="task-name"><b class="mono" style="color:${t.col};margin-right:5px;">[${t.src}]</b>${esc(t.name)}</span><span class="mono" style="font-size:10.5px;color:${t.col};">${t.pct}%</span></div>
+          <div class="prog-track"><div class="prog-fill" style="width:${Math.min(100,t.pct)}%;background:${t.col};box-shadow:0 0 8px ${t.col};"></div></div>
+          <div class="task-top mono" style="font-size:10px;color:#94a3b8;">
+            <span>${fmt(t.speed)} · ${esc(t.st)}</span>
+            <span style="display:flex;gap:4px;">
+              <button onclick="act('${t.src==='A2'?'aria2_pause':'qbit_pause'}',{${t.src==='A2'?'gid':'hash'}:'${esc(t.id)}'})" class="btn" style="padding:1px 6px;font-size:10px;">⏸</button>
+              <button onclick="act('${t.src==='A2'?'aria2_resume':'qbit_resume'}',{${t.src==='A2'?'gid':'hash'}:'${esc(t.id)}'})" class="btn" style="padding:1px 6px;font-size:10px;">▶</button>
+            </span>
+          </div>
+        </div>`).join('') : `<div style="margin:auto;text-align:center;color:#64748b;font-size:12px;line-height:1.8;">暂无活跃下载任务<br/><span style="font-size:10.5px;color:#475569;">在中间投递舱粘贴链接 / 磁力即刻开下</span></div>`;
+
+      document.getElementById('full-a-tasks').innerHTML = aT.length ? aT.map(t => `
+        <div class="task-row">
+          <div class="task-top"><span class="task-name">${esc(t.name)}</span><span class="mono c-mint" style="font-size:11px;">${t.pct}% · ${fmt(t.speed)}</span></div>
+          <div class="prog-track"><div class="prog-fill" style="width:${Math.min(100,t.pct)}%;background:#00f5b8;"></div></div>
+          <div class="task-top mono" style="font-size:10.5px;color:#94a3b8;">
+            <span>${fmtBytes(t.done)} / ${fmtBytes(t.total)} · ${t.conn} 连接 · ${esc(t.status)}</span>
+            <span style="display:flex;gap:5px;">
+              <button onclick="act('aria2_pause',{gid:'${esc(t.gid)}'})" class="btn" style="padding:2px 8px;font-size:10.5px;">暂停</button>
+              <button onclick="act('aria2_resume',{gid:'${esc(t.gid)}'})" class="btn btn-mint" style="padding:2px 8px;font-size:10.5px;">继续</button>
+              <button onclick="act('aria2_remove',{gid:'${esc(t.gid)}'})" class="btn btn-rose" style="padding:2px 8px;font-size:10.5px;">移除</button>
+            </span>
+          </div>
+        </div>`).join('') : '<div style="color:#64748b;font-size:12px;padding:16px;">暂无 Aria2 任务</div>';
+
+      document.getElementById('full-q-tasks').innerHTML = qT.length ? qT.map(t => `
+        <div class="task-row">
+          <div class="task-top"><span class="task-name">${esc(t.name)}</span><span class="mono c-cyan" style="font-size:11px;">${t.pct}% · ↓${fmt(t.speed)}</span></div>
+          <div class="prog-track"><div class="prog-fill" style="width:${Math.min(100,t.pct)}%;background:#00d4ff;"></div></div>
+          <div class="task-top mono" style="font-size:10.5px;color:#94a3b8;">
+            <span>${fmtBytes(t.size)} · 分享率 ${t.ratio} · ${esc(t.state)}</span>
+            <span style="display:flex;gap:5px;">
+              <button onclick="act('qbit_pause',{hash:'${esc(t.hash)}'})" class="btn" style="padding:2px 8px;font-size:10.5px;">暂停</button>
+              <button onclick="act('qbit_resume',{hash:'${esc(t.hash)}'})" class="btn btn-cyan" style="padding:2px 8px;font-size:10.5px;">继续</button>
+              <button onclick="act('qbit_delete',{hash:'${esc(t.hash)}'})" class="btn btn-rose" style="padding:2px 8px;font-size:10.5px;">删除</button>
+            </span>
+          </div>
+        </div>`).join('') : '<div style="color:#64748b;font-size:12px;padding:16px;">暂无 qBittorrent 种子任务</div>';
+
       const cfg = d.cfg;
       if (cfg) {
         document.getElementById('port-a').textContent = ':' + (cfg.aria2?.port || 6800);
@@ -618,258 +1052,309 @@
         }
       }
 
-      // Logs
-      if (Array.isArray(d.logs) && d.logs.length) {
-        const last = d.logs[d.logs.length - 1];
-        const cls = s => s.includes('[ERROR]') ? 'c-rose' : (s.includes('[WARN') ? 'c-amber' : (s.includes('[OK') ? 'c-cyan' : 'c-mint'));
-        const tk = document.getElementById('ticker');
-        tk.textContent = last;
-        tk.className = 'ticker mono ' + cls(last);
+      const logs = d.logs || [];
+      const cls = s => s.includes('[ERROR]') ? 'c-rose' : (s.includes('[WARN') ? 'c-amber' : (s.includes('[OK') ? 'c-cyan' : 'c-mint'));
+      if (logs.length) {
+        const last = logs[logs.length - 1];
+        const tk = document.getElementById('ticker'); tk.textContent = last; tk.className = 'mono ' + cls(last);
         const list = document.getElementById('log-list');
-        const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 24;
-        list.innerHTML = d.logs.map(l => `<div class="${cls(l)}">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>`).join('');
-        if (atBottom) list.scrollTop = list.scrollHeight;
-      } else {
-        document.getElementById('log-list').innerHTML = '';
-      }
-
-      drawMiniWave();
+        const atBot = list.scrollHeight - list.scrollTop - list.clientHeight < 24;
+        list.innerHTML = logs.map(l => `<div class="${cls(l)}">${esc(l)}</div>`).join('');
+        if (atBot) list.scrollTop = list.scrollHeight;
+      } else { document.getElementById('log-list').innerHTML = ''; }
     }
 
     async function pollState() {
-      try {
-        const r = await fetch('/api/state', { cache: 'no-store' });
-        if (r.ok) applyState(await r.json());
-      } catch (e) {}
+      try { const r = await fetch('/api/state', { cache:'no-store' }); if (r.ok) applyState(await r.json()); } catch (e) {}
     }
 
-    // ==================== SPRING 3D POD TILT ====================
-    const pods = [];
-    document.querySelectorAll('.pod').forEach(el => {
-      const gl = el.querySelector('.pod-glare');
-      const p = { el, gl, rx:0, ry:0, trx:0, try:0 };
-      pods.push(p);
+    // ==================== SILKY FLUID CURSOR + GLOBAL 3D COCKPIT PARALLAX ====================
+    const curGlow = document.getElementById('cursorGlow');
+    const curRing = document.getElementById('cursorRing');
+    const cockpitRig = document.getElementById('cockpitRig');
+    let mX = window.innerWidth/2, mY = window.innerHeight/2, cX = mX, cY = mY, rX = mX, rY = mY;
+    let rigRX = 0, rigRY = 0;
+
+    const auraPalette = {
+      mint: ['rgba(0,245,184,0.16)', 'rgba(0,245,184,0.68)'],
+      cyan: ['rgba(0,212,255,0.16)', 'rgba(0,212,255,0.68)'],
+      violet: ['rgba(168,85,247,0.18)', 'rgba(192,132,252,0.72)'],
+      amber: ['rgba(255,179,71,0.16)', 'rgba(255,179,71,0.70)']
+    };
+    window.addEventListener('mousemove', e => {
+      mX = e.clientX; mY = e.clientY;
+      curRing.classList.toggle('hover', !!e.target.closest('button, .sw, .nav-btn, input, textarea'));
+      const zone = e.target.closest('[data-aura]');
+      const [g, r] = auraPalette[zone?.dataset.aura] || auraPalette.cyan;
+      document.documentElement.style.setProperty('--cur-glow', g);
+      document.documentElement.style.setProperty('--cur-ring', r);
+    });
+    window.addEventListener('mousedown', () => curRing.classList.add('down'));
+    window.addEventListener('mouseup', () => curRing.classList.remove('down'));
+
+    const modSprings = [];
+    document.querySelectorAll('.mod-card').forEach(el => {
+      const gl = el.querySelector('.mod-glare');
+      const sp = { el, gl, rx:0, ry:0, trx:0, try:0, tz:0, ttz:0 };
+      modSprings.push(sp);
       el.addEventListener('mousemove', e => {
         const r = el.getBoundingClientRect();
         const x = e.clientX - r.left, y = e.clientY - r.top;
-        p.trx = ((y/r.height)-0.5) * -14;
-        p.try = ((x/r.width)-0.5) * 14;
+        sp.trx = ((y/r.height)-0.5) * -14;
+        sp.try = ((x/r.width)-0.5) * 14;
+        sp.ttz = 16;
         if (gl) { gl.style.setProperty('--gx', x+'px'); gl.style.setProperty('--gy', y+'px'); }
       });
-      el.addEventListener('mouseleave', () => { p.trx = 0; p.try = 0; });
+      el.addEventListener('mouseleave', () => { sp.trx = 0; sp.try = 0; sp.ttz = 0; });
     });
 
-    // ==================== FULLSCREEN TRUE-3D SHADED SCENE ====================
-    const canvas = document.getElementById('scene3d');
-    const ctx = canvas.getContext('2d');
-    let W = 0, H = 0;
-    function resize() {
+    // ==================== MULTI-CANVAS 60FPS 3D CONSOLE RENDERER ====================
+    function fitCanvas(id) {
+      const c = document.getElementById(id); if (!c) return null;
       const dpr = Math.min(2, window.devicePixelRatio || 1);
-      W = window.innerWidth; H = window.innerHeight;
-      canvas.width = W * dpr; canvas.height = H * dpr;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const r = c.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) return { c, ctx: c.getContext('2d'), w: 0, h: 0 };
+      if (c.width !== Math.round(r.width*dpr) || c.height !== Math.round(r.height*dpr)) {
+        c.width = Math.round(r.width*dpr); c.height = Math.round(r.height*dpr);
+      }
+      const ctx = c.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      return { c, ctx, w: r.width, h: r.height };
     }
-    resize();
-    window.addEventListener('resize', resize);
+    let cv = {};
+    function resizeAllCanvases() {
+      ['bgCanvas','c-wave','c-terrain','c-aria2','c-qbit','c-magnet','c-yt'].forEach(id => { cv[id] = fitCanvas(id); });
+    }
+    window.addEventListener('resize', () => { resizeAllCanvases(); moveNavPill(document.querySelector('.nav-btn.active')); });
 
-    let camRX = 0.28, camRY = 0.4, vRX = 0, vRY = 0.008, zoom = 1.0, targetZoom = 1.0;
-    let mx = 0, my = 0, drag = false, lx = 0, ly = 0;
+    const bgStars = Array.from({ length: 100 }, () => ({ x:(Math.random()-0.5)*2.4, y:(Math.random()-0.5)*2.4, z:Math.random()*2+0.2, c:['#00f5b8','#00d4ff','#a855f7'][Math.floor(Math.random()*3)] }));
+    const warpLines = Array.from({ length: 38 }, () => ({ a: Math.random()*Math.PI*2, z: Math.random()*2+0.15, r: 0.25+Math.random()*0.95 }));
+    const globePts = Array.from({ length: 26 }, (_, i) => { const y=1-(i/25)*2, rad=Math.sqrt(1-y*y), th=i*2.39996; return [Math.cos(th)*rad, y, Math.sin(th)*rad]; });
+    const magPts = Array.from({ length: 42 }, (_, i) => ({ phi:(i/42)*Math.PI*2, t:Math.random()*Math.PI, r:0.68+(i%3)*0.34 }));
 
-    canvas.addEventListener('mousedown', e => { drag = true; lx = e.clientX; ly = e.clientY; vRX = 0; vRY = 0; });
-    window.addEventListener('mouseup', () => drag = false);
-    window.addEventListener('mousemove', e => {
-      mx = (e.clientX / (W || 1) - 0.5) * 2;
-      my = (e.clientY / (H || 1) - 0.5) * 2;
-      if (!drag) return;
-      vRY = (e.clientX - lx) * 0.009; vRX = (e.clientY - ly) * 0.009;
-      camRY += vRY; camRX = Math.max(-1.1, Math.min(1.1, camRX + vRX));
-      lx = e.clientX; ly = e.clientY;
-    });
-    canvas.addEventListener('wheel', e => {
-      targetZoom = Math.max(0.65, Math.min(1.55, targetZoom - e.deltaY * 0.0008));
-    }, { passive: true });
+    let T = 0;
+    function tickFrame() {
+      T += 0.02;
+      // 1. Silky Cursor & Global Curved Console Rig Parallax
+      cX += (mX - cX) * 0.09; cY += (mY - cY) * 0.09;
+      rX += (mX - rX) * 0.22; rY += (mY - rY) * 0.22;
+      curGlow.style.left = cX + 'px'; curGlow.style.top = cY + 'px';
+      curRing.style.left = rX + 'px'; curRing.style.top = rY + 'px';
 
-    const PHI = (1 + Math.sqrt(5)) / 2;
-    const icoV = [
-      [-1,PHI,0],[1,PHI,0],[-1,-PHI,0],[1,-PHI,0],
-      [0,-1,PHI],[0,1,PHI],[0,-1,-PHI],[0,1,-PHI],
-      [PHI,0,-1],[PHI,0,1],[-PHI,0,-1],[-PHI,0,1]
-    ].map(([x,y,z]) => { const l = Math.hypot(x,y,z); return [x/l,y/l,z/l]; });
-    const icoF = [
-      [0,11,5],[0,5,1],[0,1,7],[0,7,10],[0,10,11],
-      [1,5,9],[5,11,4],[11,10,2],[10,7,6],[7,1,8],
-      [3,9,4],[3,4,2],[3,2,6],[3,6,8],[3,8,9],
-      [4,9,5],[2,4,11],[6,2,10],[8,6,7],[9,8,1]
-    ];
+      const normMX = (mX / (window.innerWidth || 1) - 0.5) * 2;
+      const normMY = (mY / (window.innerHeight || 1) - 0.5) * 2;
+      if (window.innerWidth > 1180 && S.curView === 'cockpit') {
+        rigRY += (normMX * 2.4 - rigRY) * 0.06;
+        rigRX += (-normMY * 1.8 - rigRX) * 0.06;
+        cockpitRig.style.transform = `rotateX(${rigRX.toFixed(2)}deg) rotateY(${rigRY.toFixed(2)}deg)`;
+      } else { cockpitRig.style.transform = ''; }
 
-    const stars = Array.from({ length: 140 }, () => ({
-      x: (Math.random() - 0.5) * 14, y: (Math.random() - 0.5) * 9, z: (Math.random() - 0.5) * 14,
-      c: Math.random() > 0.5 ? '#00f5b8' : '#00d4ff'
-    }));
-    const streams = Array.from({ length: 48 }, (_, i) => ({ sat: i % 3, t: Math.random(), sp: 0.012 + Math.random() * 0.016 }));
-
-    let time = 0;
-    function render3D() {
-      time += 0.018;
-      for (const p of pods) {
-        p.rx += (p.trx - p.rx) * 0.14; p.ry += (p.try - p.ry) * 0.14;
-        p.el.style.transform = (Math.abs(p.rx)>0.02||Math.abs(p.ry)>0.02)
-          ? `rotateX(${p.rx.toFixed(2)}deg) rotateY(${p.ry.toFixed(2)}deg) translateZ(10px)` : '';
+      for (const sp of modSprings) {
+        sp.rx += (sp.trx - sp.rx) * 0.14; sp.ry += (sp.try - sp.ry) * 0.14; sp.tz += (sp.ttz - sp.tz) * 0.14;
+        sp.el.style.transform = (Math.abs(sp.rx)>0.02||Math.abs(sp.ry)>0.02||sp.tz>0.1)
+          ? `rotateX(${sp.rx.toFixed(2)}deg) rotateY(${sp.ry.toFixed(2)}deg) translateZ(${sp.tz.toFixed(1)}px)` : '';
       }
 
-      const mbps = ((S.a.dn || 0) + (S.q.dn || 0)) / (1024 * 1024);
-      const speed = 0.005 + Math.min(0.016, mbps * 0.0008) + S.boost * 0.018;
+      const totalMbps = ((S.a.dn||0) + (S.q.dn||0)) / (1024*1024);
       S.boost *= 0.93;
-      zoom += (targetZoom - zoom) * 0.08;
-      if (!drag) { vRY += (speed - vRY) * 0.04; vRX *= 0.92; camRY += vRY; camRX += vRX; }
 
-      const effRX = camRX + my * 0.14, effRY = camRY + mx * 0.22;
-      const cx = W / 2, cy = H * 0.43;
-      const fov = Math.min(W, H) * 0.72 * zoom;
+      // 2. Fullscreen Deep Space + 3D Floor Horizon
+      const bg = cv['bgCanvas'];
+      if (bg && bg.w > 0) {
+        const { ctx, w, h } = bg;
+        const g = ctx.createRadialGradient(w*0.5, h*0.35, 30, w*0.5, h*0.48, Math.max(w,h)*0.78);
+        g.addColorStop(0, '#0a162d'); g.addColorStop(0.5, '#040814'); g.addColorStop(1, '#020308');
+        ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
 
-      const bg = ctx.createRadialGradient(cx, cy, 10, cx, cy, Math.max(W, H) * 0.72);
-      bg.addColorStop(0, '#091529'); bg.addColorStop(0.45, '#040814'); bg.addColorStop(1, '#020308');
-      ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
-
-      const cY = Math.cos(effRY), sY = Math.sin(effRY), cX = Math.cos(effRX), sX = Math.sin(effRX);
-      function xform(x, y, z) {
-        const x1 = x * cY - z * sY, z1 = x * sY + z * cY;
-        const y2 = y * cX - z1 * sX, z2 = y * sX + z1 * cX;
-        const pz = 5.4 + z2;
-        if (pz < 0.4) return null;
-        const sc = fov / pz;
-        return [cx + x1 * sc, cy + y2 * sc, z2, sc, x1, y2];
-      }
-
-      // 3D Floor Grid
-      const gridY = 2.15, zShift = (time * (0.45 + mbps * 0.04)) % 1;
-      ctx.lineWidth = 1;
-      for (let i = -8; i <= 8; i++) {
-        const p1 = xform(i * 0.85, gridY, -6), p2 = xform(i * 0.85, gridY, 6);
-        if (p1 && p2) {
-          const gr = ctx.createLinearGradient(p1[0], p1[1], p2[0], p2[1]);
-          gr.addColorStop(0, 'rgba(0,212,255,0)'); gr.addColorStop(0.5, 'rgba(0,212,255,0.16)'); gr.addColorStop(1, 'rgba(0,245,184,0)');
-          ctx.strokeStyle = gr; ctx.beginPath(); ctx.moveTo(p1[0], p1[1]); ctx.lineTo(p2[0], p2[1]); ctx.stroke();
+        // Perspective Deck Floor Grid at Bottom
+        const hy = h * 0.62, shift = (T * 0.35) % 1;
+        ctx.lineWidth = 1;
+        for (let i = -10; i <= 10; i++) {
+          const xTop = w*0.5 + i*(w*0.045) - normMX*18;
+          const xBot = w*0.5 + i*(w*0.18) - normMX*48;
+          const lg = ctx.createLinearGradient(xTop, hy, xBot, h);
+          lg.addColorStop(0, 'rgba(0,212,255,0)'); lg.addColorStop(0.55, 'rgba(0,212,255,0.09)'); lg.addColorStop(1, 'rgba(0,245,184,0.03)');
+          ctx.strokeStyle = lg; ctx.beginPath(); ctx.moveTo(xTop, hy); ctx.lineTo(xBot, h); ctx.stroke();
         }
-        const gz = (i - zShift) * 0.85;
-        const q1 = xform(-6.8, gridY, gz), q2 = xform(6.8, gridY, gz);
-        if (q1 && q2) {
-          ctx.strokeStyle = `rgba(0,245,184,${Math.max(0, 0.16 - Math.abs(gz) * 0.022)})`;
-          ctx.beginPath(); ctx.moveTo(q1[0], q1[1]); ctx.lineTo(q2[0], q2[1]); ctx.stroke();
+        for (let r = 0; r < 8; r++) {
+          const t = ((r + shift) / 8); const y = hy + t * t * (h - hy);
+          ctx.strokeStyle = `rgba(0,212,255,${t * 0.10})`;
+          ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+        }
+
+        // Stars
+        const sp = 0.002 + Math.min(0.01, totalMbps*0.0005);
+        for (const st of bgStars) {
+          st.z -= sp; if (st.z <= 0.15) { st.z = 2.2; st.x = (Math.random()-0.5)*2.4; st.y = (Math.random()-0.5)*2.4; }
+          const px = w/2 + (st.x/st.z)*w*0.42 - normMX*24/st.z;
+          const py = h/2 + (st.y/st.z)*h*0.42 - normMY*18/st.z;
+          ctx.fillStyle = st.c; ctx.globalAlpha = Math.max(0.04, (1-st.z/2.2)*0.5);
+          ctx.beginPath(); ctx.arc(px, py, Math.max(0.6, (1-st.z/2.2)*2), 0, Math.PI*2); ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      if (S.curView === 'cockpit') {
+        // 3. Left Wing Liquid Waveform
+        const wv = cv['c-wave'];
+        if (wv && wv.w > 0) {
+          const { ctx, w, h } = wv; ctx.clearRect(0,0,w,h);
+          ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 1;
+          for (let i=1;i<=3;i++){ const y=(h/4)*i; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+          const peak = Math.max(2*1024*1024, ...S.waveA, ...S.waveQ);
+          function curve(arr, col, fill) {
+            const pts = arr.map((v,i)=>({ x:(i/(arr.length-1))*(w-6), y:h-Math.min(0.88,(v||0)/peak)*(h-14)-5 }));
+            ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+            for (let i=0;i<pts.length-1;i++){ const xc=(pts[i].x+pts[i+1].x)/2, yc=(pts[i].y+pts[i+1].y)/2; ctx.quadraticCurveTo(pts[i].x,pts[i].y,xc,yc); }
+            const last = pts[pts.length-1]; ctx.lineTo(last.x, last.y);
+            ctx.strokeStyle=col; ctx.lineWidth=2.1; ctx.stroke();
+            ctx.lineTo(last.x,h); ctx.lineTo(0,h); ctx.closePath();
+            const gr=ctx.createLinearGradient(0,0,0,h); gr.addColorStop(0,fill); gr.addColorStop(1,'rgba(0,0,0,0)');
+            ctx.fillStyle=gr; ctx.fill();
+            ctx.beginPath(); ctx.arc(last.x,last.y,3.2,0,Math.PI*2); ctx.fillStyle='#fff'; ctx.fill();
+          }
+          curve(S.waveQ, '#00d4ff', 'rgba(0,212,255,0.22)');
+          curve(S.waveA, '#00f5b8', 'rgba(0,245,184,0.26)');
+        }
+
+        // 4. CENTER BRIDGE: 3D FLOWING AURORA ENERGY TERRAIN (NOT A CUBE!)
+        const ct = cv['c-terrain'];
+        if (ct && ct.w > 0) {
+          const { ctx, w, h } = ct; ctx.clearRect(0, 0, w, h);
+          const rows = 15, cols = 26;
+          const amp = 0.24 + Math.min(0.42, totalMbps * 0.03) + S.boost * 0.14;
+          const palette = [
+            ['rgba(0,245,184,', 'rgba(0,212,255,'],
+            ['rgba(0,212,255,', 'rgba(99,102,241,'],
+            ['rgba(192,132,252,', 'rgba(236,72,153,'],
+            ['rgba(255,179,71,', 'rgba(255,61,113,']
+          ][S.focus >= 0 ? S.focus : 0];
+
+          const grid = [];
+          for (let r = 0; r < rows; r++) {
+            const rowPts = [];
+            const depth = r / (rows - 1); // 0=far, 1=near
+            const z = 1.15 + (1 - depth) * 2.9;
+            for (let c = 0; c < cols; c++) {
+              const nx = (c / (cols - 1) - 0.5) * 2;
+              const wave =
+                Math.sin(nx * 3.8 + T * 1.4 + r * 0.42) * Math.cos(r * 0.35 - T * 0.9) * amp
+                + Math.sin(nx * 7.2 - T * 2.2) * amp * 0.28;
+              const sx = w * 0.5 + (nx * w * 0.72) / z - normMX * 22 * depth;
+              const sy = h * 0.34 + ((0.95 - wave) * h * 0.62) / z + (depth * h * 0.18);
+              rowPts.push([sx, sy, wave, depth]);
+            }
+            grid.push(rowPts);
+          }
+
+          // Longitudinal glowing ribs
+          ctx.lineWidth = 0.85;
+          for (let c = 0; c < cols; c += 2) {
+            ctx.beginPath();
+            for (let r = 0; r < rows; r++) {
+              const p = grid[r][c];
+              if (r === 0) ctx.moveTo(p[0], p[1]); else ctx.lineTo(p[0], p[1]);
+            }
+            ctx.strokeStyle = palette[1] + '0.18)'; ctx.stroke();
+          }
+
+          // Latitudinal flowing 3D aurora ribbons + glowing crest nodes
+          for (let r = 0; r < rows; r++) {
+            const pts = grid[r], d = r / (rows - 1);
+            ctx.beginPath();
+            for (let c = 0; c < cols; c++) {
+              const p = pts[c]; if (c === 0) ctx.moveTo(p[0], p[1]); else ctx.lineTo(p[0], p[1]);
+            }
+            ctx.strokeStyle = (r % 2 === 0 ? palette[0] : palette[1]) + (0.14 + d * 0.56).toFixed(2) + ')';
+            ctx.lineWidth = 0.9 + d * 1.3;
+            ctx.stroke();
+
+            // Glowing energy peaks on near rows
+            if (r > 4 && r % 2 === 1) {
+              for (let c = 1; c < cols - 1; c += 3) {
+                const p = pts[c];
+                if (p[2] > amp * 0.25) {
+                  ctx.beginPath(); ctx.arc(p[0], p[1], 1.5 + d * 1.6, 0, Math.PI * 2);
+                  ctx.fillStyle = palette[0] + (0.4 + d * 0.55).toFixed(2) + ')'; ctx.fill();
+                }
+              }
+            }
+          }
+        }
+
+        // 5. MODULE 1: ARIA2 3D WARP-SPEED LIGHT TUNNEL
+        const ca = cv['c-aria2'];
+        if (ca && ca.w > 0) {
+          const { ctx, w, h } = ca; ctx.clearRect(0,0,w,h);
+          const cx = w*0.55, cy = h*0.48, spd = (S.a.on ? 0.038 : 0.012) + (S.focus===0 ? 0.04 : 0);
+          for (const l of warpLines) {
+            l.z -= spd; if (l.z <= 0.12) { l.z = 2.1; l.a = Math.random()*Math.PI*2; }
+            const zp = l.z + spd * 3.6;
+            const x1 = cx + (Math.cos(l.a)*l.r/l.z)*w*0.36, y1 = cy + (Math.sin(l.a)*l.r/l.z)*h*0.46;
+            const x0 = cx + (Math.cos(l.a)*l.r/zp)*w*0.36, y0 = cy + (Math.sin(l.a)*l.r/zp)*h*0.46;
+            ctx.strokeStyle = S.a.on ? `rgba(0,245,184,${Math.max(0.08,(1-l.z/2.1)*0.6)})` : 'rgba(100,116,139,0.2)';
+            ctx.lineWidth = Math.max(0.8, (1-l.z/2.1)*2.2);
+            ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke();
+          }
+        }
+
+        // 6. MODULE 2: qBITTORRENT 3D P2P SWARM GLOBE
+        const cq = cv['c-qbit'];
+        if (cq && cq.w > 0) {
+          const { ctx, w, h } = cq; ctx.clearRect(0,0,w,h);
+          const cx = w*0.74, cy = h*0.5, rad = Math.min(w,h)*0.43;
+          const ang = T * (S.q.on ? 0.65 : 0.25) + (S.focus===1 ? 0.5 : 0);
+          const cA = Math.cos(ang), sA = Math.sin(ang);
+          const pts = globePts.map(([x,y,z]) => { const x1=x*cA-z*sA, z1=x*sA+z*cA, sc=2.8/(2.8+z1); return [cx+x1*rad*sc, cy+y*rad*sc, z1]; });
+          ctx.lineWidth = 0.85;
+          for (let i=0;i<pts.length;i++) for (let j=i+1;j<pts.length;j++) {
+            const d = Math.hypot(pts[i][0]-pts[j][0], pts[i][1]-pts[j][1]);
+            if (d < rad * 0.92) {
+              ctx.strokeStyle = S.q.on ? `rgba(0,212,255,${0.26*(1-d/(rad*0.92))})` : 'rgba(100,116,139,0.14)';
+              ctx.beginPath(); ctx.moveTo(pts[i][0],pts[i][1]); ctx.lineTo(pts[j][0],pts[j][1]); ctx.stroke();
+            }
+          }
+          pts.forEach(p => { ctx.beginPath(); ctx.arc(p[0],p[1], p[2]<0?2.3:1.3, 0, Math.PI*2); ctx.fillStyle = S.q.on ? (p[2]<0?'#67e8f9':'rgba(0,212,255,0.45)') : 'rgba(100,116,139,0.35)'; ctx.fill(); });
+        }
+
+        // 7. MODULE 3: MAGNET 3D DIPOLE FIELD LINES
+        const cm = cv['c-magnet'];
+        if (cm && cm.w > 0) {
+          const { ctx, w, h } = cm; ctx.clearRect(0,0,w,h);
+          const cx = w*0.72, cy = h*0.5, sc = Math.min(w,h)*0.45;
+          const rot = T * 0.55 + (S.focus===2 ? 0.6 : 0), cR = Math.cos(rot), sR = Math.sin(rot);
+          for (const mp of magPts) {
+            mp.t += (S.focus===2 ? 0.048 : 0.026); if (mp.t > Math.PI) mp.t = 0;
+            const rad = mp.r * Math.pow(Math.sin(mp.t), 2);
+            const x = Math.cos(mp.phi)*rad, y = Math.cos(mp.t)*0.96, z = Math.sin(mp.phi)*rad;
+            const x1 = x*cR - z*sR, z1 = x*sR + z*cR, p = 3/(3+z1);
+            ctx.beginPath(); ctx.arc(cx+x1*sc*p, cy+y*sc*p, Math.max(1.2, 2.6*p), 0, Math.PI*2);
+            ctx.fillStyle = mp.t < Math.PI*0.5 ? 'rgba(192,132,252,0.8)' : 'rgba(244,114,182,0.75)'; ctx.fill();
+          }
+        }
+
+        // 8. MODULE 4: YT-DLP 3D HOLOGRAPHIC SPECTRUM DECK
+        const cy = cv['c-yt'];
+        if (cy && cy.w > 0) {
+          const { ctx, w, h } = cy; ctx.clearRect(0,0,w,h);
+          const cols = S.y.upscale ? 22 : 13, gap = w / cols;
+          for (let i=0;i<cols;i++) {
+            const amp = (Math.sin(T*3.4 + i*0.52)*0.5+0.5) * (S.y.upscale ? 0.62 : 0.36) * (S.focus===3 ? 1.35 : 1);
+            const bh = Math.max(6, h * amp);
+            const gr = ctx.createLinearGradient(0, h, 0, h - bh);
+            gr.addColorStop(0, S.y.upscale ? 'rgba(255,61,113,0.06)' : 'rgba(255,179,71,0.05)');
+            gr.addColorStop(1, S.y.upscale ? 'rgba(255,179,71,0.54)' : 'rgba(255,179,71,0.32)');
+            ctx.fillStyle = gr; ctx.fillRect(i*gap + 3, h - bh, gap - 6, bh);
+          }
         }
       }
-
-      // Stars
-      for (const st of stars) {
-        const p = xform(st.x, st.y, st.z);
-        if (!p) continue;
-        ctx.fillStyle = st.c; ctx.globalAlpha = Math.max(0.08, Math.min(0.7, (4 - p[2]) / 8));
-        ctx.beginPath(); ctx.arc(p[0], p[1], Math.max(0.8, p[3] * 0.015), 0, Math.PI * 2); ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-
-      // Halo
-      const halo = ctx.createRadialGradient(cx, cy, 10, cx, cy, 240 * zoom);
-      const focusCol = (S.a.err || S.q.err) ? 'rgba(255,61,113,0.30)'
-        : S.focus === 0 ? 'rgba(0,245,184,0.28)' : S.focus === 1 ? 'rgba(0,212,255,0.28)'
-        : S.focus === 2 ? 'rgba(255,179,71,0.28)' : 'rgba(0,225,220,0.24)';
-      halo.addColorStop(0, focusCol); halo.addColorStop(0.5, 'rgba(124,58,237,0.09)'); halo.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(cx, cy, 240 * zoom, 0, Math.PI * 2); ctx.fill();
-
-      // 3D Gyro Rings
-      const rings = [
-        { rad: 1.95, tx: 0.72, tz: time * 0.45, col: 'rgba(0,245,184,0.45)', w: 2.0 },
-        { rad: 2.28, tx: -0.58, tz: -time * 0.35, col: 'rgba(0,212,255,0.42)', w: 1.8 },
-        { rad: 2.58, tx: 0.32, tz: time * 0.25, col: 'rgba(139,92,246,0.34)', w: 1.4 }
-      ];
-      rings.forEach(rg => {
-        ctx.beginPath(); let st = false;
-        for (let i = 0; i <= 90; i++) {
-          const a = (i / 90) * Math.PI * 2, x = Math.cos(a) * rg.rad, y = Math.sin(a) * rg.rad;
-          const y1 = y * Math.cos(rg.tx), z1 = y * Math.sin(rg.tx);
-          const p = xform(x * Math.cos(rg.tz) - z1 * Math.sin(rg.tz), y1, x * Math.sin(rg.tz) + z1 * Math.cos(rg.tz));
-          if (!p) continue;
-          if (!st) { ctx.moveTo(p[0], p[1]); st = true; } else ctx.lineTo(p[0], p[1]);
-        }
-        ctx.strokeStyle = rg.col; ctx.lineWidth = rg.w; ctx.stroke();
-      });
-
-      // Shaded Crystal Core
-      const coreScale = 1.08 * (1 + Math.sin(time * 2.6) * 0.04 + S.boost * 0.08);
-      const tVerts = icoV.map(([x,y,z]) => xform(x * coreScale, y * coreScale, z * coreScale));
-      const faces = [];
-      for (const [i,j,k] of icoF) {
-        const a = tVerts[i], b = tVerts[j], c = tVerts[k];
-        if (!a || !b || !c) continue;
-        const ux = b[4]-a[4], uy = b[5]-a[5], uz = b[2]-a[2], vx = c[4]-a[4], vy = c[5]-a[5], vz = c[2]-a[2];
-        const nx = uy*vz-uz*vy, ny = uz*vx-ux*vz, nz = ux*vy-uy*vx;
-        if (nz > 0) continue;
-        const nl = Math.hypot(nx, ny, nz) || 1;
-        const diff = Math.max(0.08, -(nx * -0.45 + ny * -0.55 + nz * 0.7) / nl);
-        faces.push({ a, b, c, depth: (a[2]+b[2]+c[2])/3, diff });
-      }
-      faces.sort((p, q) => q.depth - p.depth);
-      for (const f of faces) {
-        ctx.beginPath(); ctx.moveTo(f.a[0], f.a[1]); ctx.lineTo(f.b[0], f.b[1]); ctx.lineTo(f.c[0], f.c[1]); ctx.closePath();
-        ctx.fillStyle = `rgba(${Math.round(8+f.diff*24)},${Math.round(55+f.diff*190)},${Math.round(95+f.diff*160)},0.52)`;
-        ctx.fill();
-        ctx.strokeStyle = `rgba(120,255,235,${0.25 + f.diff * 0.65})`; ctx.lineWidth = 1.25; ctx.stroke();
-      }
-
-      // 3 Satellites + Energy Streams
-      const sats = [
-        { name: 'ARIA2', on: S.a.on, err: !!S.a.err, col: '#00f5b8', rad: 1.95, ang: time * 0.9, tx: 0.72, tz: time * 0.45 },
-        { name: 'qBIT',  on: S.q.on, err: !!S.q.err, col: '#00d4ff', rad: 2.28, ang: time * 0.7 + 2.1, tx: -0.58, tz: -time * 0.35 },
-        { name: 'YT-DLP',on: S.y.on, err: false,     col: '#ffb347', rad: 2.58, ang: time * 0.55 + 4.2, tx: 0.32, tz: time * 0.25 }
-      ];
-      const satPos = sats.map(s => {
-        const x = Math.cos(s.ang) * s.rad, y = Math.sin(s.ang) * s.rad;
-        const y1 = y * Math.cos(s.tx), z1 = y * Math.sin(s.tx);
-        const x2 = x * Math.cos(s.tz) - z1 * Math.sin(s.tz), z2 = x * Math.sin(s.tz) + z1 * Math.cos(s.tz);
-        return { ...s, x: x2, y: y1, z: z2, p: xform(x2, y1, z2) };
-      });
-
-      for (const st of streams) {
-        const sat = satPos[st.sat];
-        if (!sat.on) continue;
-        st.t += st.sp * (1 + S.boost * 0.6);
-        if (st.t > 1) st.t = 0;
-        const p = xform(sat.x * (1 - st.t), sat.y * (1 - st.t), sat.z * (1 - st.t));
-        if (!p) continue;
-        ctx.beginPath(); ctx.arc(p[0], p[1], Math.max(1.2, 3.2 * (1 - st.t * 0.4)), 0, Math.PI * 2);
-        ctx.fillStyle = sat.col; ctx.shadowColor = sat.col; ctx.shadowBlur = 10; ctx.fill(); ctx.shadowBlur = 0;
-      }
-
-      satPos.forEach((s, idx) => {
-        if (!s.p) return;
-        const isF = S.focus === idx;
-        const col = s.err ? '#ff3d71' : (s.on ? s.col : '#475569');
-        ctx.beginPath(); ctx.arc(s.p[0], s.p[1], Math.max(4, (isF ? 11 : 7.5) * (s.p[3] / 120)), 0, Math.PI * 2);
-        ctx.fillStyle = col; ctx.shadowColor = (s.on || s.err) ? col : 'transparent'; ctx.shadowBlur = isF ? 28 : 16; ctx.fill(); ctx.shadowBlur = 0;
-        ctx.font = '600 10px ui-monospace, Consolas, monospace'; ctx.fillStyle = (s.on || s.err) ? '#e6f7ff' : '#64748b';
-        ctx.fillText(s.name, s.p[0] + 12, s.p[1] + 3);
-      });
-
-      requestAnimationFrame(render3D);
+      requestAnimationFrame(tickFrame);
     }
-    render3D();
 
-    const mCanvas = document.getElementById('miniWave');
-    const mctx = mCanvas.getContext('2d');
-    function drawMiniWave() {
-      const W = mCanvas.width, H = mCanvas.height;
-      mctx.clearRect(0, 0, W, H);
-      const peak = Math.max(1024 * 1024, ...S.wave);
-      mctx.beginPath();
-      S.wave.forEach((v, i) => {
-        const x = (i / Math.max(1, S.wave.length - 1)) * W;
-        const y = H - Math.min(0.9, (v || 0) / peak) * (H - 4) - 2;
-        if (i === 0) mctx.moveTo(x, y); else mctx.lineTo(x, y);
-      });
-      mctx.strokeStyle = '#00f5b8'; mctx.lineWidth = 1.8; mctx.stroke();
-    }
-
-    pollState();
+    window.addEventListener('load', () => {
+      moveNavPill(document.querySelector('.nav-btn.active'));
+      resizeAllCanvases(); pollState(); tickFrame();
+    });
+    setTimeout(() => { moveNavPill(document.querySelector('.nav-btn.active')); resizeAllCanvases(); }, 80);
     setInterval(pollState, 1500);
   </script>
 </body>
