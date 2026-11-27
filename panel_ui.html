@@ -4,6 +4,8 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>DownloadStack Control v2.5 · Spatial 3D Command OS</title>
+<link rel="icon" type="image/x-icon" href="/favicon.ico" />
+<link rel="icon" type="image/png" href="/api/app_icon.png" />
 <style>
   :root {
     --bg-0: #030712;
@@ -1246,17 +1248,143 @@
     backdrop-filter: blur(14px);
   }
   @media (max-width: 1100px) { .cine-layout { grid-template-columns: 1fr; grid-template-rows: 220px 1fr; } }
+
+  /* ===== CINEMATIC SPATIAL 3D BOOT SPLASH ===== */
+  #boot-splash {
+    position: fixed; inset: 0; z-index: 99999;
+    display: flex; align-items: center; justify-content: center; flex-direction: column;
+    background: radial-gradient(circle at 50% 42%, #0c1d45 0%, #050b1c 46%, #02040a 100%);
+    overflow: hidden;
+    transition: opacity 0.62s cubic-bezier(0.22, 1, 0.36, 1), transform 0.62s cubic-bezier(0.22, 1, 0.36, 1), filter 0.62s ease;
+  }
+  #boot-splash.boot-exit {
+    opacity: 0; transform: scale(1.07); filter: blur(12px); pointer-events: none;
+  }
+  #boot-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .boot-core {
+    position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; gap: 16px;
+    padding: 28px 34px; text-align: center;
+  }
+  .boot-emblem-stage {
+    position: relative; width: 176px; height: 176px;
+    display: grid; place-items: center;
+  }
+  .boot-aura {
+    position: absolute; inset: -24px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(0, 229, 255, 0.38) 0%, rgba(139, 92, 246, 0.24) 45%, transparent 72%);
+    filter: blur(18px);
+    animation: bootAuraPulse 2.4s ease-in-out infinite;
+  }
+  .boot-ring {
+    position: absolute; border-radius: 50%; pointer-events: none;
+  }
+  .boot-ring-1 {
+    inset: 2px;
+    border: 1.5px solid transparent;
+    border-top-color: #00e5ff; border-right-color: rgba(0, 245, 184, 0.72);
+    box-shadow: 0 0 22px rgba(0, 229, 255, 0.45);
+    animation: bootSpin 3.6s linear infinite;
+  }
+  .boot-ring-2 {
+    inset: 12px;
+    border: 1.5px dashed rgba(167, 139, 250, 0.72);
+    animation: bootSpinRev 5.8s linear infinite;
+  }
+  .boot-icon-wrap {
+    position: relative; z-index: 2; width: 118px; height: 118px; border-radius: 28px;
+    overflow: hidden;
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.72), 0 0 34px rgba(0, 229, 255, 0.42), inset 0 1px 1px rgba(255,255,255,0.28);
+    animation: bootIconFloat 2.6s ease-in-out infinite, bootIconEnter 0.72s cubic-bezier(0.16, 1, 0.3, 1) both;
+    background: linear-gradient(145deg, #0b1938, #040814);
+    display: grid; place-items: center;
+  }
+  .boot-icon-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .boot-title {
+    font-size: 26px; font-weight: 900; letter-spacing: 3.5px;
+    background: linear-gradient(90deg, #ffffff 0%, #67e8f9 38%, #c4b5fd 72%, #6ee7b7 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    text-shadow: 0 0 32px rgba(0, 229, 255, 0.25);
+    animation: bootTextUp 0.75s 0.12s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .boot-sub {
+    font-size: 11.5px; letter-spacing: 3px; color: #94a9c9; margin-top: -8px;
+    animation: bootTextUp 0.75s 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .boot-prog-wrap {
+    width: 340px; max-width: 82vw; height: 5px; border-radius: 99px;
+    background: rgba(148, 169, 201, 0.14); overflow: hidden;
+    border: 1px solid rgba(0, 229, 255, 0.22);
+    box-shadow: 0 0 18px rgba(0, 229, 255, 0.16);
+  }
+  .boot-prog-fill {
+    height: 100%; width: 0%; border-radius: 99px;
+    background: linear-gradient(90deg, #00e5ff, #a78bfa, #00f5b8);
+    box-shadow: 0 0 16px rgba(0, 229, 255, 0.75);
+    transition: width 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .boot-steps {
+    display: flex; gap: 7px; flex-wrap: wrap; justify-content: center; max-width: 520px;
+  }
+  .boot-chip {
+    font-size: 10.5px; padding: 3px 9px; border-radius: 99px;
+    border: 1px solid rgba(148, 169, 201, 0.20);
+    color: rgba(148, 169, 201, 0.55); background: rgba(6, 13, 30, 0.65);
+    transition: all 0.28s ease;
+  }
+  .boot-chip.on {
+    border-color: rgba(0, 245, 184, 0.65); color: #6ee7b7;
+    background: rgba(0, 245, 184, 0.12);
+    box-shadow: 0 0 14px rgba(0, 245, 184, 0.24);
+  }
+  .boot-skip {
+    margin-top: 4px; font-size: 11px; color: rgba(148, 169, 201, 0.62);
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(148, 169, 201, 0.18);
+    padding: 4px 12px; border-radius: 99px; cursor: pointer; transition: all 0.2s;
+  }
+  .boot-skip:hover { color: #fff; border-color: rgba(0, 229, 255, 0.55); background: rgba(0, 229, 255, 0.12); }
+  @keyframes bootSpin { to { transform: rotate(360deg); } }
+  @keyframes bootSpinRev { to { transform: rotate(-360deg); } }
+  @keyframes bootAuraPulse { 0%,100% { transform: scale(0.95); opacity: 0.78; } 50% { transform: scale(1.08); opacity: 1; } }
+  @keyframes bootIconFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+  @keyframes bootIconEnter { from { opacity: 0; transform: scale(0.62) rotateY(-22deg); } to { opacity: 1; transform: scale(1) rotateY(0); } }
+  @keyframes bootTextUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 </style>
 </head>
 <body>
+<!-- ================= CINEMATIC 3D BOOT SPLASH ================= -->
+<div id="boot-splash" class="hidden" onclick="if(event.target===this)finishBootSplash()">
+  <canvas id="boot-canvas"></canvas>
+  <div class="boot-core">
+    <div class="boot-emblem-stage">
+      <div class="boot-aura"></div>
+      <div class="boot-ring boot-ring-1"></div>
+      <div class="boot-ring boot-ring-2"></div>
+      <div class="boot-icon-wrap">
+        <img src="/api/app_icon.png" alt="DownloadStack Control" onerror="this.style.display='none'" />
+      </div>
+    </div>
+    <div class="boot-title">DOWNLOADSTACK CONTROL</div>
+    <div class="boot-sub mono">v2.5 · SPATIAL 3D COMMAND OS</div>
+    <div class="boot-prog-wrap"><div class="boot-prog-fill" id="boot-prog-fill"></div></div>
+    <div class="mono" style="font-size:11px;color:#67e8f9;min-height:16px;" id="boot-status-txt">正在唤醒 Spatial 3D 控制台核心…</div>
+    <div class="boot-steps mono">
+      <span class="boot-chip" id="bs-0">⚡ 核心调度引擎</span>
+      <span class="boot-chip" id="bs-1">🧩 20,000+ 提示词 Skill</span>
+      <span class="boot-chip" id="bs-2">🎞️ 4K WebGL2 影院</span>
+      <span class="boot-chip" id="bs-3">🎨 本地 AI 创作画室</span>
+    </div>
+    <button class="boot-skip mono" onclick="finishBootSplash()">跳过启动动画 →</button>
+  </div>
+</div>
+
 <canvas id="bg-3d-canvas"></canvas>
 <div class="aura-overlay" id="aura-overlay"></div>
 
 <div class="app-shell">
   <!-- ================= TOP HUD NAVIGATION (WITH YT PANEL) ================= -->
   <header class="topbar">
-    <div class="brand" onclick="switchView('cockpit')" title="返回 3D 控制台总览">
-      <div class="brand-orb"><div class="brand-orb-in">D</div></div>
+    <div class="brand" onclick="if(event.shiftKey){runBootSplash(true);}else{switchView('cockpit');}" title="返回 3D 控制台总览（按住 Shift 点击可重播启动动画）">
+      <div class="brand-orb" style="padding:0;overflow:hidden;"><img src="/api/app_icon.png" alt="D" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" onerror="this.outerHTML='<div class=&quot;brand-orb-in&quot;>D</div>'" /></div>
       <div class="brand-txt">
         <span class="brand-title">DownloadStack v2.5</span>
         <span class="brand-sub mono">SPATIAL COMMAND OS</span>
@@ -7727,8 +7855,105 @@
     requestAnimationFrame(tickFrame);
   }
 
+  /* ===================== CINEMATIC 3D BOOT SPLASH ===================== */
+  let _bootAnimRaf = 0;
+  let _bootTimers = [];
+
+  function finishBootSplash() {
+    const el = $('boot-splash');
+    if (!el || el.classList.contains('hidden')) return;
+    _bootTimers.forEach(t => clearTimeout(t));
+    _bootTimers = [];
+    el.classList.add('boot-exit');
+    if (_bootAnimRaf) { cancelAnimationFrame(_bootAnimRaf); _bootAnimRaf = 0; }
+    setTimeout(() => {
+      el.classList.add('hidden');
+      el.classList.remove('boot-exit');
+    }, 640);
+  }
+  window.finishBootSplash = finishBootSplash;
+
+  function runBootSplash(force = false) {
+    const el = $('boot-splash');
+    if (!el) return;
+    const params = new URLSearchParams(location.search);
+    const wantBoot = force || params.get('boot') === '1' || !sessionStorage.getItem('ds_booted_v25');
+    if (!wantBoot) return;
+    sessionStorage.setItem('ds_booted_v25', '1');
+    if (params.get('boot') === '1') {
+      try { history.replaceState(null, '', location.pathname); } catch (e) {}
+    }
+
+    el.classList.remove('hidden', 'boot-exit');
+    for (let i = 0; i < 4; i++) { const c = $('bs-' + i); if (c) c.classList.remove('on'); }
+    const fill = $('boot-prog-fill');
+    const txt = $('boot-status-txt');
+    if (fill) fill.style.width = '6%';
+    if (txt) txt.textContent = '正在唤醒 Spatial 3D 控制台核心…';
+
+    // 3D Starfield / Quantum Warp Canvas
+    const cv = $('boot-canvas');
+    if (cv) {
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      const w = cv.width = Math.floor(window.innerWidth * dpr);
+      const h = cv.height = Math.floor(window.innerHeight * dpr);
+      const ctx = cv.getContext('2d');
+      const stars = Array.from({ length: 130 }, () => ({
+        x: (Math.random() - 0.5) * w * 1.4,
+        y: (Math.random() - 0.5) * h * 1.4,
+        z: Math.random() * 900 + 80,
+        col: ['#00e5ff', '#a78bfa', '#00f5b8', '#e0f2fe'][Math.floor(Math.random() * 4)],
+      }));
+      const drawBoot = () => {
+        ctx.fillStyle = 'rgba(2, 5, 15, 0.32)';
+        ctx.fillRect(0, 0, w, h);
+        const cx = w * 0.5, cy = h * 0.45;
+        for (const s of stars) {
+          const pz = s.z;
+          s.z -= 13;
+          if (s.z <= 12) {
+            s.x = (Math.random() - 0.5) * w * 1.4;
+            s.y = (Math.random() - 0.5) * h * 1.4;
+            s.z = 920;
+            continue;
+          }
+          const sx = cx + (s.x / s.z) * 380;
+          const sy = cy + (s.y / s.z) * 380;
+          const px = cx + (s.x / pz) * 380;
+          const py = cy + (s.y / pz) * 380;
+          ctx.strokeStyle = s.col;
+          ctx.globalAlpha = Math.min(0.9, (920 - s.z) / 700);
+          ctx.lineWidth = Math.max(1, (1 - s.z / 920) * 2.6 * dpr);
+          ctx.beginPath();
+          ctx.moveTo(px, py);
+          ctx.lineTo(sx, sy);
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+        _bootAnimRaf = requestAnimationFrame(drawBoot);
+      };
+      _bootAnimRaf = requestAnimationFrame(drawBoot);
+    }
+
+    const stages = [
+      [220,  28, 0, '⚡ 已连接本地多线程引擎与 5 源磁力内核'],
+      [560,  58, 1, '🧩 已加载 20,000+ 提示词 Skill 与 Remix 引擎'],
+      [920,  84, 2, '🎞️ 已初始化 WebGL2 4K FidelityFX CAS 影院'],
+      [1280, 100, 3, '✨ SYSTEM ONLINE · 欢迎进入 DownloadStack Control v2.5'],
+    ];
+    _bootTimers = stages.map(([ms, pct, idx, label]) => setTimeout(() => {
+      if (fill) fill.style.width = pct + '%';
+      if (txt) txt.textContent = label;
+      const chip = $('bs-' + idx);
+      if (chip) chip.classList.add('on');
+    }, ms));
+    _bootTimers.push(setTimeout(() => finishBootSplash(), 1880));
+  }
+  window.runBootSplash = runBootSplash;
+
   /* ===================== INIT ===================== */
   function init() {
+    runBootSplash(false);
     const audio = $('global-audio');
     if (audio) {
       audio.addEventListener('play', () => { ensureAudioAnalyser(); updatePlayButtons(); });

@@ -4667,6 +4667,25 @@ def run_3d_server(open_browser=True):
                     return
                 self._proxy_qbit("GET")
                 return
+            if req_path in ("/favicon.ico", "/api/app_icon.png"):
+                is_ico = (req_path == "/favicon.ico")
+                fn = "DownloadStackControl.ico" if is_ico else "DownloadStackControl.png"
+                cands = [
+                    APP_DIR / "cache" / "icons" / fn,
+                    APP_DIR / "assets" / fn,
+                ]
+                hit = next((p for p in cands if p.is_file()), None)
+                if hit is None:
+                    self.send_error(404, "Icon not found")
+                    return
+                data = hit.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "image/x-icon" if is_ico else "image/png")
+                self.send_header("Cache-Control", "public, max-age=3600")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
             if req_path in ("/", "/index.html"):
                 html = ui_file.read_bytes()
                 self.send_response(200)
