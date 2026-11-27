@@ -468,9 +468,9 @@
   }
   .omni-row { display: flex; gap: 7px; align-items: center; }
 
-  /* 10-Portal Full-Feature 3D Neon Matrix (2x5, ALL features visible & 1-click clickable!) */
+  /* 12-Portal Full-Feature 3D Neon Matrix (2x6, ALL features visible & 1-click clickable!) */
   .portal-grid {
-    display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px;
+    display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 7px;
     flex-shrink: 0;
     perspective: 1200px;
   }
@@ -1505,10 +1505,20 @@
               <div class="portal-name">磁力搜索 / DHT</div>
               <div class="portal-sub" id="p-mag-sub">站内搜磁 · Tracker注入</div>
             </button>
+            <button class="portal-card tilt-3d" style="--p-col:#c4b5fd;--p-glow:rgba(196,181,253,0.44);" onclick="switchView('cinema')">
+              <div class="portal-head"><span class="portal-ico">🎞️</span><span class="portal-go">原画4K</span></div>
+              <div class="portal-name">站内原画影院</div>
+              <div class="portal-sub">4K修复 · 看完即删</div>
+            </button>
             <button class="portal-card tilt-3d" style="--p-col:#38bdf8;--p-glow:rgba(56,189,248,0.42);" onclick="toggleMonsterChat(true)">
               <div class="portal-head"><span class="portal-ico">👾</span><span class="portal-go">问答</span></div>
               <div class="portal-name">赛博小怪兽</div>
               <div class="portal-sub" id="p-cx-sub">Codex 智能体</div>
+            </button>
+            <button class="portal-card tilt-3d" style="--p-col:#fbbf24;--p-glow:rgba(251,191,36,0.38);" onclick="switchView('tutorial')">
+              <div class="portal-head"><span class="portal-ico">📖</span><span class="portal-go">速通</span></div>
+              <div class="portal-name">全功能教程</div>
+              <div class="portal-sub">11章步骤 · 避坑FAQ</div>
             </button>
           </div>
 
@@ -2473,7 +2483,7 @@
           <div class="card-body">
             <input id="cine-filter" class="inp" style="padding:7px 10px;font-size:12px;" placeholder="筛选片名…" oninput="renderCinemaLib()" />
             <div class="list-scroll" id="cine-list"><div class="c-dim" style="padding:14px;font-size:12px;">打开本页自动扫描 qB / Aria2 / YT 下载目录…</div></div>
-            <div class="mono c-dim" style="font-size:10.5px;line-height:1.6;">空格 播放/暂停 · ←/→ 10 秒（Shift 60 秒） · ↑/↓ 音量 · F / 双击 全屏 · M 静音 · C 字幕 · &lt; &gt; 倍速 · N 下一部</div>
+            <div class="mono c-dim" style="font-size:10.5px;line-height:1.6;">空格 播放/暂停 · ←/→ 10秒（Shift 60秒） · ↑/↓ 音量 · F / 双击 真全屏 · I 沉浸铺满 · E 4K画质修复 · D 选集抽屉 · M 静音 · C 字幕 · &lt; &gt; 倍速 · N 下一部</div>
           </div>
         </div>
         <div class="cine-main">
@@ -5695,18 +5705,37 @@
       summary: '将 Aria2 多线程直链、完整 AriaNg 界面、完整 qBittorrent WebUI 全部同源内嵌在同一个工作台内，支持自动分流与任务统一管控。',
       steps: [
         '【实时队列页】：在顶部快捷框粘贴任意 HTTP/HTTPS 直链、磁力链接或 .torrent 地址，点「⚡ 自动分流」自动把直链交 Aria2、把磁力/种子交 qBittorrent。',
-        '下方双栏实时展示 Aria2 与 qBittorrent 的活跃任务进度、速度与状态，支持一键暂停、继续与移除。',
+        '下方双栏实时展示 Aria2 与 qBittorrent 的活跃任务进度、速度与状态，支持一键暂停、继续、移除与「🧹 清理已停」。',
         '【内置 AriaNg】：点击顶部「🌐 内置 AriaNg」子标签，免输密钥直接同源加载完整 AriaNg，高级分片/限速/历史记录一站搞定。',
-        '【内置 qBittorrent】：点击「🌀 内置 qBittorrent」子标签，由后端同源反代 /qbit/，直接在软件内管理做种、优先级、分类与限速。'
+        '【内置 qBittorrent】：点击「🌀 内置 qBittorrent」子标签，由后端同源反代 /qbit/（含 403 自动重登），直接在软件内管理做种、优先级、分类与限速。'
       ],
       tips: [
-        '如果内置 qBittorrent 提示未连接，先回左侧引擎栏启动 qBittorrent；切勿短时间内反复输错密码，避免触发 qB 本地 IP 登录退避保护。'
+        '系统页或顶部快捷入口还提供「一键清空（无残留）」，可一次清干净 Aria2/qB 任务、磁盘文件、控制文件残骸与缓存。'
+      ]
+    },
+    {
+      id: 'cinema',
+      ico: '🎞️',
+      tag: '第 9 章 · 原画影院',
+      title: '站内原画 4K 影院 · 4K画质修复 & 看完即删',
+      color: '#c4b5fd',
+      target: { view: 'cinema' },
+      btnLabel: '进入站内原画影院',
+      summary: '种子下载完毕即刻自动入库并弹窗直达全屏观影，支持原画零压缩直出、MKV/TS 无损直封 (-c:v copy)、GPU 4K 实时修复、RTX 显卡重建纯 4K 母带及看完即删清缓存。',
+      steps: [
+        '【一键直达观影】：种子下载达到 100% 时左下角自动弹窗提示，点击「⛶ 立即全屏看」或在队列/磁力监视器点「🎬 沉浸观看」直接开播。',
+        '【原画零压缩 + 音轨/字幕自动兼容】：优先 HTTP 206 原字节直出；若检测到 MKV 含 AC3/DTS/TrueHD 音轨，自动无缝切为「💎 原画无损直封 (-c:v copy)」保持视频零压缩并恢复声音，同时自动提取外挂 (.srt/.vtt/.ass) 与 MKV 内嵌中文字幕。',
+        '【✨ 一键 4K 画质修复（快捷键 E）】：观感偏软、发灰或片源被压缩时，点击顶栏/底栏「✨ 4K画质修复」0 毫秒启动 GPU WebGL2 FidelityFX CAS 锐化 + HDR 防发灰还原；点「🔧 修复台」可分屏对比原画，或点「🚀 显卡重建纯 4K 母带」用 RTX NVENC 生成 3840×2160 高码率母带。',
+        '【🗑️ 看完即删 & 清缓存】：片尾播完自动弹出「看完即删 & 清缓存」遮罩，顶栏与片库每行也带一键删除键，先安全释放文件锁再同步删除视频、关联 qB 种子、同名字幕与缓存，精准汇报释放空间。'
+      ],
+      tips: [
+        '常用全屏快捷键：F/双击 真全屏 · I 窗口沉浸铺满 · E 4K画质修复 · D 全屏选集抽屉 · C 切换字幕 · 空格 暂停/播放。'
       ]
     },
     {
       id: 'codex',
       ico: '👾',
-      tag: '第 9 章 · 智能体',
+      tag: '第 10 章 · 智能体',
       title: '赛博小怪兽 · Codex 内置智能体配置与对话',
       color: '#38bdf8',
       target: { view: 'codex' },
@@ -5725,7 +5754,7 @@
     {
       id: 'system',
       ico: '🛠️',
-      tag: '第 10 章 · 运维与 FAQ',
+      tag: '第 11 章 · 运维与 FAQ',
       title: '系统配置、安全边界与常见问题速查',
       color: '#34d399',
       target: { view: 'system' },
@@ -7268,7 +7297,9 @@ function purgeAll() {
     '· 面板缓存\n\n' +
     '此操作不可恢复，确定执行？'
   )) return;
-  window.act('purge_all', { remove_files: true });
+  window.act('purge_all', { remove_files: true }).then(() => {
+    if (window.loadCinemaLib) window.loadCinemaLib(true);
+  });
 }
 </script>
 </body>

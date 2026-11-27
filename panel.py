@@ -328,7 +328,7 @@ def pid_alive(pid):
         pid = int(pid)
         if IS_WIN:
             out = subprocess.run(["tasklist", "/FI", "PID eq %d" % pid, "/NH"],
-                                 capture_output=True, text=True, timeout=5,
+                                 capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5,
                                  creationflags=0x08000000)
             return str(pid) in (out.stdout or "")
         os.kill(pid, 0)
@@ -1121,7 +1121,7 @@ class ControlBackend:
         try:
             enc_txt = subprocess.run(
                 [ffmpeg_exe, "-hide_banner", "-encoders"],
-                capture_output=True, text=True, timeout=6,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=6,
                 creationflags=(0x08000000 if IS_WIN else 0),
             ).stdout or ""
             if "hevc_nvenc" in enc_txt:
@@ -1882,7 +1882,7 @@ class ControlBackend:
                                 [ffprobe, "-v", "error", "-select_streams", "v:0",
                                  "-show_entries", "stream=width,height,codec_name",
                                  "-of", "csv=p=0", last_file],
-                                capture_output=True, text=True, timeout=6, **_popen_kwargs()
+                                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=6, **_popen_kwargs()
                             )
                             parts = [x.strip() for x in (pr.stdout or "").strip().split(",") if x.strip()]
                             if len(parts) >= 2:
@@ -4232,10 +4232,31 @@ def run_3d_server(open_browser=True):
                 length = int(self.headers.get("Content-Length") or 0)
                 body_bytes = self.rfile.read(length) if length > 0 else b""
             try:
-                r = requests.request(
+                _ps = requests.Session()
+                _ps.trust_env = False
+                r = _ps.request(
                     method, target_url, headers=hdrs, data=body_bytes,
-                    proxies={"http": None, "https": None}, timeout=12, allow_redirects=False
+                    timeout=12, allow_redirects=False
                 )
+                # qB 重启会让浏览器里的旧 cookie 失效（403）；代理层自动登录后重试一次
+                if r.status_code == 403:
+                    try:
+                        _s = requests.Session()
+                        _s.trust_env = False
+                        _qc = backend.cfg.get("qbit") or {}
+                        _s.post(
+                            "http://%s:%d/api/v2/auth/login" % (host, port),
+                            data={"username": _qc.get("user") or "admin",
+                                  "password": _qc.get("pass") or ""},
+                            timeout=6,
+                        )
+                        _h = {k: v for k, v in hdrs.items() if k.lower() != "cookie"}
+                        r = _s.request(
+                            method, target_url, headers=_h, data=body_bytes,
+                            timeout=12, allow_redirects=False
+                        )
+                    except Exception:
+                        pass
                 content = r.content
                 ctype = r.headers.get("Content-Type") or "application/octet-stream"
                 # 把 qB 根相对路径重写到 /qbit/ 下，确保站内 iframe 资源 100% 正常加载
@@ -4260,13 +4281,18 @@ def run_3d_server(open_browser=True):
                 self.send_header("Content-Length", str(len(content)))
                 self.end_headers()
                 self.wfile.write(content)
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                return
             except Exception as ex:
-                err = ("qBittorrent 内置代理连接失败：%s" % ex).encode("utf-8")
-                self.send_response(502)
-                self.send_header("Content-Type", "text/plain; charset=utf-8")
-                self.send_header("Content-Length", str(len(err)))
-                self.end_headers()
-                self.wfile.write(err)
+                try:
+                    err = ("qBittorrent 内置代理连接失败：%s" % ex).encode("utf-8")
+                    self.send_response(502)
+                    self.send_header("Content-Type", "text/plain; charset=utf-8")
+                    self.send_header("Content-Length", str(len(err)))
+                    self.end_headers()
+                    self.wfile.write(err)
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                    return
 
         def do_GET(self):
             req_path = self.path.split("?", 1)[0]

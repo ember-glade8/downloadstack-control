@@ -933,7 +933,7 @@ def find_compatible_py312() -> str:
         for ver in ("-3.12", "-3.11", "-3.10"):
             try:
                 r = subprocess.run(["py", ver, "-c", "import sys;print(sys.executable)"],
-                                   capture_output=True, text=True, timeout=4, **_popen_kwargs())
+                                   capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=4, **_popen_kwargs())
                 p = (r.stdout or "").strip()
                 if r.returncode == 0 and p and Path(p).is_file():
                     cands.append(p)
@@ -966,7 +966,7 @@ def detect_gpu_name() -> str:
     try:
         r = subprocess.run(
             ["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader"],
-            capture_output=True, text=True, timeout=3, **_popen_kwargs()
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=3, **_popen_kwargs()
         )
         if r.returncode == 0 and (r.stdout or "").strip():
             return r.stdout.strip().splitlines()[0]
