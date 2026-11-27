@@ -22,6 +22,11 @@ from pathlib import Path
 
 import requests
 
+try:
+    import prompt_engine as PE
+except Exception:
+    PE = None
+
 # ================= 平台差异层（Win / Linux / macOS） =================
 IS_WIN = (os.name == "nt")
 IS_MAC = (sys.platform == "darwin")
@@ -220,8 +225,26 @@ DEFAULT_CFG = {
     },
     "ui": {"theme": "dark", "autostart_panel": False, "autostart_aria2": False,
            "upscale": False},
-    "paths": {"downloads": str(DL_HOME), "music": "", "voice": ""},
+    "paths": {"downloads": str(DL_HOME), "music": "", "voice": "", "aigc": ""},
     "voice": {"api_url": "http://127.0.0.1:9880"},
+    "comfyui": {
+        "enabled": False,
+        "owner_only": True,
+        "url": "http://127.0.0.1:8188",
+        "root": "",
+        "start_bat": "",
+        "custom_mode": "comfyui",
+        "custom_url": "",
+        "custom_api_key": "",
+        "custom_model": "",
+        "custom_workflow_json": "",
+    },
+    "codex": {
+        "base_url": "",
+        "api_key": "",
+        "model": "gpt-5.3-codex",
+        "api_style": "auto",
+    },
 }
 
 
@@ -559,8 +582,9 @@ class ControlBackend:
             "running": False, "pid": None, "query": "", "source": "all",
             "fmt": "mp3", "title": "", "artist": "",
             "pct": 0.0, "speed": "", "eta": "", "status": "就绪",
-            "results": [], "logs": [], "file": "",
+            "results": [], "lyrics": {}, "logs": [], "file": "",
         }
+        self.stream_tokens = {}
         cached_ref = CACHE / "ref_voice.wav"
         self.voice_job = {
             "running": False, "pid": None, "installing": False,
@@ -572,6 +596,17 @@ class ControlBackend:
             "api_url": str((self.cfg.get("voice") or {}).get("api_url") or "http://127.0.0.1:9880"),
             "logs": [],
         }
+        self.aigc_job = {
+            "running": False, "cancel": False,
+            "mode": "t2i", "engine": "owner_comfy",
+            "prompt": "", "neg_prompt": "",
+            "width": 1024, "height": 576, "steps": 8, "length": 33, "seed": -1,
+            "first_frame": "", "first_frame_name": "",
+            "pct": 0.0, "status": "就绪",
+            "gallery": [], "logs": [],
+        }
+        self._aigc_env_cache = None
+        self._aigc_env_ts = 0.0
         self._voice_env_cache = None
         self._voice_env_ts = 0.0
         self._recent_cache = []
@@ -644,6 +679,13 @@ class ControlBackend:
         base = self.cfg.get("paths", {}).get("downloads") or str(DL_HOME)
         return str(Path(base) / "voice-clone")
 
+    def aigc_output(self):
+        custom = (self.cfg.get("paths", {}).get("aigc") or "").strip()
+        if custom:
+            return custom
+        base = self.cfg.get("paths", {}).get("downloads") or str(DL_HOME)
+        return str(Path(base) / "ai-studio")
+
     def _allowed_media_roots(self):
         base = Path(self.cfg.get("paths", {}).get("downloads") or str(DL_HOME))
         cands = [
@@ -653,11 +695,24 @@ class ControlBackend:
             Path(self.yt_output()),
             Path(self.music_output()),
             Path(self.voice_output()),
+            Path(self.aigc_output()),
             CACHE,
         ]
+        comfy_root = (self.cfg.get("comfyui") or {}).get("root") or ""
+        if comfy_root:
+            cands.append(Path(comfy_root) / "output")
+            cands.append(Path(comfy_root) / "input")
         with self.lock:
             for fp in (self.yt_job.get("file"), self.music_job.get("file"),
-                       self.voice_job.get("out_file"), self.voice_job.get("ref_wav")):
+                       self.voice_job.get("out_file"), self.voice_job.get("ref_wav"),
+                       self.aigc_job.get("first_frame")):
+                if fp:
+                    try:
+                        cands.append(Path(fp).resolve().parent)
+                    except Exception:
+                        pass
+            for g in (self.aigc_job.get("gallery") or []):
+                fp = g.get("path") if isinstance(g, dict) else ""
                 if fp:
                     try:
                         cands.append(Path(fp).resolve().parent)
@@ -680,7 +735,11 @@ class ControlBackend:
             return None
         if not target.is_file():
             return None
-        allowed_exts = {".mp3", ".flac", ".wav", ".m4a", ".ogg", ".aac", ".opus", ".webm", ".mp4", ".mkv", ".mov"}
+        allowed_exts = {
+            ".mp3", ".flac", ".wav", ".m4a", ".ogg", ".aac", ".opus",
+            ".webm", ".mp4", ".mkv", ".mov",
+            ".png", ".jpg", ".jpeg", ".webp", ".gif",
+        }
         if target.suffix.lower() not in allowed_exts:
             return None
         for rt in self._allowed_media_roots():
@@ -1456,10 +1515,23 @@ class ControlBackend:
                 self._music_append_log("[WARN] 音源[%s]退出码 %s，自动切换下一候选音源…" % (label, rc))
 
             if ok:
+                lyr = None
+                if MS is not None:
+                    try:
+                        lyr = MS.fetch_song_lyrics(title=title or query, artist=artist, query=query)
+                        if lyr and lyr.get("raw") and final_file:
+                            try:
+                                Path(final_file).with_suffix(".lrc").write_text(lyr["raw"], encoding="utf-8")
+                            except Exception:
+                                pass
+                    except Exception:
+                        lyr = None
                 with self.lock:
                     self.music_job["pct"] = 100.0
                     self.music_job["status"] = "下载完成 ✔"
                     self.music_job["file"] = final_file
+                    if lyr and lyr.get("lines"):
+                        self.music_job["lyrics"] = lyr
                 self._recent_ts = 0.0
                 self._music_append_log("[OK] 歌曲已保存 → %s" % (final_file or out_dir))
                 self.log("音乐工坊下载完成 → %s" % (Path(final_file).name if final_file else out_dir), "OK")
@@ -1706,6 +1778,220 @@ class ControlBackend:
                 self.voice_job["running"] = False
                 self.voice_job["pid"] = None
 
+    def _aigc_append_log(self, line: str):
+        ts = datetime.now().strftime("%H:%M:%S")
+        with self.lock:
+            self.aigc_job["logs"].append("%s %s" % (ts, line))
+            if len(self.aigc_job["logs"]) > 180:
+                self.aigc_job["logs"] = self.aigc_job["logs"][-180:]
+
+    def _get_aigc_env_cached(self, force: bool = False):
+        now = time.time()
+        if force or self._aigc_env_cache is None or (now - self._aigc_env_ts) > 5.0:
+            cc = self.cfg.get("comfyui") or {}
+            owner_enabled = bool(cc.get("enabled"))
+            url = str(cc.get("url") or "http://127.0.0.1:8188")
+            root = str(cc.get("root") or "")
+            bat = str(cc.get("start_bat") or "")
+            srv = MS.probe_comfyui_server(url, timeout=1.2) if (MS and owner_enabled) else {"online": False, "url": url}
+            models = MS.detect_comfyui_models(root, bat) if (MS and owner_enabled) else {"root_exists": False}
+            custom_url = str(cc.get("custom_url") or "")
+            custom_mode = str(cc.get("custom_mode") or "comfyui")
+            custom_srv = (MS.probe_comfyui_server(custom_url, timeout=1.0)
+                          if (MS and custom_mode == "comfyui" and custom_url)
+                          else {"online": bool(custom_url)})
+            self._aigc_env_cache = {
+                "owner_enabled": owner_enabled,
+                "server": srv,
+                "models": models,
+                "custom": {
+                    "configured": bool(custom_url),
+                    "mode": custom_mode,
+                    "url": custom_url,
+                    "model": str(cc.get("custom_model") or ""),
+                    "has_key": bool((cc.get("custom_api_key") or "").strip()),
+                    "has_workflow": bool((cc.get("custom_workflow_json") or "").strip()),
+                    "online": bool(custom_srv.get("online")),
+                },
+            }
+            self._aigc_env_ts = now
+        return dict(self._aigc_env_cache)
+
+    def _run_aigc_worker(self, engine: str, mode: str, prompt: str, neg_prompt: str,
+                         width: int, height: int, steps: int, length: int, seed: int,
+                         first_frame: str, out_dir_str: str):
+        out_dir = Path(out_dir_str or self.aigc_output())
+        out_dir.mkdir(parents=True, exist_ok=True)
+        cc = self.cfg.get("comfyui") or {}
+        try:
+            if MS is None:
+                raise RuntimeError("media_studio 模块缺失")
+
+            def _prog(pct, st):
+                with self.lock:
+                    self.aigc_job["pct"] = round(float(pct), 1)
+                    self.aigc_job["status"] = st
+
+            def _canceled():
+                with self.lock:
+                    return bool(self.aigc_job.get("cancel"))
+
+            if engine == "custom":
+                cmode = str(cc.get("custom_mode") or "comfyui").strip().lower()
+                curl = str(cc.get("custom_url") or "").strip()
+                ckey = str(cc.get("custom_api_key") or "").strip()
+                cmdl = str(cc.get("custom_model") or "").strip()
+                cwf = str(cc.get("custom_workflow_json") or "").strip()
+                if not curl:
+                    raise RuntimeError("尚未配置自定义本地模型，请先点「🔌 接入我的本地模型」填入地址")
+                if cmode in ("sdwebui", "openai_image"):
+                    _prog(25.0, "正在调用自定义本地生图模型…")
+                    self._aigc_append_log("[INFO] 调用自定义接口 [%s] → %s" % (cmode, curl))
+                    ok, msg, saved = MS.run_custom_http_image_api(
+                        cmode, curl, ckey, cmdl, prompt, neg_prompt, width, height, steps, out_dir
+                    )
+                else:
+                    srv = MS.probe_comfyui_server(curl, timeout=2.0)
+                    if not srv.get("online"):
+                        raise RuntimeError("无法连接到自定义 ComfyUI：%s（请确认服务已启动）" % curl)
+                    img_name = ""
+                    if first_frame and Path(first_frame).is_file():
+                        uok, ures = MS.comfyui_upload_image(curl, Path(first_frame))
+                        if not uok:
+                            raise RuntimeError(ures)
+                        img_name = ures
+                    if cwf:
+                        wf = MS.apply_custom_comfy_workflow(cwf, prompt, neg_prompt, img_name, seed)
+                    elif cmdl:
+                        wf = MS.build_sd_checkpoint_t2i_workflow(cmdl, prompt, neg_prompt, width, height, steps, seed)
+                    else:
+                        raise RuntimeError("自定义 ComfyUI 模式请提供 API Workflow JSON 或 Checkpoint 模型名")
+                    self._aigc_append_log("[INFO] 已提交自定义 ComfyUI 任务 → %s" % curl)
+                    ok, msg, saved = MS.comfyui_queue_and_wait(curl, wf, out_dir, _prog, _canceled)
+            else:
+                if not cc.get("enabled"):
+                    raise RuntimeError("本机未启用个人 ComfyUI，请点击「🔌 接入我的本地模型」接入你自己的模型")
+                url = str(cc.get("url") or "http://127.0.0.1:8188")
+                srv = MS.probe_comfyui_server(url, timeout=2.0)
+                if not srv.get("online"):
+                    self._aigc_append_log("[WARN] ComfyUI (%s) 未启动，尝试自动拉起本地 ComfyUI…" % url)
+                    _prog(5.0, "正在拉起本地 ComfyUI 服务…")
+                    ok_s, msg_s, _ = self.handle_action({"action": "aigc_start_comfy"})
+                    if not ok_s:
+                        raise RuntimeError("ComfyUI 未运行且自动拉起失败：%s" % msg_s)
+                    for _i in range(45):
+                        if _canceled():
+                            raise RuntimeError("已取消任务")
+                        time.sleep(2.0)
+                        srv = MS.probe_comfyui_server(url, timeout=1.5)
+                        if srv.get("online"):
+                            break
+                        _prog(min(18.0, 5.0 + _i * 0.3), "等待 ComfyUI 端口就绪 (%ds)…" % ((_i + 1) * 2))
+                    if not srv.get("online"):
+                        raise RuntimeError("等待 ComfyUI 启动超时，请查看 ComfyUI 窗口或稍后重试")
+
+                models = MS.detect_comfyui_models(str(cc.get("root") or ""), str(cc.get("start_bat") or ""))
+                if mode == "t2i":
+                    if models.get("z_image_ready"):
+                        self._aigc_append_log("[INFO] 使用本地 Z-Image Turbo 文生图 (%dx%d, %d 步)" % (width, height, steps))
+                        wf = MS.build_zimage_t2i_workflow(prompt, neg_prompt, width, height, steps, seed)
+                    elif models.get("checkpoints"):
+                        ckpt = models["checkpoints"][0]
+                        self._aigc_append_log("[INFO] 使用本地 Checkpoint %s 文生图" % ckpt)
+                        wf = MS.build_sd_checkpoint_t2i_workflow(ckpt, prompt, neg_prompt, width, height, steps, seed)
+                    else:
+                        raise RuntimeError("未在本地 ComfyUI 检测到完整文生图模型")
+                    ok, msg, saved = MS.comfyui_queue_and_wait(url, wf, out_dir, _prog, _canceled)
+                elif mode in ("i2v", "t2v"):
+                    if not models.get("wan22_i2v_ready"):
+                        raise RuntimeError("未检测到完整 Wan 2.2 I2V 视频模型文件")
+                    frame_path = Path(first_frame) if (first_frame and Path(first_frame).is_file()) else None
+                    if mode == "t2v" or frame_path is None:
+                        if not models.get("z_image_ready"):
+                            raise RuntimeError("图生视频请先上传或从画廊选择首帧图片")
+                        self._aigc_append_log("[INFO] 文生视频第 1 步：用 Z-Image Turbo 自动生成首帧 (832x480)…")
+                        _prog(10.0, "第 1/2 步：Z-Image Turbo 生成首帧…")
+                        wf1 = MS.build_zimage_t2i_workflow(prompt, neg_prompt, width or 832, height or 480, 8, seed, filename_prefix="DS_KeyFrame")
+                        ok1, msg1, saved1 = MS.comfyui_queue_and_wait(url, wf1, out_dir, lambda p, s: _prog(p * 0.42, "首帧生成：" + s), _canceled)
+                        if not ok1 or not saved1:
+                            raise RuntimeError("首帧生成失败：" + msg1)
+                        frame_path = Path(saved1[0]["path"])
+                        self._aigc_append_log("[OK] 首帧已生成 → %s" % frame_path.name)
+
+                    _prog(45.0, "第 2/2 步：上传首帧至 Wan 2.2 I2V…")
+                    uok, ures = MS.comfyui_upload_image(url, frame_path)
+                    if not uok:
+                        raise RuntimeError(ures)
+                    use_lora = bool(models.get("wan22_lora_ready"))
+                    v_steps = 4 if use_lora else max(8, steps)
+                    self._aigc_append_log("[INFO] 启动 Wan 2.2 I2V 14B (%dx%d, %d 帧, %d 步%s)…" % (
+                        width, height, length, v_steps, " LightX2V 4-Step LoRA" if use_lora else ""
+                    ))
+                    wf2 = MS.build_wan22_i2v_workflow(
+                        prompt, neg_prompt, ures, width=width, height=height,
+                        length=length, steps=v_steps, seed=seed, use_4step_lora=use_lora
+                    )
+                    ok, msg, saved = MS.comfyui_queue_and_wait(
+                        url, wf2, out_dir,
+                        lambda p, s: _prog(45.0 + p * 0.55, "视频生成：" + s),
+                        _canceled, timeout_sec=1200
+                    )
+                else:
+                    raise RuntimeError("未知生成模式：" + mode)
+
+            if ok and saved:
+                now_str = datetime.now().strftime("%H:%M:%S")
+                with self.lock:
+                    for it in saved:
+                        self.aigc_job["gallery"].insert(0, {
+                            "path": it["path"],
+                            "name": it["name"],
+                            "kind": it["kind"],
+                            "prompt": prompt[:120],
+                            "mode": mode,
+                            "time": now_str,
+                        })
+                    self.aigc_job["gallery"] = self.aigc_job["gallery"][:24]
+                    self.aigc_job["pct"] = 100.0
+                    self.aigc_job["status"] = msg
+                self._recent_ts = 0.0
+                self._aigc_append_log("[OK] %s → %s" % (msg, saved[0]["name"]))
+                self.log("AI 创作工坊完成 → %s" % saved[0]["name"], "OK")
+            else:
+                with self.lock:
+                    self.aigc_job["status"] = msg
+                self._aigc_append_log("[ERROR] " + msg)
+        except Exception as ex:
+            with self.lock:
+                self.aigc_job["status"] = "生成失败"
+            self._aigc_append_log("[ERROR] %s" % ex)
+        finally:
+            with self.lock:
+                self.aigc_job["running"] = False
+                self.aigc_job["cancel"] = False
+
+    @staticmethod
+    def _mask_key(k: str) -> str:
+        s = (k or "").strip()
+        if not s:
+            return ""
+        if len(s) <= 8:
+            return "*" * len(s)
+        return s[:4] + "****" + s[-4:]
+
+    def _safe_cfg_for_ui(self):
+        c = json.loads(json.dumps(self.cfg))
+        if isinstance(c.get("codex"), dict):
+            raw_k = str(c["codex"].get("api_key") or "")
+            c["codex"]["has_key"] = bool(raw_k.strip())
+            c["codex"]["key_masked"] = self._mask_key(raw_k)
+            c["codex"]["api_key"] = ""
+        if isinstance(c.get("comfyui"), dict):
+            raw_ck = str(c["comfyui"].get("custom_api_key") or "")
+            c["comfyui"]["custom_has_key"] = bool(raw_ck.strip())
+            c["comfyui"]["custom_api_key"] = ""
+        return c
+
     def _get_voice_env_cached(self):
         now = time.time()
         if self._voice_env_cache is None or (now - self._voice_env_ts) > 15.0:
@@ -1718,13 +2004,14 @@ class ControlBackend:
         if (now - self._recent_ts) > 3.5:
             dl_base = Path(self.cfg.get("paths", {}).get("downloads") or str(DL_HOME))
             dirs = [
+                ("AI创作", self.aigc_output()),
                 ("视频", self.yt_output()),
                 ("音乐", self.music_output()),
                 ("克隆", self.voice_output()),
                 ("直链", str(dl_base / "aria2")),
                 ("BT", self.cfg.get("qbit", {}).get("save_dir") or str(dl_base / "qBittorrent")),
             ]
-            self._recent_cache = MS.scan_recent_downloads(dirs, limit=8) if MS else []
+            self._recent_cache = MS.scan_recent_downloads(dirs, limit=10) if MS else []
             self._recent_ts = now
         return list(self._recent_cache)
 
@@ -1752,6 +2039,9 @@ class ControlBackend:
             music_job["results"] = list(self.music_job["results"][:30])
             voice_job = dict(self.voice_job)
             voice_job["logs"] = list(self.voice_job["logs"][-100:])
+            aigc_job = dict(self.aigc_job)
+            aigc_job["logs"] = list(self.aigc_job["logs"][-100:])
+            aigc_job["gallery"] = list(self.aigc_job["gallery"][:24])
         yt_state = dict(self.pr.y)
         yt_state["upscale"] = bool(self.cfg.get("ui", {}).get("upscale"))
         yt_state["on"] = bool(yt_state.get("on") or yt_job.get("running"))
@@ -1763,8 +2053,19 @@ class ControlBackend:
         music_job["out_dir"] = self.music_output()
         music_job["has_ytdlp"] = yt_job["has_ytdlp"]
         music_job["has_ffmpeg"] = yt_job["has_ffmpeg"]
+        music_job["charts"] = list(MS.MUSIC_CHARTS) if MS else []
         voice_job["out_dir"] = self.voice_output()
         voice_job["env"] = self._get_voice_env_cached()
+        aigc_job["out_dir"] = self.aigc_output()
+        aigc_job["env"] = self._get_aigc_env_cached()
+        codex_cfg = self.cfg.get("codex") or {}
+        codex_info = {
+            "configured": bool((codex_cfg.get("base_url") or "").strip() and (codex_cfg.get("api_key") or "").strip()),
+            "base_url": str(codex_cfg.get("base_url") or ""),
+            "model": str(codex_cfg.get("model") or "gpt-5.3-codex"),
+            "api_style": str(codex_cfg.get("api_style") or "auto"),
+            "key_masked": self._mask_key(str(codex_cfg.get("api_key") or "")),
+        }
         return {
             "aria2": dict(self.pr.a),
             "qbit": dict(self.pr.q),
@@ -1772,6 +2073,8 @@ class ControlBackend:
             "yt_studio": yt_job,
             "music_studio": music_job,
             "voice_studio": voice_job,
+            "aigc_studio": aigc_job,
+            "codex": codex_info,
             "recent_files": self._get_recent_files_cached(),
             "magnet": self._magnet_diag(),
             "tasks": {
@@ -1781,9 +2084,10 @@ class ControlBackend:
             "urls": {
                 "ariang": self._ariang_url(),
                 "ariang_embedded": self._ariang_dir() is not None,
-                "qbit": self._qbit_url(),
+                "qbit": "/qbit/",
+                "qbit_direct": self._qbit_url(),
             },
-            "cfg": self.cfg,
+            "cfg": self._safe_cfg_for_ui(),
             "wave": wave,
             "logs": logs,
             "uptime": up,
@@ -1793,8 +2097,8 @@ class ControlBackend:
         act = (body.get("action") or "").strip()
         if act == "start_a":
             if port_open(self.cfg["aria2"]["host"], self.cfg["aria2"]["port"]):
-                self.log("Aria2 已在线，可直接打开 AriaNg", "OK")
-                return True, "Aria2 已在线", {"open_url": self._ariang_url()}
+                self.log("Aria2 已在线，已切换内置 AriaNg 管理舱", "OK")
+                return True, "Aria2 已在线", {"embedded_view": "ariang"}
             exe = Path(str(self.cfg["aria2"].get("exe") or ""))
             conf = Path(str(self.cfg["aria2"].get("conf") or ""))
             script = str((self.cfg.get("scripts") or {}).get("start") or "")
@@ -1843,8 +2147,8 @@ class ControlBackend:
 
         if act == "ariang":
             url = self._ariang_url()
-            self.log("跳转 AriaNg：%s（同源免端口冲突，已自动注入 RPC Token）" % url, "OK")
-            return True, "正在打开 AriaNg", {"open_url": url}
+            self.log("已切换至站内同源 AriaNg 管理舱（自动注入 RPC Token）", "OK")
+            return True, "已打开内置 AriaNg", {"embedded_view": "ariang", "url": url}
 
         if act == "test_a":
             try:
@@ -1868,7 +2172,7 @@ class ControlBackend:
         if act == "start_q":
             if port_open(self.cfg["qbit"]["host"], self.cfg["qbit"]["port"]):
                 self.log("qBittorrent 已在线", "OK")
-                return True, "qBittorrent 已在线", {"open_url": self._qbit_url()}
+                return True, "qBittorrent 已在线", {"embedded_view": "qbit"}
             script = str((self.cfg.get("scripts") or {}).get("qbit") or "")
             if script and Path(script).exists():
                 ok, msg = self.run_cmd(script_cmd(script), "启动 qBittorrent", "qbit")
@@ -1907,9 +2211,8 @@ class ControlBackend:
                 return False, "未找到本面板记录的 qB 进程", {}
 
         if act == "webui":
-            url = self._qbit_url()
-            self.log("跳转 qBittorrent WebUI：%s" % url, "OK")
-            return True, "正在打开 qB WebUI", {"open_url": url}
+            self.log("已切换至站内同源 qBittorrent WebUI", "OK")
+            return True, "已打开内置 qB WebUI", {"embedded_view": "qbit"}
 
         if act == "test_q":
             try:
@@ -1933,6 +2236,8 @@ class ControlBackend:
                     init = self.music_output()
                 elif target == "voice":
                     init = self.voice_output()
+                elif target == "aigc":
+                    init = self.aigc_output()
                 elif target in ("qbit", "magnet"):
                     init = self.cfg["qbit"].get("save_dir") or str(DL_HOME)
                 else:
@@ -1952,6 +2257,10 @@ class ControlBackend:
                 self.cfg.setdefault("paths", {})["voice"] = chosen
                 save_cfg(self.cfg)
                 self.log("声音克隆保存目录已设为：%s" % chosen, "OK")
+            elif target == "aigc":
+                self.cfg.setdefault("paths", {})["aigc"] = chosen
+                save_cfg(self.cfg)
+                self.log("AI 创作保存目录已设为：%s" % chosen, "OK")
             elif target == "qbit":
                 self.cfg["qbit"]["save_dir"] = chosen
                 save_cfg(self.cfg)
@@ -2277,6 +2586,87 @@ class ControlBackend:
             self.log("音乐检索 [%s]「%s」命中 %d 首" % (src, q, len(res)), "OK" if res else "WARN")
             return bool(res), ("找到 %d 首歌曲" % len(res)) if res else "未找到匹配歌曲，请更换关键词或切换音源", {"results": res}
 
+        if act == "music_chart":
+            if MS is None:
+                return False, "media_studio 模块不可用", {}
+            cid = str(body.get("chart_id") or body.get("chart") or "hot").strip().lower()
+            try:
+                limit = max(5, min(60, int(body.get("limit") or 40)))
+            except Exception:
+                limit = 40
+            data = MS.fetch_music_chart(cid, limit=limit)
+            rows = data.get("results") or []
+            if rows and not body.get("silent"):
+                with self.lock:
+                    self.music_job["results"] = rows
+            cname = (data.get("chart") or {}).get("name") or cid
+            if not body.get("silent"):
+                self.log("载入音乐榜单 [%s] 共 %d 首" % (cname, len(rows)), "OK" if rows else "WARN")
+            return bool(rows), data.get("msg") or "榜单加载完成", {
+                "chart": data.get("chart"),
+                "results": rows,
+                "charts": list(MS.MUSIC_CHARTS),
+            }
+
+        if act == "music_lyrics":
+            if MS is None:
+                return False, "media_studio 模块不可用", {}
+            sid = str(body.get("song_id") or "").strip()
+            title = str(body.get("title") or "").strip()
+            artist = str(body.get("artist") or "").strip()
+            query = str(body.get("query") or "").strip()
+            audio_path = str(body.get("audio_path") or "").strip()
+            lyr = MS.fetch_song_lyrics(song_id=sid, title=title, artist=artist, query=query, audio_path=audio_path)
+            if lyr.get("lines"):
+                with self.lock:
+                    self.music_job["lyrics"] = lyr
+            return bool(lyr.get("ok")), lyr.get("msg") or "歌词查询完成", {"lyrics": lyr}
+
+        if act == "music_play":
+            if MS is None:
+                return False, "media_studio 模块不可用", {}
+            import uuid
+            from urllib.parse import quote
+            title = str(body.get("title") or "").strip()
+            artist = str(body.get("artist") or "").strip()
+            url = str(body.get("url") or "").strip()
+            query = str(body.get("query") or "").strip()
+            bvid = str(body.get("bvid") or "").strip()
+            info = MS.resolve_music_stream(
+                title=title, artist=artist, url=url, query=query, bvid=bvid,
+                ytdlp=self._find_ytdlp(), proxy=self._sys_proxy(), music_dir=self.music_output(),
+            )
+            if not info.get("ok"):
+                return False, info.get("msg") or "未解析到可播放音频流", {}
+            if info.get("is_local") and info.get("local_path"):
+                lp = info["local_path"]
+                return True, info.get("msg") or "本地音频就绪", {
+                    "play_url": "/api/media?path=" + quote(lp, safe="") + "&t=" + str(int(time.time())),
+                    "local_path": lp,
+                    "is_local": True,
+                    "source": info.get("source") or "本地",
+                }
+            tok = uuid.uuid4().hex[:16]
+            with self.lock:
+                self.stream_tokens[tok] = {
+                    "url": info["stream_url"],
+                    "headers": dict(info.get("headers") or {}),
+                    "mime": info.get("mime") or "audio/mp4",
+                    "use_proxy": bool(info.get("use_proxy")),
+                    "ts": time.time(),
+                }
+                if len(self.stream_tokens) > 30:
+                    oldest = sorted(self.stream_tokens.items(), key=lambda kv: kv[1]["ts"])[:10]
+                    for k, _ in oldest:
+                        self.stream_tokens.pop(k, None)
+            self.log("在线播歌 [%s] %s" % (info.get("source") or "流媒体", title or query), "OK")
+            return True, info.get("msg") or "音频流已就绪", {
+                "play_url": "/api/stream_audio?id=" + tok,
+                "local_path": "",
+                "is_local": False,
+                "source": info.get("source") or "在线流",
+            }
+
         if act == "music_download":
             import threading
             url = str(body.get("url") or "").strip()
@@ -2384,6 +2774,216 @@ class ControlBackend:
             with self.lock:
                 self.voice_job["logs"] = []
             return True, "声音工坊日志已清空", {}
+
+        if act == "aigc_start_comfy":
+            cc = self.cfg.get("comfyui") or {}
+            if not cc.get("enabled"):
+                return False, "个人 ComfyUI 未在本机配置启用", {}
+            url = str(cc.get("url") or "http://127.0.0.1:8188")
+            if MS and MS.probe_comfyui_server(url, timeout=1.2).get("online"):
+                self._aigc_env_ts = 0.0
+                return True, "本地 ComfyUI 已在线 ✔", {}
+            bat = Path(str(cc.get("start_bat") or ""))
+            if not bat.is_file():
+                root = Path(str(cc.get("root") or ""))
+                for cand in ("run_minimax_h3.bat", "run_nvidia_gpu.bat", "run.bat"):
+                    if (root / cand).is_file():
+                        bat = root / cand
+                        break
+            if not bat.is_file():
+                return False, "未找到本地 ComfyUI 启动脚本", {}
+            try:
+                kw = {"start_new_session": True} if not IS_WIN else {}
+                proc = subprocess.Popen(script_cmd(bat), cwd=str(bat.parent), **kw)
+                self.pids["comfyui"] = proc.pid
+                save_pids(self.pids)
+                self._aigc_env_ts = 0.0
+                self._aigc_append_log("[INFO] 已拉起本地 ComfyUI PID=%s (%s)" % (proc.pid, bat.name))
+                self.log("拉起本地 ComfyUI PID %s" % proc.pid, "OK")
+                return True, "正在后台启动本地 ComfyUI，端口就绪后自动可用", {}
+            except Exception as ex:
+                self.log("启动 ComfyUI 失败 %s" % ex, "ERROR")
+                return False, "启动本地 ComfyUI 失败：%s" % ex, {}
+
+        if act == "aigc_stop_comfy":
+            pid = self.pids.get("comfyui")
+            if pid and pid_alive(pid):
+                kill_tree(pid)
+                self.pids.pop("comfyui", None)
+                save_pids(self.pids)
+                self._aigc_env_ts = 0.0
+                self._aigc_append_log("[WARN] 已关闭本地 ComfyUI PID=%s" % pid)
+                return True, "已安全关闭本地 ComfyUI", {}
+            return False, "未找到本面板记录的 ComfyUI 进程", {}
+
+        if act == "aigc_generate":
+            import threading
+            prompt = str(body.get("prompt") or "").strip()
+            if not prompt:
+                return False, "请先输入生图或生视频提示词", {}
+            engine = str(body.get("engine") or "owner_comfy").strip().lower()
+            mode = str(body.get("mode") or "t2i").strip().lower()
+            neg_prompt = str(body.get("neg_prompt") or "").strip()
+            width = int(body.get("width") or (832 if mode in ("i2v", "t2v") else 1024))
+            height = int(body.get("height") or (480 if mode in ("i2v", "t2v") else 576))
+            steps = int(body.get("steps") or (4 if mode in ("i2v", "t2v") else 8))
+            length = int(body.get("length") or 33)
+            seed = int(body.get("seed") if body.get("seed") not in ("", None) else -1)
+            save_dir = str(body.get("save_dir") or "").strip()
+            with self.lock:
+                if self.aigc_job.get("running"):
+                    return False, "当前已有 AI 生成任务在运行，请等待完成或先取消", {}
+                if save_dir:
+                    self.cfg.setdefault("paths", {})["aigc"] = save_dir
+                    save_cfg(self.cfg)
+                ff = str(body.get("first_frame") or self.aigc_job.get("first_frame") or "").strip()
+                self.aigc_job.update({
+                    "running": True, "cancel": False,
+                    "engine": engine, "mode": mode, "prompt": prompt, "neg_prompt": neg_prompt,
+                    "width": width, "height": height, "steps": steps, "length": length, "seed": seed,
+                    "pct": 5.0, "status": "已提交生成任务…",
+                })
+            t = threading.Thread(
+                target=self._run_aigc_worker,
+                args=(engine, mode, prompt, neg_prompt, width, height, steps, length, seed, ff, save_dir or self.aigc_output()),
+                daemon=True,
+            )
+            t.start()
+            lbl = {"t2i": "AI 文生图", "i2v": "AI 图生视频", "t2v": "AI 文生视频"}.get(mode, "AI 生成")
+            return True, "已启动 %s 任务，完成后自动在右侧画廊直出" % lbl, {}
+
+        if act == "aigc_cancel":
+            with self.lock:
+                self.aigc_job["cancel"] = True
+                self.aigc_job["status"] = "正在取消…"
+            return True, "已发送取消信号", {}
+
+        if act == "aigc_clear_log":
+            with self.lock:
+                self.aigc_job["logs"] = []
+            return True, "AI 创作日志已清空", {}
+
+        if act == "aigc_use_gallery_frame":
+            fp = str(body.get("path") or "").strip()
+            target = self._is_allowed_media(fp)
+            if target is None:
+                return False, "图片文件不可访问", {}
+            with self.lock:
+                self.aigc_job["first_frame"] = str(target)
+                self.aigc_job["first_frame_name"] = target.name
+            return True, "已将「%s」设为图生视频首帧 ✔" % target.name, {"first_frame": str(target), "first_frame_name": target.name}
+
+        if act == "aigc_save_custom":
+            cc = self.cfg.setdefault("comfyui", {})
+            cc["custom_mode"] = str(body.get("custom_mode") or "comfyui").strip().lower()
+            cc["custom_url"] = str(body.get("custom_url") or "").strip()
+            new_key = str(body.get("custom_api_key") or "").strip()
+            if new_key:
+                cc["custom_api_key"] = new_key
+            elif body.get("clear_key"):
+                cc["custom_api_key"] = ""
+            cc["custom_model"] = str(body.get("custom_model") or "").strip()
+            cc["custom_workflow_json"] = str(body.get("custom_workflow_json") or "").strip()
+            save_cfg(self.cfg)
+            self._aigc_env_ts = 0.0
+            self.log("已保存自定义本地模型接入配置 (%s)" % cc["custom_mode"], "OK")
+            return True, "自定义本地模型配置已保存并生效 ✔", {}
+
+        if act == "aigc_prompt_search":
+            if PE is None:
+                return False, "prompt_engine 模块不可用", {}
+            q = str(body.get("query") or "").strip()
+            cat = str(body.get("category") or "all").strip().lower()
+            mode = str(body.get("mode") or "t2i").strip().lower()
+            limit = int(body.get("limit") or 36)
+            res = PE.search_prompts(query=q, category=cat, mode=mode, limit=limit)
+            return bool(res.get("ok")), res.get("msg") or "提示词检索完成", {
+                "results": res.get("results") or [],
+                "categories": res.get("categories") or [],
+                "total": res.get("total") or 0,
+            }
+
+        if act == "aigc_prompt_optimize":
+            if PE is None:
+                return False, "prompt_engine 模块不可用", {}
+            raw_inp = str(body.get("prompt") or body.get("query") or "").strip()
+            mode = str(body.get("mode") or "t2i").strip().lower()
+            style_hint = str(body.get("style") or "").strip()
+            count = int(body.get("count") or 3)
+            cx = self.cfg.get("codex") or {}
+            chat_fn = MS.codex_chat_request if MS is not None else None
+            res = PE.optimize_prompt_with_ai(
+                raw_input=raw_inp,
+                mode=mode,
+                style_hint=style_hint,
+                codex_cfg=cx,
+                chat_fn=chat_fn,
+                proxy=self._sys_proxy(),
+                count=count,
+            )
+            if res.get("ok"):
+                self.log("AI 提示词优化完成（%d 套方案）" % len(res.get("variants") or []), "OK")
+            return bool(res.get("ok")), res.get("msg") or "优化完成", {
+                "variants": res.get("variants") or [],
+            }
+
+        if act == "codex_save_cfg":
+            cx = self.cfg.setdefault("codex", {})
+            cx["base_url"] = str(body.get("base_url") or "").strip()
+            new_k = str(body.get("api_key") or "").strip()
+            if new_k:
+                cx["api_key"] = new_k
+            cx["model"] = str(body.get("model") or "gpt-5.3-codex").strip()
+            cx["api_style"] = str(body.get("api_style") or "auto").strip().lower()
+            save_cfg(self.cfg)
+            self.log("已保存赛博小怪兽 Codex 中转配置（模型：%s）" % cx["model"], "OK")
+            return True, "赛博小怪兽中转配置已保存到本地 config.json ✔", {}
+
+        if act == "codex_test":
+            if MS is None:
+                return False, "media_studio 模块不可用", {}
+            cx = self.cfg.get("codex") or {}
+            base = str(body.get("base_url") or cx.get("base_url") or "").strip()
+            key = str(body.get("api_key") or "").strip() or str(cx.get("api_key") or "").strip()
+            ok, msg, models = MS.codex_list_models(base, key, proxy=self._sys_proxy())
+            return ok, msg, {"models": models}
+
+        if act == "codex_chat":
+            if MS is None:
+                return False, "media_studio 模块不可用", {}
+            cx = self.cfg.get("codex") or {}
+            msgs = body.get("messages") or []
+            if not isinstance(msgs, list) or not msgs:
+                q = str(body.get("prompt") or "").strip()
+                if not q:
+                    return False, "请输入想问赛博小怪兽的问题", {}
+                msgs = [{"role": "user", "content": q}]
+            active_view = str(body.get("view") or "cockpit")
+            aigc_env = self._get_aigc_env_cached()
+            sys_prompt = (
+                "你是「赛博小怪兽」，内嵌在 DownloadStack 3D Spatial Command OS 桌面控制台里的全能智能体助手。"
+                "说话风格灵动专业、简洁直击重点，优先用中文回答。\n"
+                "本软件内置全部 9 大本地工坊（禁止让用户跳外部网页）：控制台、任务队列、内置 AriaNg、内置 qBittorrent、磁力/DHT修复、"
+                "全平台视频下载(yt-dlp+2x超分)、音乐6大榜单+任意搜歌、3D同步歌词舞台、开源AI声音克隆(F5-TTS/神经配音)、AI画室(本地ComfyUI Z-Image Turbo生图 + Wan 2.2 I2V生视频 + 自定义本地模型接入)。\n"
+                "当前本机实时状态（脱敏）：Aria2=%s, qBittorrent=%s, YT运行中=%s, 本地ComfyUI在线=%s, 当前页面=%s。"
+                % (
+                    "在线" if self.pr.a.get("on") else "离线",
+                    "在线" if self.pr.q.get("on") else "离线",
+                    "是" if self.yt_job.get("running") else "否",
+                    "在线" if (aigc_env.get("server") or {}).get("online") else "离线",
+                    active_view,
+                )
+            )
+            ok, reply = MS.codex_chat_request(
+                base_url=str(cx.get("base_url") or ""),
+                api_key=str(cx.get("api_key") or ""),
+                model=str(cx.get("model") or "gpt-5.3-codex"),
+                messages=msgs,
+                system_prompt=sys_prompt,
+                api_style=str(cx.get("api_style") or "auto"),
+                proxy=self._sys_proxy(),
+            )
+            return ok, ("已回复" if ok else reply), {"reply": reply}
 
         if act == "start_y":
             bat = Path(self.cfg["yt"]["bat"])
@@ -2533,6 +3133,7 @@ class ControlBackend:
                 "yt_out": self.yt_output(),
                 "music_dl": self.music_output(),
                 "voice_dl": self.voice_output(),
+                "aigc_dl": self.aigc_output(),
                 "downloads": str(dl_base),
             }
             if key == "custom":
@@ -2544,7 +3145,7 @@ class ControlBackend:
                     target = raw_p
             else:
                 target = mapping.get(key, "")
-            if key in ("aria2_dl", "qbit_dl", "yt_out", "music_dl", "voice_dl", "downloads") and target:
+            if key in ("aria2_dl", "qbit_dl", "yt_out", "music_dl", "voice_dl", "aigc_dl", "downloads") and target:
                 try:
                     Path(target).mkdir(parents=True, exist_ok=True)
                 except Exception:
@@ -2586,6 +3187,8 @@ class ControlBackend:
                     self.cfg.setdefault("paths", {})["music"] = str(body.get("music_dir") or "").strip()
                 if "voice_dir" in body:
                     self.cfg.setdefault("paths", {})["voice"] = str(body.get("voice_dir") or "").strip()
+                if "aigc_dir" in body:
+                    self.cfg.setdefault("paths", {})["aigc"] = str(body.get("aigc_dir") or "").strip()
                 if "yt_out" in body:
                     self.cfg["yt"]["output"] = str(body.get("yt_out") or "").strip()
                 save_cfg(self.cfg)
@@ -2669,8 +3272,87 @@ def run_3d_server(open_browser=True):
             self.end_headers()
             self.wfile.write(raw)
 
+        def _proxy_qbit(self, method="GET"):
+            c = backend.cfg.get("qbit") or {}
+            host = c.get("host") or "127.0.0.1"
+            port = int(c.get("port") or 8080)
+            if not port_open(host, port):
+                msg = (
+                    "<html><body style='margin:0;height:100vh;display:flex;flex-direction:column;align-items:center;"
+                    "justify-content:center;background:#040814;color:#93c5fd;font-family:sans-serif;gap:12px;'>"
+                    "<div style='font-size:18px;font-weight:800;'>qBittorrent 尚未启动</div>"
+                    "<div style='font-size:13px;color:#64748b;'>请点击上方「▶ 启动 qBittorrent」后刷新，即可在软件内直接使用 WebUI</div>"
+                    "</body></html>"
+                ).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(msg)))
+                self.end_headers()
+                self.wfile.write(msg)
+                return
+            sub = self.path[len("/qbit"):] if self.path.startswith("/qbit") else "/"
+            if not sub.startswith("/"):
+                sub = "/" + sub
+            target_url = "http://%s:%d%s" % (host, port, sub)
+            hdrs = {
+                "Referer": "http://%s:%d/" % (host, port),
+                "Origin": "http://%s:%d" % (host, port),
+            }
+            if self.headers.get("Cookie"):
+                hdrs["Cookie"] = self.headers.get("Cookie")
+            if self.headers.get("Content-Type"):
+                hdrs["Content-Type"] = self.headers.get("Content-Type")
+            body_bytes = None
+            if method == "POST":
+                length = int(self.headers.get("Content-Length") or 0)
+                body_bytes = self.rfile.read(length) if length > 0 else b""
+            try:
+                r = requests.request(
+                    method, target_url, headers=hdrs, data=body_bytes,
+                    proxies={"http": None, "https": None}, timeout=12, allow_redirects=False
+                )
+                content = r.content
+                ctype = r.headers.get("Content-Type") or "application/octet-stream"
+                # 把 qB 根相对路径重写到 /qbit/ 下，确保站内 iframe 资源 100% 正常加载
+                if "text/html" in ctype.lower():
+                    try:
+                        txt = content.decode("utf-8", errors="replace")
+                        if "<base " not in txt.lower():
+                            txt = txt.replace("<head>", "<head><base href='/qbit/'>", 1)
+                        content = txt.encode("utf-8")
+                    except Exception:
+                        pass
+                self.send_response(r.status_code)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Cache-Control", "no-store")
+                if r.headers.get("Set-Cookie"):
+                    self.send_header("Set-Cookie", r.headers.get("Set-Cookie").replace("Path=/", "Path=/"))
+                if r.headers.get("Location"):
+                    loc = r.headers.get("Location")
+                    if loc.startswith("/") and not loc.startswith("/qbit/"):
+                        loc = "/qbit" + loc
+                    self.send_header("Location", loc)
+                self.send_header("Content-Length", str(len(content)))
+                self.end_headers()
+                self.wfile.write(content)
+            except Exception as ex:
+                err = ("qBittorrent 内置代理连接失败：%s" % ex).encode("utf-8")
+                self.send_response(502)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Content-Length", str(len(err)))
+                self.end_headers()
+                self.wfile.write(err)
+
         def do_GET(self):
             req_path = self.path.split("?", 1)[0]
+            if req_path == "/qbit" or req_path.startswith("/qbit/"):
+                if req_path == "/qbit":
+                    self.send_response(302)
+                    self.send_header("Location", "/qbit/")
+                    self.end_headers()
+                    return
+                self._proxy_qbit("GET")
+                return
             if req_path in ("/", "/index.html"):
                 html = ui_file.read_bytes()
                 self.send_response(200)
@@ -2682,6 +3364,45 @@ def run_3d_server(open_browser=True):
                 return
             if req_path == "/api/state":
                 self._send_json(backend.get_state())
+                return
+            if req_path == "/api/stream_audio":
+                from urllib.parse import parse_qs, urlsplit
+                qs = parse_qs(urlsplit(self.path).query)
+                tok = (qs.get("id") or [""])[0]
+                with backend.lock:
+                    info = dict(backend.stream_tokens.get(tok) or {})
+                if not info.get("url"):
+                    self.send_error(404, "Stream expired")
+                    return
+                hdrs = dict(info.get("headers") or {})
+                rng = self.headers.get("Range")
+                if rng:
+                    hdrs["Range"] = rng
+                px = backend._sys_proxy() if info.get("use_proxy") else ""
+                proxies = {"http": px, "https": px} if px else {"http": None, "https": None}
+                try:
+                    with requests.get(info["url"], headers=hdrs, proxies=proxies, stream=True, timeout=18) as r:
+                        self.send_response(r.status_code)
+                        self.send_header("Content-Type", r.headers.get("Content-Type") or info.get("mime") or "audio/mp4")
+                        self.send_header("Accept-Ranges", r.headers.get("Accept-Ranges") or "bytes")
+                        self.send_header("Cache-Control", "no-store")
+                        if r.headers.get("Content-Range"):
+                            self.send_header("Content-Range", r.headers["Content-Range"])
+                        if r.headers.get("Content-Length"):
+                            self.send_header("Content-Length", r.headers["Content-Length"])
+                        self.end_headers()
+                        for chunk in r.iter_content(chunk_size=65536):
+                            if not chunk:
+                                continue
+                            try:
+                                self.wfile.write(chunk)
+                            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                                break
+                except Exception as ex:
+                    try:
+                        self.send_error(502, "Audio stream error: %s" % ex)
+                    except Exception:
+                        pass
                 return
             if req_path == "/api/media":
                 from urllib.parse import parse_qs, urlsplit
@@ -2760,6 +3481,9 @@ def run_3d_server(open_browser=True):
 
         def do_POST(self):
             req_path = self.path.split("?", 1)[0]
+            if req_path == "/qbit" or req_path.startswith("/qbit/"):
+                self._proxy_qbit("POST")
+                return
             if req_path == "/api/action":
                 length = int(self.headers.get("Content-Length") or 0)
                 raw = self.rfile.read(length) if length > 0 else b"{}"
@@ -2805,6 +3529,31 @@ def run_3d_server(open_browser=True):
                     "msg": "参考音频已载入并标准化 ✔",
                     "ref_name": Path(orig_name).name,
                     "ref_wav": str(dst_wav.resolve()),
+                })
+                return
+            if req_path == "/api/upload_aigc_image":
+                from urllib.parse import parse_qs, urlsplit
+                qs = parse_qs(urlsplit(self.path).query)
+                orig_name = (qs.get("name") or ["first_frame.png"])[0]
+                length = int(self.headers.get("Content-Length") or 0)
+                if length <= 0 or length > 26 * 1024 * 1024:
+                    self._send_json({"ok": False, "msg": "图片为空或超过 25MB 限制"}, code=400)
+                    return
+                raw = self.rfile.read(length)
+                ext = Path(orig_name).suffix.lower()
+                if ext not in (".png", ".jpg", ".jpeg", ".webp"):
+                    ext = ".png"
+                dst = CACHE / ("aigc_first_frame" + ext)
+                dst.write_bytes(raw)
+                with backend.lock:
+                    backend.aigc_job["first_frame"] = str(dst.resolve())
+                    backend.aigc_job["first_frame_name"] = Path(orig_name).name
+                backend._aigc_append_log("[OK] 已载入图生视频首帧：%s" % Path(orig_name).name)
+                self._send_json({
+                    "ok": True,
+                    "msg": "已载入首帧图片 ✔",
+                    "first_frame": str(dst.resolve()),
+                    "first_frame_name": Path(orig_name).name,
                 })
                 return
             self.send_error(404)

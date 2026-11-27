@@ -1,14 +1,14 @@
 <div align="center">
 
-# DownloadStack Control
+# DownloadStack Control · Spatial 3D Command OS
 
-**把 aria2 / AriaNg / qBittorrent / Magnet 磁力增强 / yt-dlp 全平台视频 / 全网歌曲搜下 / 开源 AI 声音克隆 统一收拢进 7 大 3D 空间工坊的跨平台桌面控制台**
+**本地运行、全站内嵌入的下载 / 影音 / AI 一体化 3D 空间桌面控制中心**
 
-Windows / Linux / macOS · 零前端构建 · 离线可用 · 同源直出 AriaNg · 不内置任何下载引擎二进制
+支持 Windows / Linux / macOS · 全程站内闭环零外跳 · 不打包第三方二进制与模型权重 · 凭据永不落仓库
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![UI](https://img.shields.io/badge/UI-Spatial%203D%20Console-00E5A0)](#核心功能)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-00ccff)](#快速部署)
+[![WebGL](https://img.shields.io/badge/UI-Spatial%203D%20HUD%20%2B%20WebGL%20GLSL-00E5FF)](#-核心功能全景)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-00F5B8)](#-快速开始)
 [![License](https://img.shields.io/badge/License-MIT-FFB020)](LICENSE)
 [![PRs](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
 
@@ -16,233 +16,150 @@ Windows / Linux / macOS · 零前端构建 · 离线可用 · 同源直出 AriaN
 
 ---
 
-## 📖 这是什么
+## 🎯 需求面向（为谁而生）
 
-机器上同时装了 **aria2**（直链加速）、**AriaNg**（aria2 网页管理）、**qBittorrent**（BT / PT）、**yt-dlp**（平台视频）时，各自独立启停、配置分散、磁力冷启动易卡元数据、AriaNg 经常遇端口或 Token 认证报错。
+如果你本机同时使用或想要一站式管理以下工具，又受够了在十几个窗口、网页、命令行之间反复切换：
 
-**DownloadStack Control 不替代它们，只做一件事：用一个 3D 空间控制台统一监控、调度、投递任务与修复磁力/DHT。**
+- **高速下载用户**：需要把 **Aria2**（多线程直链）、**AriaNg**（Web 管理）、**qBittorrent**（BT/PT 做种）、**磁力/DHT 修复** 聚合在同一个桌面窗口内管理，不再弹出一堆外部浏览器标签页。
+- **全平台音视频收藏者**：希望直接粘贴 YouTube / B站 / 抖音 / 小红书 / X / TikTok 链接一键下最高 4K 视频（可选 2x 超分），同时支持 **6 大音乐榜单、6 音源聚合搜歌、秒播试听、下载与电影级全屏 3D 歌词舞台**。
+- **本地 AI 创作者**：希望在软件内直接接入自己的本地 **ComfyUI / SD WebUI / OpenAI 兼容生图生视频模型**（含提示词搜索引擎与 AI 提示词优化器）以及 **开源 AI 声音克隆（F5-TTS / 神经配音）**，并配有一只常驻桌面随时问答的 **赛博小怪兽智能体**。
 
 ---
 
-## 🎯 需求背景与面向人群
+## 🏷️ 项目标签（GitHub Topics / Tags）
 
-### 适合谁用（面向人群）
-| 面向用户 | 典型需求与痛点 | 本项目提供的解法 |
+`download-manager` · `aria2` · `ariang` · `qbittorrent` · `yt-dlp` · `magnet-dht` · `music-player` · `webgl-shaders` · `3d-lyrics` · `comfyui` · `ai-prompt-optimizer` · `wan22` · `f5-tts` · `voice-cloning` · `ai-agent` · `desktop-dashboard` · `cyberpunk-ui` · `python`
+
+---
+
+## 🚨 项目红线（设计与开源铁律）
+
+1. **一切功能站内闭环，禁止外跳外部浏览器**：AriaNg、qBittorrent WebUI、3D 歌词全屏舞台、AI 画室画廊与高清灯箱、赛博小怪兽问答框全部同源内嵌在桌面面板内部。
+2. **禁止空壳、禁止留空白框**：每个视觉元素背后必须承载真实可用的后端能力，主屏左/中/右三栏与 10 大功能卡片全部直连实机状态。
+3. **3D 空间控制台，绝不是“旋转立方体”**：采用全屏 3D 透视网格、轨道雷达 HUD、卡片 3D 悬停跟手微倾，以及基于 GPU WebGL GLSL 的电影级实景着色器。
+4. **凭据与隐私零落库**：所有 API Key、中转域名、qBittorrent 密码、RPC 密钥与本机路径仅存于本地 `config.json`（已加入 `.gitignore`），代码、注释、日志、文档严禁硬编码；提交前强制跑 `scripts/scan_secrets.py`。
+5. **只做调度与聚合，不打包第三方二进制/模型权重**：不内嵌 aria2 / qBittorrent / ffmpeg / ComfyUI 模型权重，全部复用用户本机已装环境或从官方地址按需配置；启停服务只操作面板自身记录的 PID，绝不全局 `taskkill`。
+
+---
+
+## ✨ 核心功能全景（9 大站内工坊 + 常驻智能体）
+
+### 1. ✦ 3D 空间控制台总览大屏（Cockpit）
+- **3D 全息轨道指挥核**：实时 3D 轨道雷达 + 6 颗引擎运行卫星 + 5 层实时吞吐量能量波面 + 5 项核心指标（总下行/峰值速率、活跃任务/连接、BT 种子/DHT 节点、本地 GPU 显存占用、AI 与智能体状态）。
+- **全能智能投递舱（Omni Dispatch）**：单一输入框自动识别 HTTP 直链、磁力/InfoHash、YouTube/B站/抖音视频链接、歌曲名、AI 生图提示词或向小怪兽提问，一键分流直达。
+- **全站 10 大核心工坊 3D 霓虹矩阵**：10 张带 3D 悬停微倾的实时状态卡，点击 100% 站内跳转，消灭一切死卡片。
+- **双核直出展台 & 左右动力翼**：左翼 5 大引擎实时启停/显存仪表；中下双栏同时展示「最近成品直出舱」与「AI 画室直出墙」；右翼集成实时任务雷达、热歌/飙升/抖音即点即播台与实时遥测终端。
+
+### 2. 🎬 YT / 全平台视频下载工坊
+- 支持 YouTube、Bilibili、抖音、小红书、TikTok、X 等主流平台链接与分享口令自动提取。
+- 一键选择画质（最佳 4K/HDR、1080P、720P、仅提取 MP3）、浏览器 Cookies 自动识别或手动 `cookies.txt`、**Video2X 2x AI 超分开关**、实时进度条、取消并清理整棵进程树与内核日志。
+
+### 3. 🎵 全网 6 音源音乐榜单与秒播中心
+- **6 大官方实时榜单**：热歌榜、飙升榜、新歌榜、抖音热歌、原创榜、欧美热歌（网易云 v6 + QQ 音乐双源兜底）。
+- **6 大音源并发聚合检索**：同时并发搜索 **QQ 音乐、酷狗、网易云、酷我、B站音乐、YouTube**，去重聚合，周杰伦等热门原唱优先命中。
+- **免下载一键站内秒播**：优先命中本地已下载音频，否则自动通过同源音频流代理（`/api/stream_audio`，完整支持 `Range` 拖动进度条）实时播放高清音频。
+- **三层 LRC 同步歌词**：本地同名 `.lrc` → 网易云（含双语翻译）→ 酷狗全版权歌词库自动兜底。
+- **多格式下载**：支持 MP3 / FLAC / M4A / WAV 下载并自动扫描入最近成品舱。
+
+### 4. 🌌 电影级 GPU WebGL GLSL 全屏沉浸 3D 歌词舞台
+- **真·零遮挡全屏沉浸**（点击 `⛶ 全屏沉浸` / 双击画面 / 按 `F`）：隐藏顶栏、侧栏、浮标与边框，100vw × 100vh 铺满屏幕；鼠标静止 **2.4 秒** 后自动隐去全部浮动控件与光标，轻动鼠标柔和唤醒；支持「影院封面+歌词」与「纯净居中歌词」双版式切换。
+- **6 大电影级 GPU 着色器实景（随歌曲意境自动切换，也可按 `M` 手动切换）**：
+  - `🌊 深海月光`：真实 3D 透视海平面、波纹法线碎银月光反射、微云与细星。
+  - `🌧️ 雨夜车窗`：物理折射雨滴滑落玻璃 + 11 盏 35mm 大光圈城市虚化散景光斑。
+  - `🌅 日落微光`：暮色体积霞光云海 + 暖色逆光散射与柔光浮尘。
+  - `🏔️ 水墨月雾`：多层流动水墨云海 + 朦胧孤月与远山薄雾剪影。
+  - `🎬 暗室舞台`：3 束体积聚光灯穿透烟雾扫射 + 变形宽银幕光晕与湿润舞台倒影。
+  - `✨ 流光色韵`：域扭曲液态丝绸流体，柔和呼吸律动。
+- **真实音频 FFT 驱动 + ACES 电影色调**：接入同源 WebAudio `AnalyserNode` 实时响应低/中/高频鼓点与人声，辅以 ACES 电影高光滚落与 35mm 微胶片颗粒。
+
+### 5. 🎨 AI 创作画室（本地 ComfyUI + 自定义模型 + 提示词引擎）
+- **提示词直出，全程站内**：
+  - **文生图（T2I）**：对接本地 ComfyUI（如 Z-Image Turbo / SD Checkpoint），结果直接渲染在站内画廊，点击弹出全屏灯箱预览。
+  - **一键文生视频（T2V） & 图生视频（I2V）**：支持「提示词 → 自动生成首帧 → Wan 2.2 I2V 出片」单次输入全自动链路，也支持上传本地首帧或将画廊图片一键设为视频首帧。
+- **🔌 接入自己的本地模型**：任何终端用户均可点击画室顶部的「接入自己的本地模型」，填入自己的 **自定义 ComfyUI 地址与 API Workflow JSON**（支持 `{{PROMPT}}` / `{{NEG_PROMPT}}` / `{{IMAGE}}` / `{{SEED}}` 占位符）、**Stable Diffusion WebUI / Forge** 或 **OpenAI Images 兼容接口**，配置安全存于本地 `config.json`。
+- **✨ 专业提示词搜索引擎 & AI 大师优化架构师**（`prompt_engine.py`）：
+  - **13 大分类 54 套大师级模板库**：专为 Lumina2 / Qwen 编码器与 Wan 2.2 调优的自然语言电影提示词（拒绝老式无意义堆砌词）。
+  - **中英语义检索 + 关键词即时合成 6 风格模板**：输入任意中文或英文关键词，毫秒返回精选匹配 + 6 套专属定制风格模板。
+  - **✨ AI 大师一键优化**：调用本机配置的 Codex 智能体，把任意一句口语想法升格为 **3 套差异化大师方案**（电影写实版 / 概念美学版 / Wan2.2 运镜视频版），附中文拆解、精准负向词与最佳画幅，一键填入或立即生成。
+  - **专业词缀积木栏**：一键追加光影、电影镜头焦段与 Wan 2.2 运镜修饰语。
+
+### 6. 🎙️ 开源 AI 声音克隆 & 神经配音工坊
+- **零污染独立虚拟环境（`.venv-voice`）**：一键部署 **F5-TTS (CUDA)**，不污染主 Python 环境。
+- 支持上传 3~15 秒参考音频或浏览器**麦克风直录**（自动用 ffmpeg 标准化为 24kHz 单声道 WAV），同时内置零显卡秒出的多情感 **Edge-TTS 神经配音** 以及 **外部克隆 API（GPT-SoVITS / CosyVoice / FishSpeech）** 接口。
+
+### 7. ⚡ 下载核心（全站内同源嵌入）
+- **实时任务队列**：统一管理 Aria2 与 qBittorrent 活跃任务（暂停 / 继续 / 移除 / 自动分流投递）。
+- **内置同源 AriaNg**：`/ariang/` 同源直嵌，自动注入 RPC 密钥。
+- **内置同源 qBittorrent**：`/qbit/` 后端反向代理重写 `<base>` 路径，直接在软件窗口内操作完整 WebUI。
+- **磁力 / DHT 修复实验室**：支持 `magnet:?` 与 40 位 InfoHash 解析、秒级预取 `.torrent` 元数据、一键热更新公共 Tracker 至运行中的 Aria2 / qBittorrent、无损修复 `aria2.conf` BT/DHT 参数与 DHT 引导探测。
+
+### 8. 👾 赛博小怪兽 · Codex 内置智能体
+- 全站右下角常驻悬浮 **赛博小怪兽**（SVG 霓虹精灵 + 实时跟随鼠标转动的电子眼），在任意页面点击即弹出站内多轮问答框，自动感知当前页面与本机引擎状态（严格脱敏）。
+- 支持在 **👾 智能体** 页面配置任意 OpenAI / Codex 兼容中转地址、模型名与 API Key（支持一键拉取可用模型列表，代理/直连自动回退，密钥仅写本地 `config.json`）。
+
+### 9. 🛠️ 系统与运维中心
+- 全局端口/路径配置、开机自启开关、一键自检、端口扫描、一键备份配置、日志清空/导出、清理缓存与安全停止全部服务。
+
+---
+
+## 🚀 快速开始
+
+### 1. 首次一键配置
+
+| 平台 | 入口 | 用法 |
 | --- | --- | --- |
-| **多引擎重度下载用户** | 同时用 aria2 下直链、qBittorrent 下 BT/PT、yt-dlp 下视频，来回切换多个窗口与端口 | 单一 3D 控制台统一启停、聚合速率波形、全栈任务队列与万能链接直投 |
-| **BT / PT / 磁力玩家** | 磁力冷启动长期卡在 `[METADATA]`、DHT 0 节点、公共 Tracker 失效 | 内置 **磁力工坊**：自动补全公共 Tracker、SHA1 校验预取 `.torrent`、KRPC DHT 节点修复与 qB DHT 节点数监控 |
-| **视频归档与画质党** | 需要下载多平台视频并按需做 2x 超分，但懒得每次敲命令行参数或配代理 | 自动透传系统代理、支持 Cookies 登录态、提供 2x AI 超分物理开关（联动 Video2X） |
-| **跨平台 / NAS / SSH 自托管用户** | Windows 想要独立桌面 App 体验，Linux / macOS / 服务器又需要浏览器访问 | Windows 自动以 Edge/Chrome 无边框 App 窗口运行；无桌面环境自动监听 `127.0.0.1:18550` 供浏览器访问 |
+| **Windows** | `一键配置.bat` | 双击打开向导 → 点「一键配置(含环境)」 |
+| **Linux / macOS** | `一键配置.sh` | 终端执行：`sh 一键配置.sh`（支持 `--scan` / `--auto`） |
 
-### 不面向的场景（明确边界）
-- ❌ **不面向**「想找一个内置内核、完全替代 aria2 / qBittorrent / yt-dlp 本体的下载软件」的用户。
-- ❌ **不面向**「破解付费墙、绕过 DRM 加密、采集受保护版权内容」等非合规用途。
-- ❌ **不面向**「希望一个工具顺带改写系统代理、防火墙规则或杀掉全部同类进程」的激进操作场景。
+### 2. 启动 3D 控制台
 
----
+- **Windows**：双击 `启动面板.bat`（或命令行运行 `python -B panel.py`），自动以无边框桌面 App 窗口打开 `http://127.0.0.1:18550/`。
+- **Linux / macOS**：`sh 启动面板.sh`（无桌面环境可访问 `http://127.0.0.1:18550/`）。
 
-## 🏷️ 项目标签（GitHub Topics）
-
-`download-manager` · `aria2` · `ariang` · `qbittorrent` · `yt-dlp` · `magnet` · `dht` · `bittorrent` · `spatial-ui` · `3d-dashboard` · `python` · `cross-platform` · `self-hosted`
+### 3. 接入 AI 能力（可选，按需开启）
+- **AI 画室本地模型**：进入 **🎨 AI画室** → 点右上角 **「🔌 接入自己的本地模型」** → 填写你的 ComfyUI / SD WebUI / OpenAI Image 接口地址即可生效。
+- **赛博小怪兽 & AI 提示词优化**：进入 **👾 智能体** → 填写你的中转域名与 API Key → 点 **「🔎 拉取可用模型」** 选好模型并保存（仅写入本地 `config.json`）。
 
 ---
 
-## 🚫 项目红线（不可逾越的工程与合规底线）
-
-1. **零第三方二进制捆绑红线**：本仓库只存放自有源码与脚本，**绝不打包、托管或二次分发** `aria2c`、`qBittorrent`、`yt-dlp`、`ffmpeg`、`Video2X` 等任何第三方二进制文件；安装器仅从官方 Release 拉取并执行 SHA256 完整性校验。
-2. **进程安全与防误杀红线**：**绝不执行全局 `taskkill` / `killall`**。所有停止、重启与一键全停操作仅作用于本面板记录在 `state/pids.json` 的进程树，或通过官方 RPC / WebUI API 优雅关闭，绝不触碰用户手动启动的其他程序。
-3. **隐私、零遥测与凭据隔离红线**：
-   - 无任何数据上报、无埋点统计、前端零外链 CDN（完全离线可运行）。
-   - `config.json`、`rpc-secret.txt`、`logs/`、`backups/`、`state/` 均在本地保存并写入 `.gitignore`，绝不上传仓库。
-   - 所有代码提交前强制通过 `python scripts/scan_secrets.py .`（拦截明文密码、RPC 密钥、绝对用户路径、内网 IP 等敏感信息）。
-4. **零篡改与破坏性操作确认红线**：不修改系统网络、代理、TUN 或防火墙配置，不篡改外部视频脚本内部逻辑；清理日志、清理缓存、恢复默认配置、一键全停均必须经过显式二次确认弹窗。
-5. **合法合规使用红线**：本项目仅限用于你有合法权限获取的资源下载、开源镜像同步与个人合规归档，严禁用于侵犯版权、绕过访问控制或违反目标站点服务条款的行为。
-
----
-
-## 📋 环境与部署要求（开始前必看）
-
-| 类别 | 组件 / 依赖 | 是否必装 | 说明 |
-| --- | --- | --- | --- |
-| **运行环境** | **Python 3.10+** | **必装** | Windows 官网安装时请勾选 `Add Python to PATH` |
-| **Python 依赖** | **`requests>=2.31`** | **必装** | 3D 主控制台 `panel.py` 唯一外部依赖（其余全用标准库） |
-| **展示窗口** | **Edge / Chrome / 任意现代浏览器** | **必装** | Windows 自动以 Edge/Chrome 无边框 App 窗口启动；Linux/macOS 自动开默认浏览器；无桌面 SSH 自动跑在 `http://127.0.0.1:18550/` |
-| **下载引擎** | **aria2 + AriaNg + yt-dlp + ffmpeg** | **一键自动安装** | 运行 `一键配置.bat` / `sh 一键配置.sh` 会从官方 Release 下载并做 SHA256 校验 |
-| **BT / PT 引擎** | **qBittorrent** | 可选 | 需要下种子/PT 时安装（支持 `WebUI` 密码登录与本机免密 `LocalHostAuth=false`） |
-| **视频下载 GUI** | **`flet==1.1.3`** | 可选 | 仅独立视频图形窗口 `ytdl_gui.py` 需要；不装也能正常使用 3D 主控制台与命令行直投 |
-| **AI 超分** | **Video2X** | 可选 | 检测到本地 Video2X 后可开启「2x 超分」开关，未安装自动跳过 |
-
----
-
-## 🚀 快速部署（任选一种）
-
-### 方式 A：全自动一键配置（推荐新手）
-
-| 平台 | 第一步：配置环境与组件 | 第二步：启动 3D 控制台 |
-| --- | --- | --- |
-| **Windows** | 双击 `一键配置.bat` → 点「一键配置(含环境)」 | 双击 `启动面板.bat` |
-| **Linux / macOS** | 终端执行 `sh 一键配置.sh`（支持 `--scan` / `--auto`） | 终端执行 `sh 启动面板.sh` |
-
-> Linux 里双击 `.sh` 默认会用文本编辑器打开，请在终端运行 `sh 一键配置.sh`。
-
-### 方式 B：极简手动部署（已有 aria2 / qBittorrent）
-
-如果你本机已经装好了 aria2 或 qBittorrent，只需 3 条命令即可跑起 3D 控制台：
-
-```bash
-git clone https://github.com/ember-glade8/downloadstack-control.git
-cd downloadstack-control
-python -m pip install requests          # 若还要用独立 ytdl_gui.py，改为 pip install -r requirements.txt
-python panel.py                         # 自动启动 http://127.0.0.1:18550/ 并打开 3D 控制台窗口
-```
-
-> 首次启动会在同目录自动生成 `config.json`、`state/`、`logs/`、`cache/`、`backups/`，全部位于 `.gitignore` 内，不会污染仓库。点击右上角 **「⚙ 设置」** 即可填入或微调本机路径与端口。
-
-### 方式 C：无桌面 / SSH / NAS 服务器模式
-
-```bash
-DOWNLOADSTACK_WEB_PORT=18550 python panel.py
-# 本机或 SSH 端口转发后浏览器访问 http://127.0.0.1:18550/
-```
-
----
-
-## ✨ 核心功能
-
-### 1. 曲面 3D 空间控制台（`panel_ui.html` · 7 大专属工坊）
-- **零外链离线运行**：纯原生 HTML5 / CSS3 3D / Canvas 渲染，无需 Node.js、无需构建、无 CDN 依赖。
-- **实用化中枢驾驶舱**：中枢整合紧凑 3D 极光吞吐条、**双模式命令栏（万能直投 / 搜歌直下 + 原生 `📁 选目录`）** 与 **最近下载成品秒开舱**（支持站内直播音乐/克隆语音、一键打开视频与文件夹）。
-- **七大面板各有专属 3D 动效与输入框**：`✦ 控制台`、`⚡ 任务队列`（3D 轨道吞吐雷达）、`🌐 内置 AriaNg`（光速光纤脉冲）、`🧲 磁力工坊`（3D 磁感力场）、`🎬 YT 视频`（3D 影院扫描矩阵 + 2x 超分）、`🎵 音乐搜下`（3D 全息黑胶唱片 + Hi-Fi 播放器）、`🎙️ 声音克隆`（3D 神经声纹双螺旋 + 麦克风直录）。
-
-### 6. 全网任意歌曲检索下载 & 开源 AI 声音克隆（`media_studio.py`）
-- **多源搜歌无损下**：聚合网易云音乐 + B站高码率 + YouTube Music，支持 `MP3 320K` / `FLAC 无损` / `WAV` / `M4A`，自动内嵌封面与元信息，下完直接在站内 Hi-Fi 播放器试听。
-- **开源顶尖声音克隆**：
-  - **F5-TTS（MIT 开源零样本 3~15 秒真克隆）**：支持在独立 `.venv-voice` 一键部署 PyTorch CUDA + `f5-tts`（绝不污染主环境、不打包权重进仓库），支持浏览器麦克风直录或上传参考音频（自动 `ffmpeg` 标准化为 24kHz WAV）。
-  - **外部开源 API 兼容**：支持直连本机运行的 CosyVoice / GPT-SoVITS / Fish Speech / Chatterbox API。
-  - **即用神经配音**：内置 12 款高拟真中文/方言/英/日神经声线（`edge-tts`），免显卡 1 秒出片。
-
-### 2. 万能极速直投舱 & 实时任务队列
-- **粘贴即下**：在中枢输入框粘贴 HTTP/HTTPS 直链、`magnet:?`、纯 40 位 Hex / 32 位 Base32 InfoHash、或视频平台链接，自动识别并分流投递。
-- **全栈任务管理**：顶部切换 **「⚡ 任务队列」** 即可实时查看并暂停 / 继续 / 移除 Aria2 与 qBittorrent 全部任务。
-
-### 3. 内置同源 AriaNg（免端口冲突）
-- `panel.py` 直接在 `/ariang/` 挂载本地 `ariaNg/index.html` 并自动 Base64 注入 `rpc-secret`，不再依赖额外的 16800/16801 静态 HTTP 进程。
-- 支持顶部 **「🌐 内置 AriaNg」** 全屏嵌入使用，或点击 **「↗ 跳转 AriaNg」** 前台弹出独立窗口。
-
-### 4. 磁力 / DHT 增强工坊（`magnet_tools.py`）
-- **秒解元数据**：投递磁力时自动尝试预取公共 `.torrent` 并做 **SHA1 InfoHash 严格校验**，跳过 `[METADATA]` 卡顿。
-- **Tracker 热更新**：多镜像拉取公共高速 Tracker（支持自动代理回退与内置保底），一键热写入运行中的 Aria2 与 qBittorrent。
-- **DHT 一键修复**：自动发现携带合法 `token` 的真实 KRPC DHT 节点并写入 `aria2.conf`，实时展示 qBittorrent DHT 节点数。
-
-### 5. 安全调度与维护
-- **PID 隔离**：停止 / 重启 / 一键全停（按 Aria2 → qBittorrent → YT 壳顺序）仅操作本面板记录的 PID 或官方 API 优雅关闭，**绝不全局 `taskkill`**。
-- **一键自检 & 备份**：检查端口、核心文件、目录可写性与 RPC/WebUI 连通性；一键备份全套配置至 `backups/`。
-- **敏感信息防泄漏**：提交前可运行 `python scripts/scan_secrets.py .` 扫描凭据与绝对用户路径。
-
----
-
-## 🔌 默认端口与环境变量
-
-| 端口 / 变量 | 默认值 | 说明 |
-| --- | --- | --- |
-| `DOWNLOADSTACK_WEB_PORT` | `18550`（被占自动顺延至 `18569`） | 3D 控制台本地服务端口（同时直出 `/ariang/`） |
-| `aria2.port` | `6800` | aria2 JSON-RPC 端口（带 `rpc-secret` 认证） |
-| `qbit.port` | `8080` | qBittorrent WebUI 端口（支持密码登录与本机免密） |
-| `DOWNLOADSTACK_ROOT` | 自动探测 | 安装根目录（定位 aria2、ariaNg、qBittorrent、tools） |
-| `DOWNLOADSTACK_DOWNLOADS` | `<同盘>\Downloads` 或 `~/Downloads` | 总下载成品根目录 |
-| `VIDEO2X_PATH` | 自动探测（可选） | Video2X 可执行文件路径（2x 超分用） |
-
----
-
-## 🏗 架构与目录结构
-
-```text
-panel.py（3D 控制台后端服务 + 平台差异层 + 实时轮询 + 同源 AriaNg 挂载）
-  ├─ 平台差异层   IS_WIN / pid_alive / kill_tree / shell_run / open_path
-  ├─ Probe         aria2 JSON-RPC + 任务队列 · qB WebUI 免密/登录 + DHT 节点 · yt PID
-  ├─ ControlBackend 启停 · 万能投递 · 磁力增强 · 任务控制 · 自检 · 备份 · 清理 · 开机自启
-  └─ HTTP Server   127.0.0.1:18550  (/ · /api/state · /api/action · /ariang/)
-
-panel_ui.html      零外链离线曲面 3D 空间控制台前端
-magnet_tools.py    磁力解析 · Tracker 拉取热更 · DHT token 节点发现 · SHA1 种子预取校验
-ytdl_gui.py        独立视频下载器 GUI（支持画质/Cookies/2x 超分）
-setup_wizard.py    图形/文本配置引导（--auto / --text / --scan）
-install.bat / .sh  三平台组件安装器（目录初始化 + 官方包 SHA256 校验 + 启停脚本生成）
-```
+## 📁 仓库目录结构
 
 ```text
 downloadstack-control/
-├─ panel.py              面板主程序（3D 控制台后端服务 + 探测 + 动作 + 平台差异层）
-├─ panel_ui.html         7 大专属 3D 空间工坊前端（零外链离线运行 + 内置 AriaNg / 磁力 / 视频 / 音乐 / 声音克隆）
-├─ magnet_tools.py       磁力解析 / Tracker 热更新 / DHT 修复 / 种子预取校验模块
-├─ media_studio.py       全网歌曲检索下载（网易云/B站/YouTube）+ 开源声音克隆（F5-TTS / 外部 API / Edge-TTS）
-├─ ytdl_gui.py           独立视频下载器 GUI
-├─ setup_wizard.py       图形/文本引导（--auto / --text / --scan）
-├─ 一键配置.bat / .sh     一键配置（依赖 + 组件 + 环境变量）
-├─ 启动面板.bat / .sh     启动器（先体检 → 缺就问你 → 启动 3D 控制台）
-├─ install.bat / .sh     安装向导（盘符自选、端口避让、SHA256 校验）
-├─ diag.bat / diag.sh    环境与端口诊断 → diag-report.txt
-├─ config.example.json   配置模板
-├─ requirements.txt      requests（必装） / flet（ytdl_gui.py 可选）
+├─ panel.py              核心本地服务（HTTP /api/state、/api/action、/api/media、/api/stream_audio、/ariang/、/qbit/ 代理）
+├─ panel_ui.html         无构建链单文件 Spatial 3D Command OS 前端（含 WebGL GLSL 沉浸舞台）
+├─ media_studio.py       6 音源搜歌、6 大榜单、LRC 歌词、音频流解析、声音克隆、ComfyUI 与 Codex 客户端
+├─ prompt_engine.py      AI 画室提示词引擎（54+ 大师模板库、中英语义检索、动态合成、Codex 优化架构师）
+├─ magnet_tools.py       磁力 / InfoHash 解析、公共 Tracker 热更新、DHT 诊断与 aria2.conf 无损修复
+├─ ytdl_gui.py           独立视频下载 GUI 工具
+├─ setup_wizard.py       图形 / 命令行跨平台引导向导
+├─ install.bat / .sh     一键环境与组件安装器（盘符自选、端口避让、SHA256 校验）
+├─ 一键配置.bat / .sh     首次配置统一入口
+├─ 启动面板.bat / .sh     面板启动器
+├─ diag.bat / .sh        一键环境诊断脚本
+├─ config.example.json   脱敏配置模板（运行时自动生成本地 config.json）
 ├─ scripts/
-│  ├─ scan_secrets.py    提交前敏感信息扫描
-│  └─ build.ps1          PyInstaller 单文件打包脚本（可选）
-├─ tests/test_core.py    核心与磁力模块单元测试
-└─ LICENSE / NOTICE / SECURITY.md / CONTRIBUTING.md / README.md
+│  ├─ scan_secrets.py    提交前敏感信息与个人路径扫描器
+│  └─ build.ps1          打包辅助脚本
+├─ tests/test_core.py    核心单元测试
+└─ LICENSE / NOTICE / SECURITY.md / CONTRIBUTING.md
 ```
 
 ---
 
-## 🆘 常见问题排错
-
-### 1. qBittorrent 状态灯为红 / 登录失败
-- 点击右上角 **「⚙ 设置」** 填写 qBittorrent WebUI 账号密码并保存；如果你在 qBittorrent 中勾选了「对本地主机上的客户端跳过身份验证（`LocalHostAuth=false`）」，面板会自动免密直连，密码留空即可。
-- 面板内置 30 秒失败退避保护，避免密码填错触发 qB 封禁本机 IP。
-
-### 2. 磁力链接卡在「获取元数据」或 DHT 为 0 节点
-- 进入顶部 **「🧲 磁力工坊」** → 点 **「🔧 一键修复 DHT/磁力」** 与 **「🌐 更新并热载 Tracker」**。
-- 直接在「磁力工坊」或中枢「万能直投舱」粘贴 `magnet:?` 或 40 位 InfoHash，系统会自动补全高速 Tracker 并优先预取 `.torrent`（带 SHA1 校验）。
-
-### 3. 抖音 / 小红书视频提示 403 或需要 Cookies
-- 打开视频下载器 GUI（`ytdl_gui.py`），在 **「登录状态 / Cookies」** 选择已登录该站点的 Firefox / Chrome 或指定导出的 `cookies.txt`（选择会自动保存）。
-
-### 4. Linux / Ubuntu 24.04 报 `externally-managed-environment`
-- 一键安装器默认创建独立 `.venv` 避开 PEP 668；若手动安装请先执行：
-  ```bash
-  sudo apt install -y python3-venv python3-pip
-  python3 -m venv .venv && .venv/bin/pip install requests
-  .venv/bin/python panel.py
-  ```
-
-### 5. 导出诊断报告
-- Windows 双击 `diag.bat`，Linux/macOS 执行 `sh diag.sh`，会生成 `diag-report.txt`（包含系统、Python、核心文件、18550/6800/8080 端口与日志）。
-
----
-
-## 🛣 Roadmap
-
-- [x] 下载队列可视化（Aria2 + qBittorrent 多任务进度条与暂停/继续/移除）
-- [x] 磁力 / DHT 增强工坊（Tracker 热更新、DHT 节点修复、SHA1 预取 `.torrent`）
-- [x] 同源内置 AriaNg 挂载（零端口冲突 + 自动注入 RPC Token）
-- [ ] 系统托盘图标 + 最小化到托盘
-- [ ] 定时任务（夜间限速、定时备份）
-- [ ] 打包为单文件 exe（Release 附件 + SHA256）
-
----
-
-## 🤝 贡献与验证
-
-提交 PR 前请运行本地自检（与 GitHub Actions CI 一致）：
+## 🛡 提交前安全与单测自检
 
 ```bash
 python scripts/scan_secrets.py .
-python -m py_compile panel.py magnet_tools.py ytdl_gui.py setup_wizard.py scripts/scan_secrets.py
 python -m unittest discover -s tests -v
 ```
 
 ---
 
-## 📄 License
+## 📄 License & 合规声明
 
 MIT © DownloadStack Control contributors  
-第三方组件许可见 [NOTICE](NOTICE)。本仓库只包含自有源码，不打包任何第三方二进制；请仅下载你有权获取的内容。
+第三方组件许可信息见 [NOTICE](NOTICE)。
+
+> 本仓库仅包含自有源码与文档，**不包含任何第三方二进制文件、模型权重、API 密钥或个人配置**。  
+> 请仅下载与处理您拥有合法权限的内容，严格遵守所在地法律法规及各平台服务条款。

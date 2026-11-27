@@ -1,5 +1,5 @@
 {
-  "_readme": "参考文件，不需要改名。面板首次启动会按自身位置自动生成 config.json；<ROOT> 与 <DOWNLOADS> 会被替换成实际目录。",
+  "_readme": "参考配置模板，不需要手动改名。面板首次启动会按自身位置自动生成本地 config.json（已加入 .gitignore，绝不入库）。<ROOT> 与 <DOWNLOADS> 会自动替换为本机实际目录。",
   "aria2": {
     "host": "127.0.0.1",
     "port": 6800,
@@ -20,7 +20,10 @@
   "yt": {
     "bat": "",
     "bat2": "",
-    "ini": ""
+    "ini": "",
+    "output": "<DOWNLOADS>/yt-dlp",
+    "cookies": "auto",
+    "cookies_file": ""
   },
   "ariang": {
     "port": 16800,
@@ -39,6 +42,30 @@
     "upscale": false
   },
   "paths": {
-    "downloads": "<DOWNLOADS>"
+    "downloads": "<DOWNLOADS>",
+    "music": "<DOWNLOADS>/music",
+    "voice": "<DOWNLOADS>/voice-clone",
+    "aigc": "<DOWNLOADS>/ai-studio"
+  },
+  "voice": {
+    "api_url": "http://127.0.0.1:9880"
+  },
+  "comfyui": {
+    "enabled": false,
+    "owner_only": true,
+    "url": "http://127.0.0.1:8188",
+    "root": "",
+    "start_bat": "",
+    "custom_mode": "comfyui",
+    "custom_url": "",
+    "custom_api_key": "",
+    "custom_model": "",
+    "custom_workflow_json": ""
+  },
+  "codex": {
+    "base_url": "",
+    "api_key": "",
+    "model": "",
+    "api_style": "auto"
   }
 }

@@ -31,6 +31,9 @@ __pycache__/
 .venv/
 .venv-voice/
 venv/
+SPEC.md
+STATE.md
+workflows/
 
 # 构建
 build/
