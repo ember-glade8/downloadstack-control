@@ -601,6 +601,11 @@ class ControlBackend:
             "results": [], "lyrics": {}, "logs": [], "file": "",
         }
         self.stream_tokens = {}
+        self.repair4k_job = {
+            "running": False, "pid": None, "pct": 0.0, "stage": "就绪",
+            "src_path": "", "src_name": "", "out_path": "", "out_name": "",
+            "encoder": "", "err": "", "cancel": False,
+        }
         cached_ref = CACHE / "ref_voice.wav"
         self.voice_job = {
             "running": False, "pid": None, "installing": False,
@@ -970,6 +975,8 @@ class ControlBackend:
             "vcodec": "", "pix_fmt": "", "bit_depth": "", "fps": 0.0,
             "bitrate_mbps": 0.0, "duration": 0.0,
             "acodec": "", "achannels": 0,
+            "color_transfer": "", "color_primaries": "", "is_hdr": False,
+            "issues": [],
             "can_copy_video": True,
             "needs_remux": ext not in self._WEB_VIDEO_EXTS,
             "has_ffmpeg": bool(ff_dir or shutil.which("ffmpeg")),
@@ -1030,6 +1037,26 @@ class ControlBackend:
                         except Exception:
                             pass
                     info["can_copy_video"] = vc in self._COPY_VCODECS
+                    ct = str(v_st.get("color_transfer") or "").lower()
+                    cp = str(v_st.get("color_primaries") or "").lower()
+                    info["color_transfer"] = ct
+                    info["color_primaries"] = cp
+                    info["is_hdr"] = (ct in ("smpte2084", "arib-std-b67")) or ("2020" in cp)
+                    # 自动画质体检诊断
+                    issues = []
+                    if w and h and max(w, h) < 3800 and h < 2100:
+                        issues.append("源片仅 %dx%d（非原生 4K），建议开启 GPU 4K 锐化或用显卡重建纯 4K 母带" % (w, h))
+                    br_m = float(info.get("bitrate_mbps") or 0)
+                    if br_m > 0:
+                        if h >= 2100 and br_m < 10.0:
+                            issues.append("4K 码率偏低（%.1f Mbps，压缩痕迹较重）" % br_m)
+                        elif 1000 <= h < 2100 and br_m < 4.5:
+                            issues.append("1080P 码率偏低（%.1f Mbps，存在有损压缩模糊）" % br_m)
+                        elif h < 1000 and br_m < 2.2:
+                            issues.append("低清低码率片源（%.1f Mbps）" % br_m)
+                    if info["is_hdr"]:
+                        issues.append("检测到 HDR (%s/%s)，网页直接渲染易发灰，已支持一键色彩还原" % (ct or "HDR", cp or "BT2020"))
+                    info["issues"] = issues
                 if a_st:
                     ac = str(a_st.get("codec_name") or "").lower()
                     info["acodec"] = ac
@@ -1066,6 +1093,187 @@ class ControlBackend:
             cache.clear()
         cache[cache_key] = dict(info)
         return info
+
+    def _run_repair_4k_worker(self, src: Path, preset: str = "ultra4k", fix_hdr: bool = True):
+        """后台使用 RTX NVENC + Lanczos 4K + Deblock/HQDN3D + FidelityFX CAS 重建纯 4K 高码率母带。"""
+        ff_dir = self._find_ffmpeg()
+        ffmpeg_exe = (str(Path(ff_dir) / ("ffmpeg.exe" if IS_WIN else "ffmpeg")) if ff_dir else (shutil.which("ffmpeg") or ""))
+        if not ffmpeg_exe:
+            with self.lock:
+                self.repair4k_job.update({"running": False, "stage": "缺少 ffmpeg", "err": "未找到 ffmpeg 可执行文件"})
+            return
+
+        pinfo = self.probe_video(str(src))
+        w = int(pinfo.get("width") or 0)
+        h = int(pinfo.get("height") or 0)
+        dur = float(pinfo.get("duration") or 0.0)
+        acodec = str(pinfo.get("acodec") or "").lower()
+        is_hdr = bool(pinfo.get("is_hdr"))
+
+        out_path = src.with_name(src.stem + "_4K纯享修复.mp4")
+        idx_n = 2
+        while out_path.exists():
+            out_path = src.with_name("%s_4K纯享修复_%d.mp4" % (src.stem, idx_n))
+            idx_n += 1
+
+        # 探测可用编码器（优先 RTX hevc_nvenc -> h264_nvenc -> libx264）
+        enc_name = "libx264"
+        try:
+            enc_txt = subprocess.run(
+                [ffmpeg_exe, "-hide_banner", "-encoders"],
+                capture_output=True, text=True, timeout=6,
+                creationflags=(0x08000000 if IS_WIN else 0),
+            ).stdout or ""
+            if "hevc_nvenc" in enc_txt:
+                enc_name = "hevc_nvenc"
+            elif "h264_nvenc" in enc_txt:
+                enc_name = "h264_nvenc"
+        except Exception:
+            pass
+
+        # 构建专业 4K 修复滤镜链：去压缩块/降噪 -> 纯 4K Lanczos 超分 -> AMD FidelityFX CAS 锐化 -> 微纹理 & HDR防发灰
+        vf = []
+        if preset in ("deblock", "ultra4k"):
+            vf.append("deblock=filter=weak:block=4")
+            vf.append("hqdn3d=1.0:1.0:3.0:3.0")
+        # 若非纯 4K (3840 宽 / 2160 高)，拉升至纯 4K UHD（保持原比例且宽高为偶数）
+        if max(w, h) < 3800 and h < 2100:
+            if w > 0 and h > 0 and h > w:
+                vf.append("scale=-2:3840:flags=lanczos+accurate_rnd+full_chroma_int")
+            else:
+                vf.append("scale=3840:-2:flags=lanczos+accurate_rnd+full_chroma_int")
+        cas_val = "0.52" if preset == "ultra4k" else "0.42"
+        vf.append("cas=strength=%s" % cas_val)
+        vf.append("unsharp=3:3:0.30:3:3:0.0")
+        if is_hdr and fix_hdr:
+            vf.append("eq=contrast=1.08:saturation=1.15:gamma=1.02")
+        vf.append("format=yuv420p")
+
+        def _build_cmd(enc):
+            c = [
+                ffmpeg_exe, "-y", "-hide_banner", "-v", "error", "-nostdin",
+                "-i", str(src),
+                "-map", "0:v:0", "-map", "0:a:0?",
+                "-vf", ",".join(vf),
+            ]
+            if enc == "hevc_nvenc":
+                c += [
+                    "-c:v", "hevc_nvenc", "-preset", "p5", "-tune", "hq",
+                    "-rc", "vbr", "-cq", "16", "-b:v", "35M", "-maxrate", "65M", "-bufsize", "80M",
+                    "-spatial_aq", "1", "-temporal_aq", "1", "-tag:v", "hvc1",
+                ]
+            elif enc == "h264_nvenc":
+                c += [
+                    "-c:v", "h264_nvenc", "-preset", "p5", "-tune", "hq",
+                    "-rc", "vbr", "-cq", "16", "-b:v", "35M", "-maxrate", "65M", "-bufsize", "80M",
+                    "-spatial_aq", "1",
+                ]
+            else:
+                c += ["-c:v", "libx264", "-preset", "fast", "-crf", "16"]
+            if acodec in self._COPY_ACODECS:
+                c += ["-c:a", "copy"]
+            else:
+                c += ["-c:a", "aac", "-b:a", "320k", "-ac", "2"]
+            c += ["-movflags", "+faststart", "-progress", "pipe:1", str(out_path)]
+            return c
+
+        with self.lock:
+            self.repair4k_job.update({
+                "running": True, "pct": 1.0,
+                "stage": "正在调用 %s 重建纯 4K (3840×2160) 高码率母带…" % enc_name,
+                "src_path": str(src), "src_name": src.name,
+                "out_path": str(out_path), "out_name": out_path.name,
+                "encoder": enc_name, "err": "", "cancel": False,
+            })
+
+        try_encs = [enc_name] + ([e for e in ("h264_nvenc", "libx264") if e != enc_name])
+        success = False
+        last_err = ""
+        for enc in try_encs:
+            with self.lock:
+                if self.repair4k_job.get("cancel"):
+                    break
+                self.repair4k_job["encoder"] = enc
+                self.repair4k_job["stage"] = "正在用 %s 重建纯 4K 母带…" % enc
+            cmd = _build_cmd(enc)
+            proc = None
+            try:
+                proc = subprocess.Popen(
+                    cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    text=True, encoding="utf-8", errors="replace",
+                    creationflags=(0x08000000 if IS_WIN else 0),
+                )
+                with self.lock:
+                    self.repair4k_job["pid"] = proc.pid
+                while True:
+                    with self.lock:
+                        if self.repair4k_job.get("cancel"):
+                            proc.terminate()
+                            break
+                    line = proc.stdout.readline()
+                    if not line:
+                        if proc.poll() is not None:
+                            break
+                        continue
+                    s = line.strip()
+                    if s.startswith("out_time_us=") and dur > 0:
+                        try:
+                            us = float(s.split("=", 1)[1])
+                            pct = min(99.0, max(1.0, (us / 1_000_000.0) / dur * 100.0))
+                            with self.lock:
+                                self.repair4k_job["pct"] = round(pct, 1)
+                        except Exception:
+                            pass
+                    elif s.startswith("speed="):
+                        spd = s.split("=", 1)[1].strip()
+                        if spd and spd != "N/A":
+                            with self.lock:
+                                self.repair4k_job["stage"] = "纯 4K 母带重建中（%s · 速度 %s）" % (enc, spd)
+                rc = proc.wait()
+                err_txt = (proc.stderr.read() or "").strip() if proc.stderr else ""
+                with self.lock:
+                    canceled = bool(self.repair4k_job.get("cancel"))
+                if canceled:
+                    try:
+                        if out_path.exists():
+                            out_path.unlink()
+                    except Exception:
+                        pass
+                    with self.lock:
+                        self.repair4k_job.update({"running": False, "pid": None, "pct": 0.0, "stage": "已取消重建"})
+                    return
+                if rc == 0 and out_path.is_file() and out_path.stat().st_size > 100_000:
+                    success = True
+                    break
+                last_err = err_txt[-160:] if err_txt else ("exit=%d" % rc)
+                try:
+                    if out_path.exists():
+                        out_path.unlink()
+                except Exception:
+                    pass
+            except Exception as ex:
+                last_err = str(ex)
+                if proc is not None:
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
+
+        if success:
+            with self.lock:
+                self.repair4k_job.update({
+                    "running": False, "pid": None, "pct": 100.0,
+                    "stage": "纯 4K 高码率母带重建完成 ✔",
+                    "out_path": str(out_path), "out_name": out_path.name, "err": "",
+                })
+            self.log("纯 4K 母带重建完成 → %s" % out_path.name, "OK")
+        else:
+            with self.lock:
+                self.repair4k_job.update({
+                    "running": False, "pid": None, "pct": 0.0,
+                    "stage": "4K 重建失败", "err": last_err or "编码失败",
+                })
+            self.log("纯 4K 母带重建失败：%s" % last_err, "ERROR")
 
     @staticmethod
     def _pick_folder_dialog(initial: str = "") -> str:
@@ -2455,6 +2663,7 @@ class ControlBackend:
             "music_studio": music_job,
             "voice_studio": voice_job,
             "aigc_studio": aigc_job,
+            "repair4k": dict(self.repair4k_job),
             "codex": codex_info,
             "recent_files": self._get_recent_files_cached(),
             "magnet": self._magnet_diag(),
@@ -2486,6 +2695,27 @@ class ControlBackend:
         if act == "video_probe":
             info = self.probe_video(str(body.get("path") or ""))
             return bool(info.get("ok")), info.get("msg") or "探测完成", {"info": info}
+        if act == "video_repair_4k":
+            import threading
+            with self.lock:
+                if self.repair4k_job.get("running"):
+                    return False, "已有 4K 画质重建任务正在运行，请等待完成或先取消", {"job": dict(self.repair4k_job)}
+            target = self._is_allowed_media(str(body.get("path") or ""))
+            if target is None or target.suffix.lower() not in self._VIDEO_EXTS:
+                return False, "视频文件不存在或不在允许目录内", {}
+            preset = str(body.get("preset") or "ultra4k").strip().lower()
+            fix_hdr = bool(body.get("fix_hdr", True))
+            threading.Thread(
+                target=self._run_repair_4k_worker, args=(target, preset, fix_hdr), daemon=True
+            ).start()
+            return True, "已启动 RTX 显卡纯 4K (3840×2160) 高码率母带重建任务", {}
+        if act == "video_repair_4k_cancel":
+            with self.lock:
+                self.repair4k_job["cancel"] = True
+                pid = self.repair4k_job.get("pid")
+            if pid and pid_alive(pid):
+                kill_tree(pid)
+            return True, "已取消 4K 母带重建任务", {}
         if act in ("video_open_external", "video_open_folder"):
             target = self._is_allowed_media(str(body.get("path") or ""))
             if target is None or target.suffix.lower() not in self._VIDEO_EXTS:

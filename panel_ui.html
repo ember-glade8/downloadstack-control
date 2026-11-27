@@ -1162,6 +1162,45 @@
     transform: translateX(100%); transition: transform .24s ease;
   }
   .cine-drawer.open { transform: translateX(0); }
+  .cine-gl-4k {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 1; background: #000;
+  }
+  .cine-sub-overlay {
+    position: absolute; left: 8%; right: 8%; bottom: 72px; z-index: 2;
+    pointer-events: none; text-align: center;
+    font-size: 20px; font-weight: 800; color: #fff; line-height: 1.45;
+    text-shadow: 0 2px 6px #000, 0 0 12px rgba(0,0,0,0.95);
+  }
+  .cine-stage:fullscreen .cine-sub-overlay,
+  body.cine-immersive .cine-sub-overlay { font-size: 28px; bottom: 84px; }
+  .cine-sub-overlay span {
+    display: inline-block; padding: 3px 12px; border-radius: 7px;
+    background: rgba(0, 0, 0, 0.56);
+  }
+  .cine-btn.c4k-on {
+    background: linear-gradient(135deg, rgba(0,229,255,0.34), rgba(255,179,71,0.34)) !important;
+    border-color: rgba(0,229,255,0.88) !important;
+    color: #fff !important;
+    box-shadow: 0 0 16px rgba(0,229,255,0.38);
+  }
+  .cine-4k-panel {
+    position: absolute; top: 0; right: 0; bottom: 0; width: 356px; max-width: 88vw;
+    background: rgba(5, 11, 26, 0.94); backdrop-filter: blur(18px);
+    border-left: 1px solid rgba(0, 229, 255, 0.42);
+    z-index: 6; display: flex; flex-direction: column; padding: 13px; gap: 10px;
+    overflow-y: auto; transform: translateX(100%); transition: transform .24s ease;
+  }
+  .cine-4k-panel.open { transform: translateX(0); }
+  .c4k-slider-row {
+    display: flex; flex-direction: column; gap: 4px;
+    padding: 8px 10px; border-radius: 10px;
+    background: rgba(12, 24, 52, 0.72); border: 1px solid rgba(148, 192, 255, 0.16);
+  }
+  .c4k-slider-row label {
+    display: flex; justify-content: space-between; font-size: 11.5px; color: var(--text-1); font-weight: 700;
+  }
+  .c4k-slider-row input[type=range] { width: 100%; accent-color: #00e5ff; cursor: pointer; }
   body.cine-immersive .topbar,
   body.cine-immersive .cine-lib,
   body.cine-immersive #monster-dock,
@@ -2440,6 +2479,8 @@
         <div class="cine-main">
           <div class="cine-stage" id="cine-stage">
             <video id="cine-video" preload="metadata" playsinline></video>
+            <canvas id="cine-gl-4k" class="cine-gl-4k hidden"></canvas>
+            <div id="cine-sub-overlay" class="cine-sub-overlay hidden"></div>
             <div class="cine-cover" id="cine-empty">
               <div style="font-size:48px;">🎬</div>
               <div style="font-size:17px;font-weight:900;color:#fff;">站内原画影院 · 零压缩沉浸式全屏观看</div>
@@ -2475,6 +2516,49 @@
               </div>
               <div id="cine-drawer-list" class="list-scroll" style="flex:1;min-height:0;"></div>
             </div>
+            <div class="cine-4k-panel" id="cine-4k-panel">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                <div style="font-size:13.5px;font-weight:900;color:#00e5ff;">✨ 4K 纯享画质诊断与修复台</div>
+                <button class="cine-btn" onclick="toggleCine4kPanel(false)">✕</button>
+              </div>
+              <div id="cine-4k-diag" class="eng-tile" style="font-size:11.5px;line-height:1.65;">
+                <div class="c-dim">播放任意影片后自动进行 ffprobe 真 4K / 码率 / HDR 体检…</div>
+              </div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <button class="btn btn-xs btn-cyan" style="flex:1;" id="c4k-master-btn" onclick="toggleCine4kFix()">✨ 开启 GPU 4K 实时修复</button>
+                <button class="btn btn-xs btn-amber" id="c4k-split-btn" onclick="toggleCine4kSplit()">⚖️ 分屏对比</button>
+              </div>
+              <div class="pill-row">
+                <span class="chip" onclick="applyCine4kPreset('pure4k')">💎 纯4K锐利</span>
+                <span class="chip" onclick="applyCine4kPreset('hdr')">🌈 HDR防发灰</span>
+                <span class="chip" onclick="applyCine4kPreset('deblock')">🧹 去压缩模糊</span>
+              </div>
+              <div class="c4k-slider-row">
+                <label><span>FidelityFX CAS 4K 锐化清晰度</span><span class="mono c-cyan" id="c4k-sharp-v">72%</span></label>
+                <input id="c4k-sharp" type="range" min="0" max="100" value="72" oninput="updateCine4kParam('sharp', this.value)" />
+              </div>
+              <div class="c4k-slider-row">
+                <label><span>影院微对比 / HDR 防发灰还原</span><span class="mono c-amber" id="c4k-hdr-v">32%</span></label>
+                <input id="c4k-hdr" type="range" min="0" max="100" value="32" oninput="updateCine4kParam('hdr', this.value)" />
+              </div>
+              <div class="c4k-slider-row">
+                <label><span>色彩通透度与质感饱和</span><span class="mono c-mint" id="c4k-sat-v">18%</span></label>
+                <input id="c4k-sat" type="range" min="0" max="100" value="18" oninput="updateCine4kParam('sat', this.value)" />
+              </div>
+              <div class="eng-tile" style="gap:7px;border-color:rgba(167,139,250,0.38);">
+                <div style="font-size:12px;font-weight:800;color:#c4b5fd;">🚀 离线显卡深度重建纯 4K (3840×2160)</div>
+                <div class="c-dim" style="font-size:11px;line-height:1.55;">若原片本身被压缩成 1080P/低码率，可直接调用本机 RTX 显卡 (NVENC + Lanczos + Deblock + CAS) 重建一份高码率纯 4K 母带文件（不覆盖原片）。</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                  <button class="btn btn-xs btn-violet" style="flex:1;" id="c4k-rebuild-btn" onclick="startCine4kRebuild()">🚀 显卡重建纯 4K 母带</button>
+                  <button class="btn btn-xs btn-rose hidden" id="c4k-cancel-btn" onclick="cancelCine4kRebuild()">⏹ 取消</button>
+                </div>
+                <div id="c4k-prog-wrap" class="hidden" style="display:flex;flex-direction:column;gap:4px;">
+                  <div class="mono c-cyan" style="font-size:10.5px;" id="c4k-prog-txt">准备中…</div>
+                  <div class="prog-track"><div class="prog-fill" id="c4k-prog-fill" style="width:0%;background:linear-gradient(90deg,#00e5ff,#a78bfa);"></div></div>
+                </div>
+                <button class="btn btn-xs btn-mint hidden" id="c4k-play-out-btn" onclick="playCine4kOutput()">▶ 立即播放纯 4K 修复母带</button>
+              </div>
+            </div>
             <div class="cine-top">
               <div style="min-width:0;flex:1;">
                 <div class="cine-title" id="cine-title">尚未选择影片</div>
@@ -2482,6 +2566,8 @@
                 <div class="cine-qbadge mono hidden" id="cine-qbadge">💎 原画零压缩</div>
               </div>
               <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;">
+                <button class="cine-btn" id="cine-4k-top-btn" onclick="toggleCine4kFix()" title="一键 GPU FidelityFX CAS 4K 清晰度与 HDR 防发灰修复 (快捷键 E)">✨ 4K画质修复</button>
+                <button class="cine-btn" onclick="toggleCine4kPanel()" title="打开 4K 诊断、微调滑块与 RTX 显卡重建纯 4K 母带">🔧 修复台</button>
                 <button class="cine-btn" style="background:rgba(255,61,113,0.26);border-color:rgba(255,61,113,0.62);" onclick="cineDeleteCurrent()" title="看完即删：删除当前影片与关联种子并清理缓存">🗑️ 删片清缓存</button>
                 <button class="cine-btn" onclick="toggleCineDrawer()" title="选集/片库 (D)">📑 选集</button>
                 <button class="cine-btn" id="cine-imm-x" onclick="toggleCineImmersive()" title="窗口沉浸铺满 (I)">🕶️ 沉浸</button>
@@ -2501,6 +2587,7 @@
                 <button class="cine-btn" onclick="cineSeekBy(10)" title="前进 10 秒">10 ↻</button>
                 <span class="cine-time mono" id="cine-time">00:00 / 00:00</span>
                 <span style="flex:1;"></span>
+                <button class="cine-btn" id="cine-4k-btn" onclick="toggleCine4kFix()" title="一键 GPU 4K 清晰度修复 (E)">✨ 4K修复</button>
                 <button class="cine-btn" id="cine-mode-btn" onclick="toggleCineMode()" title="切换原画直出 / 无损视频直封 (-c:v copy)">💎 原画直出</button>
                 <button class="cine-btn" id="cine-mute" onclick="cineMute()" title="静音 (M)">🔊</button>
                 <input id="cine-vol" class="cine-vol" type="range" min="0" max="1" step="0.01" value="1" oninput="cineSetVol(this.value)" />
@@ -3301,6 +3388,7 @@
       const mergedSubs = [...initSubs, ...(pr.info.embedded_subs || [])];
       if ((pr.info.embedded_subs || []).length) applyCineSubList(mergedSubs, true);
       updateCineQualityBadge();
+      renderCine4kDiag();
       // 若 MKV 含浏览器无声的 AC3/DTS/TrueHD 音轨，自动无缝切到原画无损直封 (-c:v copy)
       if (pr.info.needs_remux && pr.info.has_ffmpeg && CINE.mode === 'direct' && !CINE.autoTriedRemux) {
         CINE.autoTriedRemux = true;
@@ -3392,7 +3480,7 @@
     clearTimeout(CINE.idleTimer);
     CINE.idleTimer = setTimeout(() => {
       const v = cineV();
-      if (v && !v.paused && CINE.cur && !CINE.drawerOpen) st.classList.add('idle');
+      if (v && !v.paused && CINE.cur && !CINE.drawerOpen && !C4K.panelOpen) st.classList.add('idle');
     }, 2500);
   }
   function cineToggle() {
@@ -3536,6 +3624,371 @@
     if (it) await _doDeleteVideo(it);
   }
   window.cineDeleteItem = cineDeleteItem;
+
+  /* ===== GPU WEBGL2 FIDELITYFX CAS 4K REALTIME REPAIR + RTX OFFLINE 4K REBUILD ===== */
+  const C4K = {
+    enabled: false, panelOpen: false, split: false,
+    sharp: 0.72, hdr: 0.32, sat: 0.18,
+    gl: null, prog: null, tex: null, locs: null, raf: 0, lastOutPath: '',
+  };
+
+  function initCine4kGL() {
+    if (C4K.gl && C4K.prog) return true;
+    const cv = $('cine-gl-4k');
+    if (!cv) return false;
+    const gl = cv.getContext('webgl2', { alpha: false, antialias: false, powerPreference: 'high-performance' })
+            || cv.getContext('webgl', { alpha: false, antialias: false, powerPreference: 'high-performance' });
+    if (!gl) return false;
+    const vsSrc = `
+      attribute vec2 a_pos;
+      varying vec2 v_uv;
+      void main() {
+        v_uv = vec2(a_pos.x * 0.5 + 0.5, 0.5 - a_pos.y * 0.5);
+        gl_Position = vec4(a_pos, 0.0, 1.0);
+      }`;
+    // AMD FidelityFX CAS (Contrast Adaptive Sharpening) + Filmic Micro-Contrast + HDR Recovery + Split Compare
+    const fsSrc = `
+      precision highp float;
+      uniform sampler2D u_tex;
+      uniform vec2 u_texSize;
+      uniform vec4 u_rect; // (ox, oy, sx, sy) letterbox mapping
+      uniform float u_sharp;
+      uniform float u_hdr;
+      uniform float u_sat;
+      uniform float u_split;
+      varying vec2 v_uv;
+
+      vec3 lumaWeights = vec3(0.2126, 0.7152, 0.0722);
+
+      void main() {
+        vec2 uv = (v_uv - u_rect.xy) / u_rect.zw;
+        if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+          gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+          return;
+        }
+        vec3 orig = texture2D(u_tex, uv).rgb;
+        if (u_split > 0.5) {
+          if (abs(v_uv.x - 0.5) < 0.0018) {
+            gl_FragColor = vec4(0.0, 0.90, 1.0, 1.0);
+            return;
+          }
+          if (v_uv.x < 0.5) {
+            gl_FragColor = vec4(orig, 1.0);
+            return;
+          }
+        }
+        vec2 px = 1.0 / max(u_texSize, vec2(1.0));
+        vec3 n = texture2D(u_tex, uv + vec2(0.0, -px.y)).rgb;
+        vec3 s = texture2D(u_tex, uv + vec2(0.0,  px.y)).rgb;
+        vec3 w = texture2D(u_tex, uv + vec2(-px.x, 0.0)).rgb;
+        vec3 e = texture2D(u_tex, uv + vec2( px.x, 0.0)).rgb;
+
+        // AMD FidelityFX CAS adaptive sharpening (zero halo, preserves smooth gradients)
+        vec3 mn = min(orig, min(min(n, s), min(w, e)));
+        vec3 mx = max(orig, max(max(n, s), max(w, e)));
+        vec3 amp = clamp(min(mn, 1.0 - mx) / max(mx, vec3(0.0001)), 0.0, 1.0);
+        amp = sqrt(amp);
+        float peak = -1.0 / mix(8.8, 4.7, clamp(u_sharp, 0.0, 1.0));
+        vec3 weight = amp * peak;
+        vec3 col = clamp((orig + (n + s + w + e) * weight) / max(1.0 + 4.0 * weight, vec3(0.001)), 0.0, 1.0);
+
+        // Micro-contrast & HDR washed-out black-floor / S-curve restoration
+        if (u_hdr > 0.01) {
+          float k = u_hdr;
+          col = max(col - vec3(0.022 * k), vec3(0.0)) / max(1.0 - 0.032 * k, 0.5);
+          col = clamp(col, 0.0, 1.0);
+          vec3 scurve = col * col * (3.0 - 2.0 * col);
+          col = mix(col, scurve, 0.36 * k);
+        }
+        // Clean cinema saturation vibrance
+        if (u_sat > 0.01) {
+          float l = dot(col, lumaWeights);
+          col = mix(vec3(l), col, 1.0 + 0.42 * u_sat);
+        }
+        gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+      }`;
+    const mk = (t, src) => {
+      const sh = gl.createShader(t);
+      gl.shaderSource(sh, src);
+      gl.compileShader(sh);
+      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) return null;
+      return sh;
+    };
+    const vs = mk(gl.VERTEX_SHADER, vsSrc);
+    const fs = mk(gl.FRAGMENT_SHADER, fsSrc);
+    if (!vs || !fs) return false;
+    const prog = gl.createProgram();
+    gl.attachShader(prog, vs);
+    gl.attachShader(prog, fs);
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return false;
+
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+    const aPos = gl.getAttribLocation(prog, 'a_pos');
+    gl.enableVertexAttribArray(aPos);
+    gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+    C4K.gl = gl;
+    C4K.prog = prog;
+    C4K.tex = tex;
+    C4K.locs = {
+      texSize: gl.getUniformLocation(prog, 'u_texSize'),
+      rect: gl.getUniformLocation(prog, 'u_rect'),
+      sharp: gl.getUniformLocation(prog, 'u_sharp'),
+      hdr: gl.getUniformLocation(prog, 'u_hdr'),
+      sat: gl.getUniformLocation(prog, 'u_sat'),
+      split: gl.getUniformLocation(prog, 'u_split'),
+    };
+    return true;
+  }
+
+  function syncCineSubOverlay() {
+    const ov = $('cine-sub-overlay');
+    const v = cineV();
+    if (!ov || !v) return;
+    if (!C4K.enabled) { ov.classList.add('hidden'); return; }
+    let lines = [];
+    const tt = v.textTracks;
+    for (let i = 0; i < tt.length; i++) {
+      if (tt[i].mode === 'showing' && tt[i].activeCues) {
+        for (let j = 0; j < tt[i].activeCues.length; j++) {
+          const txt = String(tt[i].activeCues[j].text || '').replace(/<[^>]+>/g, '').trim();
+          if (txt) lines.push(txt);
+        }
+      }
+    }
+    if (lines.length) {
+      ov.innerHTML = '<span>' + lines.map(l => esc(l)).join('<br/>') + '</span>';
+      ov.classList.remove('hidden');
+    } else {
+      ov.classList.add('hidden');
+    }
+  }
+
+  function renderCine4kFrame() {
+    if (!C4K.enabled) { C4K.raf = 0; return; }
+    C4K.raf = requestAnimationFrame(renderCine4kFrame);
+    const v = cineV(), cv = $('cine-gl-4k'), st = $('cine-stage');
+    if (!v || !cv || !st || v.readyState < 2 || !v.videoWidth || !v.videoHeight) return;
+    const gl = C4K.gl;
+    if (!gl || !C4K.prog) return;
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const tw = Math.max(1, Math.round(st.clientWidth * dpr));
+    const th = Math.max(1, Math.round(st.clientHeight * dpr));
+    if (cv.width !== tw || cv.height !== th) {
+      cv.width = tw; cv.height = th;
+    }
+    gl.viewport(0, 0, tw, th);
+    gl.useProgram(C4K.prog);
+    gl.bindTexture(gl.TEXTURE_2D, C4K.tex);
+    try {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, v);
+    } catch (_) { return; }
+
+    // Exact object-fit: contain letterbox calculation
+    const va = v.videoWidth / v.videoHeight;
+    const ca = tw / th;
+    let ox = 0, oy = 0, sx = 1, sy = 1;
+    if (va > ca) { sy = ca / va; oy = (1 - sy) * 0.5; }
+    else { sx = va / ca; ox = (1 - sx) * 0.5; }
+
+    gl.uniform2f(C4K.locs.texSize, v.videoWidth, v.videoHeight);
+    gl.uniform4f(C4K.locs.rect, ox, oy, sx, sy);
+    gl.uniform1f(C4K.locs.sharp, C4K.sharp);
+    gl.uniform1f(C4K.locs.hdr, C4K.hdr);
+    gl.uniform1f(C4K.locs.sat, C4K.sat);
+    gl.uniform1f(C4K.locs.split, C4K.split ? 1.0 : 0.0);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    syncCineSubOverlay();
+  }
+
+  function refreshCine4kButtons() {
+    const on = C4K.enabled;
+    ['cine-4k-top-btn', 'cine-4k-btn'].forEach(id => {
+      const b = $(id);
+      if (!b) return;
+      b.classList.toggle('c4k-on', on);
+      b.textContent = on ? (id === 'cine-4k-top-btn' ? '✨ 4K修复已开' : '✨ 4K已开') : (id === 'cine-4k-top-btn' ? '✨ 4K画质修复' : '✨ 4K修复');
+    });
+    const mb = $('c4k-master-btn');
+    if (mb) mb.textContent = on ? '🟢 GPU 4K 修复运行中（点此关闭）' : '✨ 开启 GPU 4K 实时修复';
+    const sb = $('c4k-split-btn');
+    if (sb) sb.textContent = C4K.split ? '⚖️ 退出对比（左原/右修）' : '⚖️ 分屏对比';
+  }
+
+  function setCine4kEnabled(on) {
+    C4K.enabled = !!on;
+    const cv = $('cine-gl-4k');
+    if (C4K.enabled) {
+      if (initCine4kGL()) {
+        if (cv) cv.classList.remove('hidden');
+        if (!C4K.raf) C4K.raf = requestAnimationFrame(renderCine4kFrame);
+      } else {
+        // Fallback CSS sharpness enhancement if WebGL unavailable
+        const v = cineV();
+        if (v) v.style.filter = 'contrast(1.10) saturate(1.12)';
+      }
+      if (CINE.probe && CINE.probe.is_hdr && C4K.hdr < 0.45) {
+        updateCine4kParam('hdr', 55);
+      }
+    } else {
+      if (C4K.raf) { cancelAnimationFrame(C4K.raf); C4K.raf = 0; }
+      if (cv) cv.classList.add('hidden');
+      const v = cineV();
+      if (v) v.style.filter = '';
+      syncCineSubOverlay();
+    }
+    refreshCine4kButtons();
+  }
+
+  function toggleCine4kFix() {
+    if (!CINE.cur) { toast('请先选择一部影片再开启 4K 画质修复', 'amber'); return; }
+    setCine4kEnabled(!C4K.enabled);
+    cineOsd(C4K.enabled ? '✨ 4K 画质修复：已开启 (GPU FidelityFX CAS)' : '原画直出：已关闭 4K 锐化');
+    if (C4K.enabled) {
+      renderCine4kDiag();
+      toast('已开启 GPU 4K 实时锐化 + 影院对比度修复（按「🔧 修复台」可微调或用 RTX 显卡重建纯 4K 文件）', 'cyan');
+    }
+  }
+  window.toggleCine4kFix = toggleCine4kFix;
+
+  function toggleCine4kPanel(force) {
+    const open = typeof force === 'boolean' ? force : !C4K.panelOpen;
+    C4K.panelOpen = open;
+    if (open) toggleCineDrawer(false);
+    const p = $('cine-4k-panel');
+    if (p) p.classList.toggle('open', open);
+    if (open) { renderCine4kDiag(); refreshCine4kButtons(); }
+  }
+  window.toggleCine4kPanel = toggleCine4kPanel;
+
+  function updateCine4kParam(key, val) {
+    const n = Math.max(0, Math.min(100, Number(val) || 0));
+    C4K[key] = n / 100.0;
+    const inp = $('c4k-' + key);
+    if (inp && Number(inp.value) !== n) inp.value = String(n);
+    const lbl = $('c4k-' + key + '-v');
+    if (lbl) lbl.textContent = n + '%';
+    if (!C4K.enabled && n > 0 && CINE.cur) setCine4kEnabled(true);
+  }
+  window.updateCine4kParam = updateCine4kParam;
+
+  function applyCine4kPreset(name) {
+    if (name === 'pure4k') { updateCine4kParam('sharp', 82); updateCine4kParam('hdr', 30); updateCine4kParam('sat', 18); }
+    else if (name === 'hdr') { updateCine4kParam('sharp', 68); updateCine4kParam('hdr', 68); updateCine4kParam('sat', 38); }
+    else if (name === 'deblock') { updateCine4kParam('sharp', 92); updateCine4kParam('hdr', 40); updateCine4kParam('sat', 24); }
+    if (!C4K.enabled && CINE.cur) setCine4kEnabled(true);
+    cineOsd('✨ 已应用预设：' + ({ pure4k: '纯4K锐利', hdr: 'HDR防发灰', deblock: '去压缩模糊' }[name] || name));
+  }
+  window.applyCine4kPreset = applyCine4kPreset;
+
+  function toggleCine4kSplit() {
+    if (!C4K.enabled && CINE.cur) setCine4kEnabled(true);
+    C4K.split = !C4K.split;
+    refreshCine4kButtons();
+    cineOsd(C4K.split ? '⚖️ 对比模式：左原画 | 右4K修复' : '已恢复全屏 4K 修复视图');
+  }
+  window.toggleCine4kSplit = toggleCine4kSplit;
+
+  function renderCine4kDiag() {
+    const box = $('cine-4k-diag');
+    if (!box) return;
+    const p = CINE.probe;
+    if (!CINE.cur) {
+      box.innerHTML = '<div class="c-dim">尚未播放影片。</div>';
+      return;
+    }
+    if (!p || !p.ok) {
+      box.innerHTML = '<div class="c-cyan mono">🔎 正在调用 ffprobe 分析真实画质与码率…</div>';
+      return;
+    }
+    const isReal4k = (p.width >= 3800 || p.height >= 2100);
+    const issues = p.issues || [];
+    const lines = [
+      `<div style="font-weight:800;color:${isReal4k ? '#00f5b8' : '#ffb347'};">${isReal4k ? '✔ 实测原生 4K 源片' : '⚠ 非原生 4K 源片'} · ${p.width}×${p.height} · ${(p.vcodec || '-').toUpperCase()} ${p.bit_depth || ''}</div>`,
+      `<div class="mono c-dim">码率：${p.bitrate_mbps ? p.bitrate_mbps + ' Mbps' : '-'} · 帧率：${p.fps || '-'}fps · 色彩：${p.is_hdr ? 'HDR (' + (p.color_transfer || 'BT2020') + ')' : 'SDR'}</div>`,
+    ];
+    if (issues.length) {
+      lines.push(...issues.map(x => `<div class="c-amber">• ${esc(x)}</div>`));
+    } else {
+      lines.push('<div class="c-mint">• 片源规格优秀，开启 GPU FidelityFX CAS 可在 HiDPI 屏幕呈现更极致锐度。</div>');
+    }
+    box.innerHTML = lines.join('');
+  }
+
+  async function startCine4kRebuild() {
+    if (!CINE.cur) { toast('请先播放要重建的影片', 'amber'); return; }
+    const p = CINE.probe || {};
+    const sz = fmtBytes(CINE.cur.size || 0);
+    const tip = `将调用本机 RTX 显卡（NVENC + 4K Lanczos + 去压缩块 + FidelityFX CAS）重建纯 4K (3840×2160) 高码率母带。\n\n源片：${CINE.cur.name}（${sz}）\n输出：同目录 *_4K纯享修复.mp4（绝不覆盖原片）\n\n确认开始后台重建？`;
+    if (!confirm(tip)) return;
+    const res = await act('video_repair_4k', { path: CINE.cur.path, preset: 'ultra4k', fix_hdr: !!p.is_hdr });
+    if (res && res.ok) await poll();
+  }
+  window.startCine4kRebuild = startCine4kRebuild;
+
+  async function cancelCine4kRebuild() {
+    await act('video_repair_4k_cancel', {});
+    await poll();
+  }
+  window.cancelCine4kRebuild = cancelCine4kRebuild;
+
+  async function playCine4kOutput() {
+    if (!C4K.lastOutPath) return;
+    await loadCinemaLib(true);
+    const idx = CINE.items.findIndex(it => it.path === C4K.lastOutPath);
+    if (idx >= 0) {
+      toggleCine4kPanel(false);
+      playCinemaItem(idx, isCineFs(), CINE.immersive);
+      toast('已切换播放纯 4K 高码率修复母带 💎', 'mint');
+    } else {
+      toast('请刷新片库后查看 *_4K纯享修复.mp4', 'amber');
+    }
+  }
+  window.playCine4kOutput = playCine4kOutput;
+
+  function updateRepair4kUI(job) {
+    if (!job) return;
+    const wrap = $('c4k-prog-wrap'), txt = $('c4k-prog-txt'), fill = $('c4k-prog-fill');
+    const rbtn = $('c4k-rebuild-btn'), cbtn = $('c4k-cancel-btn'), pbtn = $('c4k-play-out-btn');
+    if (job.running) {
+      if (wrap) wrap.classList.remove('hidden');
+      if (txt) txt.textContent = `${job.stage || '4K 重建中…'} (${job.pct || 0}%)`;
+      if (fill) fill.style.width = `${Math.min(100, job.pct || 0)}%`;
+      if (rbtn) { rbtn.disabled = true; rbtn.textContent = `⏳ 重建中 ${job.pct || 0}%`; }
+      if (cbtn) cbtn.classList.remove('hidden');
+      if (pbtn) pbtn.classList.add('hidden');
+    } else {
+      if (rbtn) { rbtn.disabled = false; rbtn.textContent = '🚀 显卡重建纯 4K 母带'; }
+      if (cbtn) cbtn.classList.add('hidden');
+      if (job.pct >= 100 && job.out_path) {
+        const justFinished = C4K.lastOutPath !== job.out_path;
+        C4K.lastOutPath = job.out_path;
+        if (wrap) wrap.classList.remove('hidden');
+        if (txt) txt.textContent = `✔ 已生成纯 4K 母带：${job.out_name || ''}`;
+        if (fill) fill.style.width = '100%';
+        if (pbtn) pbtn.classList.remove('hidden');
+        if (justFinished) {
+          toast(`💎 纯 4K 母带重建完成：${job.out_name}`, 'mint');
+          loadCinemaLib(true);
+        }
+      } else if (job.err) {
+        if (wrap) wrap.classList.remove('hidden');
+        if (txt) txt.textContent = `✘ ${job.err}`;
+        if (fill) fill.style.width = '0%';
+      }
+    }
+  }
   function isCineFs() { return document.fullscreenElement === $('cine-stage'); }
   function enterCineFs() {
     const st = $('cine-stage');
@@ -3549,6 +4002,8 @@
   function cineOnLeave() {
     setCineImmersive(false);
     toggleCineDrawer(false);
+    toggleCine4kPanel(false);
+    if (C4K.enabled) setCine4kEnabled(false);
     const v = cineV();
     if (v && !v.paused && document.pictureInPictureElement !== v) { saveCinePos(true); v.pause(); }
   }
@@ -3648,16 +4103,16 @@
     });
     st.addEventListener('mousemove', bumpCineIdle, { passive: true });
     st.addEventListener('click', e => {
-      if (e.target.closest('.cine-ctrl, .cine-top, .cine-cover button, .cine-drawer')) return;
+      if (e.target.closest('.cine-ctrl, .cine-top, .cine-cover button, .cine-drawer, .cine-4k-panel')) return;
       clearTimeout(CINE.clickTimer);
       CINE.clickTimer = setTimeout(cineToggle, 230);
     });
     st.addEventListener('dblclick', e => {
-      if (e.target.closest('.cine-ctrl, .cine-top, .cine-drawer')) return;
+      if (e.target.closest('.cine-ctrl, .cine-top, .cine-drawer, .cine-4k-panel')) return;
       clearTimeout(CINE.clickTimer);
       toggleCineFs();
     });
-    st.addEventListener('wheel', e => { if (!CINE.cur || e.target.closest('.cine-drawer')) return; e.preventDefault(); cineVolBy(e.deltaY < 0 ? 0.05 : -0.05); bumpCineIdle(); }, { passive: false });
+    st.addEventListener('wheel', e => { if (!CINE.cur || e.target.closest('.cine-drawer, .cine-4k-panel')) return; e.preventDefault(); cineVolBy(e.deltaY < 0 ? 0.05 : -0.05); bumpCineIdle(); }, { passive: false });
     document.addEventListener('fullscreenchange', () => {
       const on = isCineFs();
       $('cine-fs').textContent = on ? '🗗' : '⛶';
@@ -3678,7 +4133,8 @@
         case 'f': case 'F': case 'Enter': toggleCineFs(); break;
         case 'i': case 'I': toggleCineImmersive(); break;
         case 'd': case 'D': toggleCineDrawer(); break;
-        case 'Escape': if (CINE.immersive && !isCineFs()) setCineImmersive(false); else hit = false; break;
+        case 'e': case 'E': toggleCine4kFix(); break;
+        case 'Escape': if (C4K.panelOpen) toggleCine4kPanel(false); else if (CINE.immersive && !isCineFs()) setCineImmersive(false); else hit = false; break;
         case 'm': case 'M': cineMute(); break;
         case 'c': case 'C': cycleCineSub(); break;
         case 'n': case 'N': stepCine(1); break;
@@ -5817,6 +6273,7 @@
     $('cnt-a-tasks').textContent = aT.length;
     $('cnt-q-tasks').textContent = qT.length;
     cineTrackQbit(qT);
+    updateRepair4kUI(d.repair4k);
     const allT = [
       ...qT.map(t => ({
         src: 'qB', id: t.hash, name: t.name, pct: t.pct, speed: t.speed,
