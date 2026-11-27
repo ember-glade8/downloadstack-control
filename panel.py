@@ -606,6 +606,11 @@ class ControlBackend:
             "src_path": "", "src_name": "", "out_path": "", "out_name": "",
             "encoder": "", "err": "", "cancel": False,
         }
+        self.after_dl = {
+            "mode": "off", "seen_active": False, "countdown": 0,
+            "deadline": 0.0, "status": "未启用", "active_cnt": 0,
+        }
+        self._disk_cache = (0.0, {})
         cached_ref = CACHE / "ref_voice.wav"
         self.voice_job = {
             "running": False, "pid": None, "installing": False,
@@ -666,8 +671,126 @@ class ControlBackend:
                 self.wave.append(total_dn)
                 if len(self.wave) > 40:
                     self.wave = self.wave[-40:]
+            self._check_after_dl()
         except Exception as ex:
             self.log("轮询异常 %s" % type(ex).__name__, "ERROR")
+
+    def _disk_stats(self) -> dict:
+        now = time.time()
+        ts, cached = getattr(self, "_disk_cache", (0.0, {}))
+        if cached and now - ts < 5.0:
+            return dict(cached)
+        dl_base = Path(str(self.cfg.get("paths", {}).get("downloads") or str(DL_HOME)))
+        probe_p = dl_base if dl_base.exists() else Path(dl_base.anchor or ".")
+        try:
+            du = shutil.disk_usage(str(probe_p))
+            free_gb = round(du.free / (1024 ** 3), 1)
+            total_gb = round(du.total / (1024 ** 3), 1)
+            used_pct = round((du.used / du.total) * 100.0, 1) if du.total > 0 else 0.0
+            lvl = "crit" if free_gb < 10.0 else ("warn" if free_gb < 30.0 else "ok")
+            drive = (probe_p.drive or str(probe_p)[:2] or "/").rstrip("\\")
+            res = {
+                "drive": drive, "free": int(du.free), "total": int(du.total),
+                "free_gb": free_gb, "total_gb": total_gb, "used_pct": used_pct, "level": lvl,
+            }
+        except Exception:
+            res = {"drive": "-", "free": 0, "total": 0, "free_gb": 0.0, "total_gb": 0.0, "used_pct": 0.0, "level": "ok"}
+        self._disk_cache = (now, res)
+        return dict(res)
+
+    def _count_active_jobs(self) -> int:
+        cnt = 0
+        try:
+            cnt += sum(1 for t in (self.pr.a_tasks or []) if t.get("status") in ("active", "waiting"))
+        except Exception:
+            pass
+        try:
+            dl_st = {"downloading", "forcedDL", "metaDL", "forcedMetaDL", "stalledDL", "checkingDL", "allocating", "queuedDL"}
+            cnt += sum(1 for t in (self.pr.q_tasks or []) if t.get("state") in dl_st)
+        except Exception:
+            pass
+        with self.lock:
+            if self.yt_job.get("running"):
+                cnt += 1
+            if self.repair4k_job.get("running"):
+                cnt += 1
+        return cnt
+
+    def _check_after_dl(self):
+        with self.lock:
+            mode = self.after_dl.get("mode", "off")
+        if mode == "off":
+            return
+        active = self._count_active_jobs()
+        now = time.time()
+        fire_mode = None
+        with self.lock:
+            self.after_dl["active_cnt"] = active
+            if active > 0:
+                self.after_dl["seen_active"] = True
+                self.after_dl["deadline"] = 0.0
+                self.after_dl["countdown"] = 0
+                self.after_dl["status"] = "护航中（%d 个任务运行中）" % active
+            elif self.after_dl.get("seen_active"):
+                dl = float(self.after_dl.get("deadline") or 0.0)
+                if dl <= 0.0:
+                    self.after_dl["deadline"] = now + 15.0
+                    self.after_dl["countdown"] = 15
+                    self.after_dl["status"] = "全部完成！15 秒后执行（可随时取消）"
+                else:
+                    rem = int(max(0, round(dl - now)))
+                    self.after_dl["countdown"] = rem
+                    if rem > 0:
+                        self.after_dl["status"] = "全部完成！%d 秒后执行（可随时取消）" % rem
+                    else:
+                        fire_mode = mode
+                        self.after_dl.update({
+                            "mode": "off", "seen_active": False, "countdown": 0,
+                            "deadline": 0.0, "status": "已触发：%s" % mode,
+                        })
+            else:
+                self.after_dl["status"] = "待机中（等待新任务启动后开始监听）"
+
+        if not fire_mode:
+            return
+        if fire_mode == "stop_seed":
+            try:
+                if port_open(self.cfg["qbit"]["host"], self.cfg["qbit"]["port"]):
+                    s, base = self.pr.q_login(timeout=3.0)
+                    hdr = {"Referer": base + "/", "Origin": base}
+                    for ep in ("/api/v2/torrents/stop", "/api/v2/torrents/pause"):
+                        r = s.post(base + ep, timeout=4.0, headers=hdr, data={"hashes": "all"})
+                        if r.status_code == 200:
+                            break
+                self.log("🌙 挂机护航：全部下载已完成，已自动停止做种省电 ✔", "OK")
+            except Exception as ex:
+                self.log("挂机停种失败：%s" % ex, "WARN")
+        elif fire_mode == "sleep":
+            self.log("🌙 挂机护航：全部下载已完成，正在进入系统睡眠…", "WARN")
+            try:
+                if IS_WIN:
+                    subprocess.Popen(["rundll32.exe", "powrprof.dll,SetSuspendState", "0,1,0"])
+                elif IS_MAC:
+                    subprocess.Popen(["pmset", "sleepnow"])
+                else:
+                    subprocess.Popen(["systemctl", "suspend"])
+            except Exception as ex:
+                self.log("系统睡眠触发失败：%s" % ex, "ERROR")
+        elif fire_mode == "shutdown":
+            self.log("⏻ 挂机护航：全部下载已完成，将在 60 秒后关机（可点取消中止）", "WARN")
+            try:
+                if IS_WIN:
+                    subprocess.Popen(["shutdown", "/s", "/t", "60", "/c", "DownloadStack 全部下载任务已完成，60秒后自动关机"])
+                else:
+                    subprocess.Popen(["shutdown", "-h", "+1"])
+            except Exception as ex:
+                self.log("系统关机触发失败：%s" % ex, "ERROR")
+
+    def captures_output(self) -> Path:
+        base = Path(str(self.cfg.get("paths", {}).get("downloads") or str(DL_HOME)))
+        p = base / "captures"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
 
     def _poll_loop(self):
         while True:
@@ -2664,6 +2787,8 @@ class ControlBackend:
             "voice_studio": voice_job,
             "aigc_studio": aigc_job,
             "repair4k": dict(self.repair4k_job),
+            "disk": self._disk_stats(),
+            "after_dl": dict(self.after_dl),
             "codex": codex_info,
             "recent_files": self._get_recent_files_cached(),
             "magnet": self._magnet_diag(),
@@ -2716,6 +2841,159 @@ class ControlBackend:
             if pid and pid_alive(pid):
                 kill_tree(pid)
             return True, "已取消 4K 母带重建任务", {}
+        if act == "set_after_dl":
+            mode = str(body.get("mode") or "off").strip().lower()
+            if mode not in ("off", "stop_seed", "sleep", "shutdown"):
+                return False, "无效的自动动作模式", {}
+            if mode == "off" and IS_WIN:
+                try:
+                    subprocess.run(["shutdown", "/a"], capture_output=True, timeout=3, creationflags=0x08000000)
+                except Exception:
+                    pass
+            active = self._count_active_jobs()
+            labels = {"off": "未启用", "stop_seed": "下完自动停种", "sleep": "下完自动睡眠", "shutdown": "下完60秒后关机"}
+            with self.lock:
+                self.after_dl.update({
+                    "mode": mode,
+                    "seen_active": (active > 0) if mode != "off" else False,
+                    "countdown": 0,
+                    "deadline": 0.0,
+                    "active_cnt": active,
+                    "status": ("未启用" if mode == "off" else
+                               ("护航中（%d 个任务运行中）" % active if active > 0 else "已预约：%s（等待任务开始）" % labels[mode])),
+                })
+            self.log("🌙 下完自动动作 → %s" % labels[mode], "OK")
+            return True, "已设置：%s" % labels[mode], {"after_dl": dict(self.after_dl)}
+        if act == "video_snap_frame":
+            from urllib.parse import quote
+            raw_p = str(body.get("path") or "").strip()
+            target = self._is_allowed_media(raw_p)
+            if target is None or target.suffix.lower() not in self._VIDEO_EXTS:
+                return False, "视频文件不存在或不在允许目录内", {}
+            try:
+                sec = max(0.0, float(body.get("time_sec") or 0.0))
+            except Exception:
+                sec = 0.0
+            send_aigc = bool(body.get("send_to_aigc"))
+            ff_dir = self._find_ffmpeg()
+            ffmpeg_exe = (str(Path(ff_dir) / ("ffmpeg.exe" if IS_WIN else "ffmpeg")) if ff_dir else (shutil.which("ffmpeg") or ""))
+            if not ffmpeg_exe:
+                return False, "未找到 ffmpeg，无法导出原画截图", {}
+            cap_dir = self.captures_output()
+            ts_tag = "%02d%02d%02d" % (int(sec // 3600), int((sec % 3600) // 60), int(sec % 60))
+            out_png = cap_dir / ("%s_4K_%s_%s.png" % (target.stem[:42], ts_tag, datetime.now().strftime("%H%M%S")))
+            try:
+                r = subprocess.run(
+                    [ffmpeg_exe, "-y", "-v", "error", "-ss", "%.3f" % sec, "-i", str(target),
+                     "-frames:v", "1", "-compression_level", "3", str(out_png)],
+                    capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20,
+                    creationflags=(0x08000000 if IS_WIN else 0),
+                )
+                if r.returncode != 0 or not out_png.is_file():
+                    return False, "截图失败：%s" % (r.stderr or "ffmpeg error")[:80], {}
+            except Exception as ex:
+                return False, "截图异常：%s" % ex, {}
+            aigc_loaded = False
+            if send_aigc:
+                try:
+                    dst = CACHE / "aigc_first_frame.png"
+                    shutil.copy2(out_png, dst)
+                    with self.lock:
+                        self.aigc_job["first_frame"] = str(dst.resolve())
+                        self.aigc_job["first_frame_name"] = out_png.name
+                    aigc_loaded = True
+                except Exception:
+                    pass
+            self._recent_ts = 0.0
+            msg = ("已抓取 4K 原画截图并载入 AI 画室首帧 ✔" if aigc_loaded else "已保存 4K 无损原画截图 → %s" % out_png.name)
+            self.log(msg, "OK")
+            return True, msg, {
+                "path": str(out_png), "name": out_png.name,
+                "play_url": "/api/media?path=" + quote(str(out_png), safe=""),
+                "aigc_loaded": aigc_loaded,
+            }
+        if act == "video_clip_extract":
+            from urllib.parse import quote
+            raw_p = str(body.get("path") or "").strip()
+            target = self._is_allowed_media(raw_p)
+            if target is None or target.suffix.lower() not in self._VIDEO_EXTS:
+                return False, "视频文件不存在或不在允许目录内", {}
+            try:
+                t_start = max(0.0, float(body.get("start_sec") or 0.0))
+                t_end = max(t_start + 1.0, float(body.get("end_sec") or (t_start + 15.0)))
+            except Exception:
+                return False, "剪辑时间范围无效", {}
+            dur = min(600.0, t_end - t_start)
+            mode = str(body.get("mode") or "clip").strip().lower()
+            ff_dir = self._find_ffmpeg()
+            ffmpeg_exe = (str(Path(ff_dir) / ("ffmpeg.exe" if IS_WIN else "ffmpeg")) if ff_dir else (shutil.which("ffmpeg") or ""))
+            if not ffmpeg_exe:
+                return False, "未找到 ffmpeg，无法剪辑导出", {}
+            cap_dir = self.captures_output()
+            ts_tag = "%02d%02d-%02d%02d" % (int(t_start // 60), int(t_start % 60), int((t_start + dur) // 60), int((t_start + dur) % 60))
+            if mode == "voice_ref":
+                dur = min(15.0, max(3.0, dur))
+                out_wav = CACHE / "ref_voice.wav"
+                r = subprocess.run(
+                    [ffmpeg_exe, "-y", "-v", "error", "-ss", "%.3f" % t_start, "-t", "%.3f" % dur,
+                     "-i", str(target), "-vn", "-ac", "1", "-ar", "24000", "-c:a", "pcm_s16le", str(out_wav)],
+                    capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30,
+                    creationflags=(0x08000000 if IS_WIN else 0),
+                )
+                if r.returncode != 0 or not out_wav.is_file():
+                    return False, "人声提取失败：%s" % (r.stderr or "")[:80], {}
+                ref_name = "%s_%s.wav" % (target.stem[:24], ts_tag)
+                with self.lock:
+                    self.voice_job["ref_wav"] = str(out_wav.resolve())
+                    self.voice_job["ref_name"] = ref_name
+                self.log("🎙️ 已从影片截取 %.1fs 台词送入 AI 声音克隆参考音" % dur, "OK")
+                return True, "已截取 %.1f 秒人声参考音并自动载入声音克隆工坊 ✔" % dur, {
+                    "path": str(out_wav), "name": ref_name, "mode": "voice_ref",
+                }
+            if mode == "audio":
+                out_mp3 = cap_dir / ("%s_audio_%s_%s.mp3" % (target.stem[:36], ts_tag, datetime.now().strftime("%H%M%S")))
+                r = subprocess.run(
+                    [ffmpeg_exe, "-y", "-v", "error", "-ss", "%.3f" % t_start, "-t", "%.3f" % dur,
+                     "-i", str(target), "-vn", "-c:a", "libmp3lame", "-b:a", "320k", str(out_mp3)],
+                    capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=45,
+                    creationflags=(0x08000000 if IS_WIN else 0),
+                )
+                if r.returncode != 0 or not out_mp3.is_file():
+                    return False, "音轨提取失败：%s" % (r.stderr or "")[:80], {}
+                self._recent_ts = 0.0
+                self.log("🎵 已无损提取影片音轨 → %s" % out_mp3.name, "OK")
+                return True, "已导出 320K 音轨 → %s" % out_mp3.name, {
+                    "path": str(out_mp3), "name": out_mp3.name,
+                    "play_url": "/api/media?path=" + quote(str(out_mp3), safe=""), "mode": "audio",
+                }
+            # 默认 mode == "clip": 极速零重编码无损高光剪辑 (-c:v copy)
+            out_clip = cap_dir / ("%s_clip_%s_%s.mp4" % (target.stem[:36], ts_tag, datetime.now().strftime("%H%M%S")))
+            pinfo = self.probe_video(str(target))
+            acodec = str(pinfo.get("acodec") or "").lower()
+            vcodec = str(pinfo.get("vcodec") or "").lower()
+            cmd = [
+                ffmpeg_exe, "-y", "-v", "error", "-ss", "%.3f" % t_start, "-t", "%.3f" % dur,
+                "-i", str(target), "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "copy",
+            ]
+            if vcodec in ("hevc", "h265"):
+                cmd += ["-tag:v", "hvc1"]
+            if acodec in self._COPY_ACODECS:
+                cmd += ["-c:a", "copy"]
+            else:
+                cmd += ["-c:a", "aac", "-b:a", "320k", "-ac", "2"]
+            cmd += ["-movflags", "+faststart", str(out_clip)]
+            r = subprocess.run(
+                cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
+                creationflags=(0x08000000 if IS_WIN else 0),
+            )
+            if r.returncode != 0 or not out_clip.is_file():
+                return False, "高光剪辑失败：%s" % (r.stderr or "")[:80], {}
+            self._recent_ts = 0.0
+            self.log("✂️ 极速无损剪辑完成 → %s" % out_clip.name, "OK")
+            return True, "已零压缩无损导出 %.0f 秒高光片段 → %s" % (dur, out_clip.name), {
+                "path": str(out_clip), "name": out_clip.name,
+                "play_url": "/api/media?path=" + quote(str(out_clip), safe=""), "mode": "clip",
+            }
         if act in ("video_open_external", "video_open_folder"):
             target = self._is_allowed_media(str(body.get("path") or ""))
             if target is None or target.suffix.lower() not in self._VIDEO_EXTS:

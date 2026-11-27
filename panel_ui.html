@@ -1260,6 +1260,9 @@
         <span class="c-dim">|</span>
         <span class="c-cyan">↑ <b id="top-up">0 B/s</b></span>
       </div>
+      <div class="telemetry-pill mono" id="top-disk-pill" onclick="switchView('cinema')" title="下载磁盘剩余空间（点击进影院管理/删片释放空间）" style="cursor:pointer;">
+        <span>💿 <b id="top-disk-txt">-- GB</b></span>
+      </div>
       <div class="telemetry-pill led-group">
         <span class="led-chip" onclick="switchView('downloads'); setDlTab('ariang')" title="Aria2 引擎"><i class="led" id="led-top-a"></i>A2</span>
         <span class="led-chip" onclick="switchView('downloads'); setDlTab('qbit')" title="qBittorrent 引擎"><i class="led" id="led-top-q"></i>qB</span>
@@ -2283,6 +2286,16 @@
             <button class="btn btn-violet" onclick="submitDlQuick('auto')">⚡ 自动分流</button>
             <button class="btn btn-amber" onclick="quickSearchMagnetFromQueue()">🔍 搜磁力</button>
           </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px solid rgba(148,192,255,0.12);">
+            <div class="pill-row" id="after-dl-pills">
+              <span class="c-dim" style="font-size:11px;font-weight:700;">🌙 挂机下完自动动作：</span>
+              <span class="chip active" data-afterdl="off" onclick="setAfterDlMode('off')">关闭</span>
+              <span class="chip" data-afterdl="stop_seed" onclick="setAfterDlMode('stop_seed')">🛑 下完停种</span>
+              <span class="chip" data-afterdl="sleep" onclick="setAfterDlMode('sleep')">🌙 下完睡眠</span>
+              <span class="chip" data-afterdl="shutdown" onclick="setAfterDlMode('shutdown')">⏻ 下完关机</span>
+            </div>
+            <span class="mono c-dim" style="font-size:11px;" id="after-dl-status">未启用 · 适合通宵下载 4K 大片</span>
+          </div>
         </div>
         <div class="split-2-eq">
           <div class="holo-card" style="display:flex;flex-direction:column;">
@@ -2569,6 +2582,46 @@
                 <button class="btn btn-xs btn-mint hidden" id="c4k-play-out-btn" onclick="playCine4kOutput()">▶ 立即播放纯 4K 修复母带</button>
               </div>
             </div>
+            <div class="cine-4k-panel" id="cine-clip-panel" style="border-left-color:rgba(244,114,182,0.45);">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                <div style="font-size:13.5px;font-weight:900;color:#f472b6;">✂️ 4K 原画截图 &amp; 无损高光剪辑</div>
+                <button class="cine-btn" onclick="toggleCineClipPanel(false)">✕</button>
+              </div>
+              <div class="eng-tile" style="gap:7px;">
+                <div style="font-size:12px;font-weight:800;color:#00e5ff;">📸 当前帧 4K 无损原画截图 (PNG)</div>
+                <div class="c-dim" style="font-size:11px;">直接用 ffmpeg 从原始视频提取 100% 原始分辨率无损 PNG（支持直传 AI 画室作图生视频首帧）。</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                  <button class="btn btn-xs btn-cyan" style="flex:1;" onclick="cineSnapFrame(false)">📸 存 4K 原画截图</button>
+                  <button class="btn btn-xs btn-violet" style="flex:1;" onclick="cineSnapFrame(true)">🎨 送 AI 画室首帧</button>
+                </div>
+              </div>
+              <div class="eng-tile" style="gap:7px;border-color:rgba(244,114,182,0.34);">
+                <div style="font-size:12px;font-weight:800;color:#f472b6;">✂️ A-B 区间极速无损剪辑 &amp; 音频/克隆提取</div>
+                <div class="grid-2">
+                  <div class="fld">
+                    <label>起点 A (秒)</label>
+                    <div style="display:flex;gap:4px;"><input id="cclip-a" class="inp mono" value="0" style="padding:5px 7px;" /><button class="btn btn-xs" onclick="cineMarkClip('a')">取当前</button></div>
+                  </div>
+                  <div class="fld">
+                    <label>终点 B (秒)</label>
+                    <div style="display:flex;gap:4px;"><input id="cclip-b" class="inp mono" value="15" style="padding:5px 7px;" /><button class="btn btn-xs" onclick="cineMarkClip('b')">取当前</button></div>
+                  </div>
+                </div>
+                <div class="pill-row">
+                  <span class="chip" onclick="cineQuickRange(-15, 0)">⚡ 取前 15 秒</span>
+                  <span class="chip" onclick="cineQuickRange(-15, 15)">⚡ 取当前 ±15 秒</span>
+                  <span class="chip" onclick="cineQuickRange(0, 10)">⚡ 取后 10 秒(台词)</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:6px;">
+                  <button class="btn btn-xs btn-mint" onclick="cineRunClip('clip')">✂️ 极速无损导出高光视频 (-c:v copy)</button>
+                  <button class="btn btn-xs btn-amber" onclick="cineRunClip('audio')">🎵 导出该段 320K 音轨 (MP3)</button>
+                  <button class="btn btn-xs btn-magenta" onclick="cineRunClip('voice_ref')">🎙️ 截此段台词 → 送入 AI 声音克隆参考音</button>
+                </div>
+              </div>
+              <div id="cclip-result" class="eng-tile" style="font-size:11.5px;color:var(--text-2);">
+                <div>截图与剪辑成品默认保存于下载目录 <code>captures/</code>，导出后可直接预览或定位。</div>
+              </div>
+            </div>
             <div class="cine-top">
               <div style="min-width:0;flex:1;">
                 <div class="cine-title" id="cine-title">尚未选择影片</div>
@@ -2578,6 +2631,8 @@
               <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;">
                 <button class="cine-btn" id="cine-4k-top-btn" onclick="toggleCine4kFix()" title="一键 GPU FidelityFX CAS 4K 清晰度与 HDR 防发灰修复 (快捷键 E)">✨ 4K画质修复</button>
                 <button class="cine-btn" onclick="toggleCine4kPanel()" title="打开 4K 诊断、微调滑块与 RTX 显卡重建纯 4K 母带">🔧 修复台</button>
+                <button class="cine-btn" onclick="cineSnapFrame(false)" title="抓取当前帧 4K 无损 PNG 原画截图 (快捷键 S)">📸 4K截图</button>
+                <button class="cine-btn" onclick="toggleCineClipPanel()" title="4K 原画截图、A-B 无损高光剪辑、联动 AI 画室与声音克隆">✂️ 剪辑/取音</button>
                 <button class="cine-btn" style="background:rgba(255,61,113,0.26);border-color:rgba(255,61,113,0.62);" onclick="cineDeleteCurrent()" title="看完即删：删除当前影片与关联种子并清理缓存">🗑️ 删片清缓存</button>
                 <button class="cine-btn" onclick="toggleCineDrawer()" title="选集/片库 (D)">📑 选集</button>
                 <button class="cine-btn" id="cine-imm-x" onclick="toggleCineImmersive()" title="窗口沉浸铺满 (I)">🕶️ 沉浸</button>
@@ -3490,7 +3545,7 @@
     clearTimeout(CINE.idleTimer);
     CINE.idleTimer = setTimeout(() => {
       const v = cineV();
-      if (v && !v.paused && CINE.cur && !CINE.drawerOpen && !C4K.panelOpen) st.classList.add('idle');
+      if (v && !v.paused && CINE.cur && !CINE.drawerOpen && !C4K.panelOpen && !CINE.clipOpen) st.classList.add('idle');
     }, 2500);
   }
   function cineToggle() {
@@ -4009,10 +4064,130 @@
     else enterCineFs();
   }
   window.toggleCineFs = toggleCineFs;
+  /* ===== FEATURE: OVERNIGHT AUTO-ACTION & DISK RADAR + CINEMA 4K SNAP & LOSSLESS CLIP ===== */
+  async function setAfterDlMode(mode) {
+    const res = await act('set_after_dl', { mode });
+    if (res && res.ok) await poll();
+  }
+  window.setAfterDlMode = setAfterDlMode;
+
+  function updateDiskAndAfterDlUI(disk, afterDl) {
+    if (disk && $('top-disk-txt')) {
+      const pill = $('top-disk-pill');
+      $('top-disk-txt').textContent = `${disk.drive} 余 ${disk.free_gb} GB`;
+      if (pill) {
+        pill.style.borderColor = disk.level === 'crit' ? 'rgba(255,61,113,0.8)' : (disk.level === 'warn' ? 'rgba(255,179,71,0.75)' : '');
+        pill.classList.toggle('c-rose', disk.level === 'crit');
+        pill.classList.toggle('c-amber', disk.level === 'warn');
+        pill.classList.toggle('c-mint', disk.level === 'ok');
+        pill.title = `下载盘 ${disk.drive} 剩余 ${disk.free_gb} GB / 共 ${disk.total_gb} GB（已用 ${disk.used_pct}%）· 点击进影院删片释放空间`;
+      }
+    }
+    if (afterDl) {
+      const m = afterDl.mode || 'off';
+      document.querySelectorAll('#after-dl-pills .chip').forEach(c => c.classList.toggle('active', c.dataset.afterdl === m));
+      const st = $('after-dl-status');
+      if (st) {
+        st.textContent = afterDl.status || '未启用';
+        st.className = 'mono ' + (afterDl.countdown > 0 ? 'c-rose' : (m !== 'off' ? 'c-amber' : 'c-dim'));
+      }
+    }
+  }
+
+  function toggleCineClipPanel(force) {
+    const open = typeof force === 'boolean' ? force : !CINE.clipOpen;
+    CINE.clipOpen = open;
+    if (open) { toggleCineDrawer(false); toggleCine4kPanel(false); }
+    const p = $('cine-clip-panel');
+    if (p) p.classList.toggle('open', open);
+    if (open && CINE.cur) {
+      const cur = Math.floor(getCineCurTime());
+      if ($('cclip-a')) $('cclip-a').value = String(Math.max(0, cur - 10));
+      if ($('cclip-b')) $('cclip-b').value = String(cur + 5);
+    }
+  }
+  window.toggleCineClipPanel = toggleCineClipPanel;
+
+  function cineMarkClip(which) {
+    if (!CINE.cur) { toast('请先播放影片', 'amber'); return; }
+    const t = Math.floor(getCineCurTime());
+    const el = $('cclip-' + which);
+    if (el) el.value = String(t);
+    cineOsd(`✂️ 已设${which === 'a' ? '起点 A' : '终点 B'} = ${fmtClock(t)}`);
+  }
+  window.cineMarkClip = cineMarkClip;
+
+  function cineQuickRange(dStart, dEnd) {
+    if (!CINE.cur) { toast('请先播放影片', 'amber'); return; }
+    const cur = getCineCurTime();
+    const dur = getCineDur();
+    const a = Math.max(0, Math.floor(cur + dStart));
+    const b = Math.max(a + 2, Math.floor(dur ? Math.min(dur, cur + dEnd) : (cur + dEnd)));
+    if ($('cclip-a')) $('cclip-a').value = String(a);
+    if ($('cclip-b')) $('cclip-b').value = String(b);
+    cineOsd(`✂️ 已选区间 ${fmtClock(a)} → ${fmtClock(b)}`);
+  }
+  window.cineQuickRange = cineQuickRange;
+
+  async function cineSnapFrame(sendToAigc = false) {
+    if (!CINE.cur) { toast('请先播放影片再截图', 'amber'); return; }
+    const t = getCineCurTime();
+    cineOsd(sendToAigc ? '🎨 抓取 4K 首帧送 AI 画室…' : '📸 正在抓取 4K 无损原画截图…');
+    const res = await act('video_snap_frame', { path: CINE.cur.path, time_sec: t, send_to_aigc: !!sendToAigc });
+    if (res && res.ok) {
+      const box = $('cclip-result');
+      if (box && res.play_url) {
+        box.innerHTML = `
+          <div class="c-mint mono" style="font-weight:800;">✔ 4K 无损原画 PNG：${esc(res.name || '')}</div>
+          <img src="${esc(res.play_url)}" style="width:100%;border-radius:8px;margin-top:5px;border:1px solid rgba(0,229,255,0.35);cursor:pointer;" onclick="openLightbox('${escJs(res.play_url)}','${escJs(res.name || '')}','img','${escJs(res.path || '')}')" />
+          <div style="display:flex;gap:6px;margin-top:5px;">
+            <button class="btn btn-xs" onclick="act('open_path',{key:'custom',path:'${escJs(res.path || '')}',reveal:true})">📂 定位文件</button>
+          </div>`;
+      }
+      if (sendToAigc && res.aigc_loaded) {
+        if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
+        setCineImmersive(false);
+        switchView('aigc');
+        pickAigcMode('i2v');
+        await poll();
+      }
+    }
+  }
+  window.cineSnapFrame = cineSnapFrame;
+
+  async function cineRunClip(mode) {
+    if (!CINE.cur) { toast('请先播放影片', 'amber'); return; }
+    const a = Math.max(0, Number($('cclip-a')?.value || 0));
+    const b = Math.max(a + 1, Number($('cclip-b')?.value || (a + 15)));
+    cineOsd(mode === 'voice_ref' ? '🎙️ 截取台词送入声音克隆…' : (mode === 'audio' ? '🎵 正在提取 320K 音轨…' : '✂️ 正在极速无损剪辑…'));
+    const res = await act('video_clip_extract', { path: CINE.cur.path, start_sec: a, end_sec: b, mode });
+    if (res && res.ok) {
+      const box = $('cclip-result');
+      if (mode === 'voice_ref') {
+        if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
+        setCineImmersive(false);
+        switchView('voice');
+        pickVcEng('f5');
+        await poll();
+        return;
+      }
+      if (box) {
+        box.innerHTML = `
+          <div class="c-mint mono" style="font-weight:800;">✔ ${esc(res.msg || '导出完成')}</div>
+          <div style="display:flex;gap:6px;margin-top:5px;">
+            <button class="btn btn-xs btn-cyan" onclick="act('open_path',{key:'custom',path:'${escJs(res.path || '')}',reveal:true})">📂 打开所在目录</button>
+          </div>`;
+      }
+      if (mode === 'clip') loadCinemaLib(true);
+    }
+  }
+  window.cineRunClip = cineRunClip;
+
   function cineOnLeave() {
     setCineImmersive(false);
     toggleCineDrawer(false);
     toggleCine4kPanel(false);
+    toggleCineClipPanel(false);
     if (C4K.enabled) setCine4kEnabled(false);
     const v = cineV();
     if (v && !v.paused && document.pictureInPictureElement !== v) { saveCinePos(true); v.pause(); }
@@ -4144,7 +4319,8 @@
         case 'i': case 'I': toggleCineImmersive(); break;
         case 'd': case 'D': toggleCineDrawer(); break;
         case 'e': case 'E': toggleCine4kFix(); break;
-        case 'Escape': if (C4K.panelOpen) toggleCine4kPanel(false); else if (CINE.immersive && !isCineFs()) setCineImmersive(false); else hit = false; break;
+        case 's': case 'S': cineSnapFrame(false); break;
+        case 'Escape': if (CINE.clipOpen) toggleCineClipPanel(false); else if (C4K.panelOpen) toggleCine4kPanel(false); else if (CINE.immersive && !isCineFs()) setCineImmersive(false); else hit = false; break;
         case 'm': case 'M': cineMute(); break;
         case 'c': case 'C': cycleCineSub(); break;
         case 'n': case 'N': stepCine(1); break;
@@ -6303,6 +6479,7 @@
     $('cnt-q-tasks').textContent = qT.length;
     cineTrackQbit(qT);
     updateRepair4kUI(d.repair4k);
+    updateDiskAndAfterDlUI(d.disk, d.after_dl);
     const allT = [
       ...qT.map(t => ({
         src: 'qB', id: t.hash, name: t.name, pct: t.pct, speed: t.speed,
