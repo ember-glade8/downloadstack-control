@@ -2427,6 +2427,7 @@
             <div class="card-title" style="color:#c4b5fd;">🎞️ 片库 <span class="nav-badge mono" id="cine-cnt">0</span></div>
             <div style="display:flex;gap:5px;">
               <button class="btn btn-xs btn-violet" id="cine-refresh" onclick="loadCinemaLib()">↻ 刷新</button>
+              <button class="btn btn-xs btn-amber" onclick="cineCleanCache()" title="清理临时缓存与已完成记录">🧹 清缓存</button>
               <button class="btn btn-xs" onclick="act('open_path',{key:'qbit_dl'})">📂 BT 目录</button>
             </div>
           </div>
@@ -2451,7 +2452,18 @@
               <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
                 <button class="btn btn-cyan" onclick="switchCineMode('remux')">💎 切换原画无损直封 (-c:v copy)</button>
                 <button class="btn btn-violet" onclick="cineExternal()">🎬 用系统播放器</button>
+                <button class="btn btn-rose" onclick="cineDeleteCurrent()">🗑️ 删除此片并清缓存</button>
                 <button class="btn" onclick="cineFolder()">📂 打开文件夹</button>
+              </div>
+            </div>
+            <div class="cine-cover hidden" id="cine-ended" style="background:rgba(4,8,20,0.82);backdrop-filter:blur(10px);">
+              <div style="font-size:44px;">🎬</div>
+              <div style="font-size:18px;font-weight:900;color:#fff;" id="cine-ended-title">本片已播放完毕</div>
+              <div style="color:rgba(226,238,255,0.82);">看完即删，一键释放磁盘空间并清理播放缓存（同步清理关联种子）</div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:6px;">
+                <button class="btn btn-rose" onclick="cineDeleteCurrent()">🗑️ 看完即删 &amp; 清缓存</button>
+                <button class="btn btn-violet" onclick="stepCine(1)">⏭ 播放下一部</button>
+                <button class="btn btn-cyan" onclick="cineReplay()">↻ 重播本片</button>
               </div>
             </div>
             <div class="cine-spin hidden" id="cine-spin"></div>
@@ -2469,7 +2481,8 @@
                 <div class="cine-sub mono" id="cine-meta"></div>
                 <div class="cine-qbadge mono hidden" id="cine-qbadge">💎 原画零压缩</div>
               </div>
-              <div style="display:flex;gap:6px;flex-shrink:0;">
+              <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;">
+                <button class="cine-btn" style="background:rgba(255,61,113,0.26);border-color:rgba(255,61,113,0.62);" onclick="cineDeleteCurrent()" title="看完即删：删除当前影片与关联种子并清理缓存">🗑️ 删片清缓存</button>
                 <button class="cine-btn" onclick="toggleCineDrawer()" title="选集/片库 (D)">📑 选集</button>
                 <button class="cine-btn" id="cine-imm-x" onclick="toggleCineImmersive()" title="窗口沉浸铺满 (I)">🕶️ 沉浸</button>
                 <button class="cine-btn" id="cine-fs-x" onclick="toggleCineFs()" title="真全屏 (F / 双击)">⛶ 全屏</button>
@@ -3232,6 +3245,7 @@
           <div class="row-name" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(it.name)}</div>
           <div class="mono c-dim" style="font-size:10.5px;margin-top:2px;">${esc(meta.join(' · '))}</div>
         </div>
+        <button class="btn btn-xs btn-rose" style="flex-shrink:0;padding:3px 6px;" onclick="cineDeleteItem(${i}, event)" title="删除此片并清缓存">🗑️</button>
       </div>`;
     }).join('');
   }
@@ -3260,6 +3274,7 @@
     CINE.autoTriedRemux = false;
     $('cine-empty').classList.add('hidden');
     $('cine-err').classList.add('hidden');
+    if ($('cine-ended')) $('cine-ended').classList.add('hidden');
     $('cine-title').textContent = it.name;
     $('cine-meta').textContent = [it.source, (it.ext || '').replace('.', '').toUpperCase(), fmtBytes(it.size), it.torrent && it.torrent !== it.name ? it.torrent : ''].filter(Boolean).join(' · ');
 
@@ -3459,6 +3474,68 @@
   window.cineExternal = cineExternal;
   function cineFolder() { if (CINE.cur) act('video_open_folder', { path: CINE.cur.path }); }
   window.cineFolder = cineFolder;
+
+  function cineReplay() {
+    if (!CINE.cur) return;
+    if ($('cine-ended')) $('cine-ended').classList.add('hidden');
+    startCineStream(CINE.mode, 0);
+  }
+  window.cineReplay = cineReplay;
+
+  async function cineCleanCache() {
+    const res = await act('clean_cache', {});
+    if (res && res.ok) await poll();
+  }
+  window.cineCleanCache = cineCleanCache;
+
+  async function _doDeleteVideo(it) {
+    if (!it || !it.path) { toast('请先选择要删除的影片', 'amber'); return; }
+    if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
+    const sz = fmtBytes(it.size || 0);
+    const tip = it.hash
+      ? `确定永久删除《${it.name}》（${sz}）并清理缓存？\n\n将同步移除关联的 qBittorrent 种子与磁盘文件，立即释放空间。`
+      : `确定永久删除《${it.name}》（${sz}）并清理缓存？\n\n将删除磁盘视频文件、同名字幕与临时缓存。`;
+    if (!confirm(tip)) return;
+    // 若正在播放该文件，必须先彻底卸载 <video> 释放 Windows 文件锁！
+    if (CINE.cur && CINE.cur.path === it.path) {
+      const v = cineV();
+      if (v) {
+        try { v.pause(); } catch (_) {}
+        v.removeAttribute('src');
+        while (v.firstChild) v.removeChild(v.firstChild);
+        v.load();
+      }
+      CINE.cur = null;
+      CINE.probe = null;
+      CINE.duration = 0;
+      CINE.offset = 0;
+      setCineImmersive(false);
+      $('cine-title').textContent = '尚未选择影片';
+      $('cine-meta').textContent = '';
+      if ($('cine-qbadge')) $('cine-qbadge').classList.add('hidden');
+      if ($('cine-ended')) $('cine-ended').classList.add('hidden');
+      $('cine-err').classList.add('hidden');
+      $('cine-empty').classList.remove('hidden');
+      await new Promise(r => setTimeout(r, 200));
+    }
+    const res = await act('video_delete_and_clean', { path: it.path, hash: it.hash || '', clean_cache: true });
+    if (res && res.ok) {
+      localStorage.removeItem(cinePosKey(it.path));
+      await loadCinemaLib(true);
+      await poll();
+    }
+  }
+  async function cineDeleteCurrent() {
+    if (!CINE.cur) { toast('当前未播放任何影片', 'amber'); return; }
+    await _doDeleteVideo(CINE.cur);
+  }
+  window.cineDeleteCurrent = cineDeleteCurrent;
+  async function cineDeleteItem(i, ev) {
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    const it = CINE.items[i];
+    if (it) await _doDeleteVideo(it);
+  }
+  window.cineDeleteItem = cineDeleteItem;
   function isCineFs() { return document.fullscreenElement === $('cine-stage'); }
   function enterCineFs() {
     const st = $('cine-stage');
@@ -3547,7 +3624,11 @@
     v.addEventListener('canplay', () => $('cine-spin').classList.add('hidden'));
     v.addEventListener('volumechange', () => { $('cine-mute').textContent = (v.muted || v.volume === 0) ? '🔇' : '🔊'; });
     v.addEventListener('ended', () => {
-      if (CINE.cur) localStorage.removeItem(cinePosKey(CINE.cur.path));
+      if (CINE.cur) {
+        localStorage.removeItem(cinePosKey(CINE.cur.path));
+        if ($('cine-ended-title')) $('cine-ended-title').textContent = `《${CINE.cur.name}》播放完毕`;
+        if ($('cine-ended')) $('cine-ended').classList.remove('hidden');
+      }
       $('cine-stage').classList.remove('idle');
       renderCinemaLib();
     });

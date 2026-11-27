@@ -2502,6 +2502,129 @@ class ControlBackend:
             else:
                 open_path(target.parent)
             return True, "已打开所在文件夹", {}
+        if act == "video_delete_and_clean":
+            raw_p = str(body.get("path") or "").strip()
+            tor_hash = str(body.get("hash") or "").strip()
+            do_cache = bool(body.get("clean_cache", True))
+            target = self._is_allowed_media(raw_p)
+            if target is None or target.suffix.lower() not in self._VIDEO_EXTS:
+                return False, "文件不存在或不在允许的下载目录内", {}
+            name = target.name
+            stem = target.stem
+            parent = target.parent
+            freed = 0
+            try:
+                freed = int(target.stat().st_size)
+            except Exception:
+                freed = 0
+            qb_removed = False
+            # 1) 若关联 qBittorrent 种子，先通知 qB 删除种子与文件（自动释放句柄并避免 Missing Files）
+            if tor_hash and port_open(self.cfg["qbit"]["host"], self.cfg["qbit"]["port"]):
+                try:
+                    s, base = self.pr.q_login(timeout=3.0)
+                    hdr = {"Referer": base + "/", "Origin": base}
+                    r = s.post(base + "/api/v2/torrents/delete", timeout=6.0, headers=hdr,
+                               data={"hashes": tor_hash, "deleteFiles": "true"})
+                    if r.status_code == 200:
+                        qb_removed = True
+                        time.sleep(0.35)
+                except Exception:
+                    pass
+            # 2) 确保视频文件本身已删除（Windows 句柄释放最多重试 5 次）
+            file_deleted = not target.exists()
+            last_err = ""
+            if not file_deleted:
+                for _ in range(5):
+                    try:
+                        target.unlink()
+                        file_deleted = True
+                        break
+                    except FileNotFoundError:
+                        file_deleted = True
+                        break
+                    except Exception as ex:
+                        last_err = str(ex)
+                        time.sleep(0.25)
+            if not file_deleted:
+                return False, "文件可能仍被其他程序占用，删除失败：%s" % last_err[:80], {}
+            # 清理同名前缀的外挂字幕与残余控制文件
+            extra_del = 0
+            try:
+                for sib in list(parent.iterdir()):
+                    if not sib.is_file():
+                        continue
+                    sn = sib.name
+                    if sn.startswith(name + ".") and sib.suffix.lower() in (".aria2", ".!qb", ".parts"):
+                        try:
+                            freed += int(sib.stat().st_size)
+                            sib.unlink()
+                            extra_del += 1
+                        except Exception:
+                            pass
+                    elif sib.stem == stem and sib.suffix.lower() in self._SUB_EXTS:
+                        try:
+                            freed += int(sib.stat().st_size)
+                            sib.unlink()
+                            extra_del += 1
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+            # 若所在目录为该影片专属子目录且已空，自动移除空目录（绝不删下载根目录）
+            try:
+                dl_base = Path(self.cfg.get("paths", {}).get("downloads") or str(DL_HOME)).resolve()
+                protected = {
+                    dl_base,
+                    (dl_base / "aria2").resolve(),
+                    Path(self.cfg.get("qbit", {}).get("save_dir") or str(dl_base / "qBittorrent")).resolve(),
+                    Path(self.yt_output()).resolve(),
+                }
+                if parent.resolve() not in protected and parent.is_dir() and not any(parent.iterdir()):
+                    parent.rmdir()
+            except Exception:
+                pass
+            # 3) 顺带清理面板缓存 + 探测缓存 + Aria2 已停记录
+            cache_n = 0
+            if do_cache:
+                try:
+                    pc = getattr(self, "_probe_cache", None)
+                    if isinstance(pc, dict):
+                        pc.clear()
+                except Exception:
+                    pass
+                try:
+                    for f in CACHE.rglob("*"):
+                        if f.is_file() and f.name.lower() != "trackers.txt":
+                            try:
+                                freed += int(f.stat().st_size)
+                                f.unlink()
+                                cache_n += 1
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+                try:
+                    if port_open(self.cfg["aria2"]["host"], self.cfg["aria2"]["port"]):
+                        self.pr.a_call("aria2.purgeDownloadResult")
+                except Exception:
+                    pass
+            # 格式化释放空间
+            v = float(freed)
+            for unit in ("B", "KB", "MB", "GB", "TB"):
+                if v < 1024.0 or unit == "TB":
+                    freed_s = ("%d %s" % (int(v), unit)) if unit == "B" else ("%.2f %s" % (v, unit))
+                    break
+                v /= 1024.0
+            self.poll_once()
+            parts = ["已删除《%s》" % name]
+            if qb_removed:
+                parts.append("同步移除 qB 种子")
+            if cache_n > 0:
+                parts.append("清理 %d 个缓存" % cache_n)
+            parts.append("释放 %s" % freed_s)
+            msg = " · ".join(parts) + " ✔"
+            self.log(msg, "OK")
+            return True, msg, {"freed_bytes": freed, "freed_str": freed_s, "cache_cleaned": cache_n, "qbit_removed": qb_removed}
         if act == "start_a":
             if port_open(self.cfg["aria2"]["host"], self.cfg["aria2"]["port"]):
                 self.log("Aria2 已在线，已切换内置 AriaNg 管理舱", "OK")
@@ -3587,15 +3710,38 @@ class ControlBackend:
 
         if act == "clean_cache":
             n = 0
+            freed = 0
             try:
-                for f in CACHE.rglob("*"):
-                    if f.is_file():
-                        f.unlink()
-                        n += 1
+                pc = getattr(self, "_probe_cache", None)
+                if isinstance(pc, dict):
+                    pc.clear()
             except Exception:
                 pass
-            self.log("清理缓存 %d 个" % n, "OK")
-            return True, "已清理 %d 个缓存文件" % n, {}
+            try:
+                for f in CACHE.rglob("*"):
+                    if f.is_file() and f.name.lower() != "trackers.txt":
+                        try:
+                            freed += int(f.stat().st_size)
+                            f.unlink()
+                            n += 1
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+            try:
+                if port_open(self.cfg["aria2"]["host"], self.cfg["aria2"]["port"]):
+                    self.pr.a_call("aria2.purgeDownloadResult")
+            except Exception:
+                pass
+            v = float(freed)
+            for unit in ("B", "KB", "MB", "GB"):
+                if v < 1024.0 or unit == "GB":
+                    fs = ("%d %s" % (int(v), unit)) if unit == "B" else ("%.2f %s" % (v, unit))
+                    break
+                v /= 1024.0
+            msg = "已清理 %d 个缓存文件（释放 %s）" % (n, fs)
+            self.log(msg, "OK")
+            return True, msg, {"count": n, "freed_bytes": freed}
 
         if act == "purge_all":
             rm_files = bool(body.get("remove_files"))
