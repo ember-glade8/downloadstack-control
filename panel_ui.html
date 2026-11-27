@@ -1109,6 +1109,80 @@
     }
     .view { overflow-y: auto; }
   }
+  /* ===== CINEMA · in-app immersive player ===== */
+  .cine-layout { flex: 1; min-height: 0; display: grid; grid-template-columns: 310px 1fr; gap: 10px; }
+  .cine-lib { display: flex; flex-direction: column; min-height: 0; }
+  .cine-item { display: flex; gap: 9px; align-items: center; padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(148,192,255,0.12); background: rgba(10,20,42,0.55); cursor: pointer; transition: all .15s; }
+  .cine-item:hover { border-color: rgba(167,139,250,0.55); background: rgba(30,30,70,0.7); }
+  .cine-item.on { border-color: rgba(167,139,250,0.9); box-shadow: 0 0 0 1px rgba(167,139,250,0.35) inset, 0 0 18px rgba(167,139,250,0.18); }
+  .cine-item.pending { opacity: .6; }
+  .cine-item-ico { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: rgba(167,139,250,0.16); flex-shrink: 0; font-size: 14px; }
+  .cine-main { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+  .cine-stage { position: relative; flex: 1; min-height: 0; background: #000; border-radius: var(--radius); overflow: hidden; user-select: none; border: 1px solid rgba(167,139,250,0.28); box-shadow: 0 18px 50px rgba(0,0,0,0.55); }
+  .cine-stage video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+  .cine-stage video::cue { background: rgba(0,0,0,0.5); color: #fff; }
+  .cine-stage:fullscreen { border-radius: 0; border: none; }
+  .cine-stage:fullscreen video::cue { font-size: 150%; }
+  .cine-top { position: absolute; left: 0; right: 0; top: 0; padding: 14px 18px 34px; display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; background: linear-gradient(rgba(0,0,0,0.75), transparent); transition: opacity .35s; z-index: 3; }
+  .cine-title { font-size: 14px; font-weight: 900; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 2px 8px #000; }
+  .cine-stage:fullscreen .cine-title { font-size: 19px; }
+  .cine-sub { font-size: 11px; color: rgba(255,255,255,0.72); margin-top: 3px; }
+  .cine-ctrl { position: absolute; left: 0; right: 0; bottom: 0; padding: 30px 16px 12px; background: linear-gradient(transparent, rgba(0,0,0,0.85)); transition: opacity .35s; z-index: 3; display: flex; flex-direction: column; gap: 8px; }
+  .cine-stage.idle .cine-top, .cine-stage.idle .cine-ctrl { opacity: 0; pointer-events: none; }
+  .cine-stage.idle { cursor: none; }
+  .cine-seek-wrap { position: relative; height: 18px; display: flex; align-items: center; }
+  .cine-seek-wrap::before { content: ''; position: absolute; left: 0; right: 0; top: 7px; height: 4px; border-radius: 3px; background: rgba(255,255,255,0.14); }
+  .cine-buf { position: absolute; left: 0; top: 7px; height: 4px; width: 0; border-radius: 3px; background: rgba(255,255,255,0.32); pointer-events: none; }
+  .cine-seek { position: relative; width: 100%; margin: 0; accent-color: #a78bfa; background: transparent; z-index: 1; cursor: pointer; }
+  .cine-row { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  .cine-btn { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.16); color: #fff; border-radius: 9px; padding: 6px 10px; font-size: 13px; font-weight: 800; cursor: pointer; line-height: 1; transition: all .15s; }
+  .cine-btn:hover { background: rgba(167,139,250,0.38); border-color: rgba(167,139,250,0.75); }
+  .cine-btn.big { font-size: 15px; padding: 7px 14px; background: rgba(167,139,250,0.3); border-color: rgba(167,139,250,0.6); }
+  .cine-sel { background: rgba(0,0,0,0.55); color: #fff; border: 1px solid rgba(255,255,255,0.18); border-radius: 8px; padding: 5px 6px; font-size: 12px; }
+  .cine-time { font-size: 12px; color: #fff; font-weight: 700; min-width: 128px; }
+  .cine-vol { width: 86px; accent-color: #a78bfa; }
+  .cine-osd { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); padding: 12px 24px; border-radius: 14px; background: rgba(0,0,0,0.58); color: #fff; font-size: 22px; font-weight: 900; opacity: 0; transition: opacity .25s; pointer-events: none; z-index: 4; white-space: nowrap; }
+  .cine-osd.show { opacity: 1; }
+  .cine-cover { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: rgba(226,238,255,0.78); text-align: center; padding: 24px; z-index: 2; font-size: 13px; line-height: 1.7; background: radial-gradient(circle at 50% 40%, rgba(167,139,250,0.16), transparent 62%); }
+  .cine-spin { position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; margin: -24px 0 0 -24px; border: 3px solid rgba(255,255,255,0.18); border-top-color: #a78bfa; border-radius: 50%; animation: cineSpin .9s linear infinite; z-index: 2; pointer-events: none; }
+  @keyframes cineSpin { to { transform: rotate(360deg); } }
+  .cine-qbadge {
+    display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    margin-top: 5px; padding: 3px 9px; border-radius: 999px;
+    background: rgba(0, 245, 184, 0.14); border: 1px solid rgba(0, 245, 184, 0.45);
+    color: #99f6e4; font-size: 10.5px; font-weight: 800; letter-spacing: 0.2px;
+    backdrop-filter: blur(8px);
+  }
+  .cine-qbadge.remux { background: rgba(0, 229, 255, 0.16); border-color: rgba(0, 229, 255, 0.52); color: #bae6fd; }
+  .cine-drawer {
+    position: absolute; top: 0; right: 0; bottom: 0; width: 320px; max-width: 82vw;
+    background: rgba(6, 12, 26, 0.92); backdrop-filter: blur(16px);
+    border-left: 1px solid rgba(167, 139, 250, 0.35);
+    z-index: 5; display: flex; flex-direction: column; padding: 12px; gap: 8px;
+    transform: translateX(100%); transition: transform .24s ease;
+  }
+  .cine-drawer.open { transform: translateX(0); }
+  body.cine-immersive .topbar,
+  body.cine-immersive .cine-lib,
+  body.cine-immersive #monster-dock,
+  body.cine-immersive #mini-player { display: none !important; }
+  body.cine-immersive #view-cinema {
+    position: fixed !important; inset: 0 !important; z-index: 950;
+    padding: 0 !important; margin: 0 !important; background: #000 !important;
+  }
+  body.cine-immersive .cine-layout { display: block !important; width: 100vw; height: 100vh; }
+  body.cine-immersive .cine-main { width: 100vw; height: 100vh; }
+  body.cine-immersive .cine-stage { border-radius: 0 !important; border: none !important; width: 100vw; height: 100vh; }
+  .cine-done-banner {
+    position: fixed; left: 20px; bottom: 20px; z-index: 980;
+    display: flex; align-items: center; gap: 10px; max-width: 520px;
+    padding: 11px 14px; border-radius: 14px;
+    background: linear-gradient(135deg, rgba(16, 26, 58, 0.96), rgba(32, 16, 62, 0.96));
+    border: 1px solid rgba(167, 139, 250, 0.65);
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.62), 0 0 24px rgba(167, 139, 250, 0.25);
+    backdrop-filter: blur(14px);
+  }
+  @media (max-width: 1100px) { .cine-layout { grid-template-columns: 1fr; grid-template-rows: 220px 1fr; } }
 </style>
 </head>
 <body>
@@ -1135,6 +1209,7 @@
       <button class="nav-btn" data-view="aigc" onclick="switchView('aigc', this)">🎨 AI画室</button>
       <button class="nav-btn" data-view="voice" onclick="switchView('voice', this)">🎙️ 声音克隆</button>
       <button class="nav-btn" data-view="downloads" onclick="switchView('downloads', this)">⚡ 下载核心 <span class="nav-badge mono" id="nav-task-cnt">0</span></button>
+        <button class="nav-btn" data-view="cinema" onclick="switchView('cinema', this)">🎞️ 影院 <span class="nav-badge mono hidden" id="nav-cine-cnt"></span></button>
       <button class="nav-btn" data-view="codex" onclick="switchView('codex', this)">👾 智能体</button>
       <button class="nav-btn" data-view="system" onclick="switchView('system', this)">🛠️ 系统</button>
       <button class="nav-btn" data-view="tutorial" onclick="switchView('tutorial', this)">📖 教程</button>
@@ -2344,6 +2419,92 @@
       </div>
     </section>
     <!-- ========== VIEW 8: CODEX AGENT WORKSPACE ========== -->
+    <!-- ========== VIEW: CINEMA (IN-APP IMMERSIVE VIDEO PLAYER) ========== -->
+    <section id="view-cinema" class="view hidden" data-aura="violet">
+      <div class="cine-layout">
+        <div class="holo-card cine-lib">
+          <div class="card-hd">
+            <div class="card-title" style="color:#c4b5fd;">🎞️ 片库 <span class="nav-badge mono" id="cine-cnt">0</span></div>
+            <div style="display:flex;gap:5px;">
+              <button class="btn btn-xs btn-violet" id="cine-refresh" onclick="loadCinemaLib()">↻ 刷新</button>
+              <button class="btn btn-xs" onclick="act('open_path',{key:'qbit_dl'})">📂 BT 目录</button>
+            </div>
+          </div>
+          <div class="card-body">
+            <input id="cine-filter" class="inp" style="padding:7px 10px;font-size:12px;" placeholder="筛选片名…" oninput="renderCinemaLib()" />
+            <div class="list-scroll" id="cine-list"><div class="c-dim" style="padding:14px;font-size:12px;">打开本页自动扫描 qB / Aria2 / YT 下载目录…</div></div>
+            <div class="mono c-dim" style="font-size:10.5px;line-height:1.6;">空格 播放/暂停 · ←/→ 10 秒（Shift 60 秒） · ↑/↓ 音量 · F / 双击 全屏 · M 静音 · C 字幕 · &lt; &gt; 倍速 · N 下一部</div>
+          </div>
+        </div>
+        <div class="cine-main">
+          <div class="cine-stage" id="cine-stage">
+            <video id="cine-video" preload="metadata" playsinline></video>
+            <div class="cine-cover" id="cine-empty">
+              <div style="font-size:48px;">🎬</div>
+              <div style="font-size:17px;font-weight:900;color:#fff;">站内原画影院 · 零压缩沉浸式全屏观看</div>
+              <div>种子下载完成后自动入库并弹窗提示，支持 <b>💎 原画直出 (HTTP 206 零压缩)</b> 与 <b>💎 MKV/TS 无损直封 (-c:v copy 零压缩)</b>，自动提取内嵌/外挂字幕。<br/>双击画面或按 <b>F</b> 进入真全屏，按 <b>I</b> 沉浸铺满窗口，静止 2.5 秒控件与鼠标自动隐藏。</div>
+            </div>
+            <div class="cine-cover hidden" id="cine-err">
+              <div style="font-size:40px;">⚠️</div>
+              <div style="font-size:15px;font-weight:900;color:#fff;" id="cine-err-msg">浏览器原生直出解码受限</div>
+              <div>可一键切换「💎 无损直封 (-c:v copy)」保持视频原画质零压缩并实时解码音轨，或打开所在目录。</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
+                <button class="btn btn-cyan" onclick="switchCineMode('remux')">💎 切换原画无损直封 (-c:v copy)</button>
+                <button class="btn btn-violet" onclick="cineExternal()">🎬 用系统播放器</button>
+                <button class="btn" onclick="cineFolder()">📂 打开文件夹</button>
+              </div>
+            </div>
+            <div class="cine-spin hidden" id="cine-spin"></div>
+            <div class="cine-osd" id="cine-osd"></div>
+            <div class="cine-drawer" id="cine-drawer">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                <div style="font-size:13px;font-weight:800;color:#c4b5fd;">📑 全屏选集 / 片库</div>
+                <button class="cine-btn" onclick="toggleCineDrawer(false)">✕</button>
+              </div>
+              <div id="cine-drawer-list" class="list-scroll" style="flex:1;min-height:0;"></div>
+            </div>
+            <div class="cine-top">
+              <div style="min-width:0;flex:1;">
+                <div class="cine-title" id="cine-title">尚未选择影片</div>
+                <div class="cine-sub mono" id="cine-meta"></div>
+                <div class="cine-qbadge mono hidden" id="cine-qbadge">💎 原画零压缩</div>
+              </div>
+              <div style="display:flex;gap:6px;flex-shrink:0;">
+                <button class="cine-btn" onclick="toggleCineDrawer()" title="选集/片库 (D)">📑 选集</button>
+                <button class="cine-btn" id="cine-imm-x" onclick="toggleCineImmersive()" title="窗口沉浸铺满 (I)">🕶️ 沉浸</button>
+                <button class="cine-btn" id="cine-fs-x" onclick="toggleCineFs()" title="真全屏 (F / 双击)">⛶ 全屏</button>
+              </div>
+            </div>
+            <div class="cine-ctrl">
+              <div class="cine-seek-wrap">
+                <div class="cine-buf" id="cine-buf"></div>
+                <input id="cine-seek" class="cine-seek" type="range" min="0" max="1000" value="0" step="1" oninput="cineSeekPreview(this.value)" onchange="cineSeekCommit(this.value)" />
+              </div>
+              <div class="cine-row">
+                <button class="cine-btn" onclick="stepCine(-1)" title="上一部">⏮</button>
+                <button class="cine-btn big" id="cine-play" onclick="cineToggle()" title="播放/暂停 (空格)">▶</button>
+                <button class="cine-btn" onclick="stepCine(1)" title="下一部 (N)">⏭</button>
+                <button class="cine-btn" onclick="cineSeekBy(-10)" title="后退 10 秒">↺ 10</button>
+                <button class="cine-btn" onclick="cineSeekBy(10)" title="前进 10 秒">10 ↻</button>
+                <span class="cine-time mono" id="cine-time">00:00 / 00:00</span>
+                <span style="flex:1;"></span>
+                <button class="cine-btn" id="cine-mode-btn" onclick="toggleCineMode()" title="切换原画直出 / 无损视频直封 (-c:v copy)">💎 原画直出</button>
+                <button class="cine-btn" id="cine-mute" onclick="cineMute()" title="静音 (M)">🔊</button>
+                <input id="cine-vol" class="cine-vol" type="range" min="0" max="1" step="0.01" value="1" oninput="cineSetVol(this.value)" />
+                <select id="cine-rate" class="cine-sel" onchange="cineSetRate(this.value)" title="倍速">
+                  <option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1.0×</option>
+                  <option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2.0×</option>
+                </select>
+                <select id="cine-subsel" class="cine-sel" onchange="setCineSub(this.value)" title="字幕 (C)"><option value="-1">字幕：无</option></select>
+                <button class="cine-btn" onclick="cinePip()" title="画中画">⧉</button>
+                <button class="cine-btn" onclick="cineExternal()" title="用系统播放器打开">🎬</button>
+                <button class="cine-btn" id="cine-fs" onclick="toggleCineFs()" title="全屏 (F / 双击)">⛶</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
     <section id="view-codex" class="view hidden" data-aura="cyan">
       <div class="sub-hero" style="border-color:rgba(0,229,255,0.42);">
         <canvas id="cv-hero-codex"></canvas>
@@ -2727,6 +2888,15 @@
   </div>
 </div>
 
+<div id="cine-done-banner" class="cine-done-banner hidden">
+  <span style="font-size:24px;">🎬</span>
+  <div style="min-width:0;flex:1;">
+    <div style="font-size:12.5px;font-weight:900;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" id="cine-done-title">种子下载已完成</div>
+    <div class="c-dim mono" style="font-size:10.5px;">支持站内原画零压缩全屏沉浸观看</div>
+  </div>
+  <button class="btn btn-xs btn-violet" id="cine-done-watch" onclick="watchDoneBanner(true)">⛶ 立即全屏看</button>
+  <button class="btn btn-xs" onclick="closeDoneBanner()">✕</button>
+</div>
 <div class="toast-stack" id="toast-stack"></div>
 <script>
 (() => {
@@ -2795,6 +2965,7 @@
     codex:     { a1: 'rgba(56,189,248,0.22)', a2: 'rgba(167,139,250,0.16)',c1: [56,189,248],  c2: [167,139,250] },
     system:    { a1: 'rgba(0,229,255,0.16)',  a2: 'rgba(56,189,248,0.12)', c1: [0,229,255],   c2: [56,189,248] },
     tutorial:  { a1: 'rgba(255,179,71,0.20)', a2: 'rgba(0,229,255,0.14)',  c1: [255,179,71],  c2: [0,229,255] },
+    cinema:    { a1: 'rgba(167,139,250,0.20)',a2: 'rgba(255,61,113,0.10)', c1: [167,139,250], c2: [255,61,113] },
   };
 
   /* ===================== HELPERS ===================== */
@@ -2870,6 +3041,576 @@
   }
   window.act = act;
 
+  /* ===================== CINEMA · IN-APP LOSSLESS IMMERSIVE VIDEO PLAYER ===================== */
+  const CINE = {
+    items: [], cur: null, loaded: false, loading: false, idleTimer: 0, clickTimer: 0, osdTimer: 0,
+    lastSave: 0, seeking: false, pendingHash: '', pendingName: '', pendingFs: false, pendingImm: false,
+    qPct: null, newDone: 0, audioTimer: 0,
+    mode: 'direct', offset: 0, duration: 0, probe: null, autoTriedRemux: false,
+    immersive: false, drawerOpen: false, doneBannerHash: '', doneBannerTimer: 0,
+  };
+  const cineV = () => $('cine-video');
+  function fmtClock(sec) {
+    const s = Math.max(0, Math.floor(Number(sec) || 0));
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
+    return (h ? h + ':' + String(m).padStart(2, '0') : String(m).padStart(2, '0')) + ':' + String(x).padStart(2, '0');
+  }
+  const cinePosKey = p => 'cine_pos_' + p;
+  function getCineDur() {
+    const v = cineV();
+    if (CINE.duration && isFinite(CINE.duration) && CINE.duration > 0) return CINE.duration;
+    return (v && isFinite(v.duration) && v.duration > 0) ? v.duration : 0;
+  }
+  function getCineCurTime() {
+    const v = cineV();
+    const raw = (v && isFinite(v.currentTime)) ? v.currentTime : 0;
+    return CINE.mode === 'remux' ? (CINE.offset + raw) : raw;
+  }
+
+  function setCineImmersive(on) {
+    CINE.immersive = !!on;
+    document.body.classList.toggle('cine-immersive', CINE.immersive);
+    const b = $('cine-imm-x');
+    if (b) b.textContent = CINE.immersive ? '🗗 退出沉浸' : '🕶️ 沉浸';
+    bumpCineIdle();
+  }
+  function toggleCineImmersive() { setCineImmersive(!CINE.immersive); }
+  window.toggleCineImmersive = toggleCineImmersive;
+
+  function toggleCineDrawer(force) {
+    const open = typeof force === 'boolean' ? force : !CINE.drawerOpen;
+    CINE.drawerOpen = open;
+    const d = $('cine-drawer');
+    if (d) d.classList.toggle('open', open);
+    if (open) renderCinemaDrawer();
+  }
+  window.toggleCineDrawer = toggleCineDrawer;
+
+  function renderCinemaDrawer() {
+    const box = $('cine-drawer-list');
+    if (!box) return;
+    box.innerHTML = CINE.items.length ? CINE.items.map((it, i) => {
+      const on = CINE.cur && CINE.cur.path === it.path;
+      return `<div class="cine-item ${on ? 'on' : ''} ${it.ready ? '' : 'pending'}" onclick="playCinemaItem(${i}, isCineFs(), CINE.immersive); toggleCineDrawer(false);">
+        <div class="cine-item-ico">${on ? '▶' : (it.ready ? '🎬' : '⏳')}</div>
+        <div style="min-width:0;flex:1;">
+          <div class="row-name" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11.5px;">${esc(it.name)}</div>
+          <div class="mono c-dim" style="font-size:10px;">${esc([it.source, (it.ext || '').replace('.', '').toUpperCase(), fmtBytes(it.size)].join(' · '))}</div>
+        </div>
+      </div>`;
+    }).join('') : '<div class="c-dim" style="padding:12px;font-size:11.5px;">片库暂无影片</div>';
+  }
+
+  function updateCineQualityBadge() {
+    const b = $('cine-qbadge');
+    const mb = $('cine-mode-btn');
+    const p = CINE.probe;
+    if (mb) {
+      mb.textContent = CINE.mode === 'remux' ? '💎 无损直封 (-c:v copy)' : '💎 原画直出';
+    }
+    if (!b) return;
+    if (!CINE.cur) { b.classList.add('hidden'); return; }
+    const parts = [];
+    if (CINE.mode === 'remux') {
+      parts.push(p && p.can_copy_video === false ? '⚡ 高码率兼容解码' : '💎 原画无损直封 (-c:v copy 零压缩)');
+    } else {
+      parts.push('💎 原画直出 · 零压缩');
+    }
+    if (p && p.ok) {
+      if (p.res_label) parts.push(p.res_label);
+      else if (p.width && p.height) parts.push(`${p.width}×${p.height}`);
+      if (p.vcodec) parts.push(p.vcodec.toUpperCase() + (p.bit_depth ? ' ' + p.bit_depth : ''));
+      if (p.fps) parts.push(p.fps + 'fps');
+      if (p.bitrate_mbps) parts.push(p.bitrate_mbps + ' Mbps');
+      if (p.acodec) parts.push('音轨:' + p.acodec.toUpperCase());
+    }
+    b.textContent = parts.join(' · ');
+    b.classList.toggle('remux', CINE.mode === 'remux');
+    b.classList.remove('hidden');
+  }
+
+  function applyCineSubList(allSubs, autoPickZh = false) {
+    const v = cineV();
+    while (v.firstChild) v.removeChild(v.firstChild);
+    (allSubs || []).forEach(s => {
+      const tr = document.createElement('track');
+      tr.kind = 'subtitles'; tr.label = s.label; tr.srclang = s.lang || 'zh'; tr.src = s.url;
+      v.appendChild(tr);
+    });
+    const sel = $('cine-subsel');
+    if (sel) {
+      sel.innerHTML = '<option value="-1">字幕：无</option>' + (allSubs || []).map((s, k) => `<option value="${k}">字幕：${esc(s.label)}</option>`).join('');
+      sel.value = '-1';
+    }
+    if (autoPickZh && allSubs && allSubs.length) {
+      let pick = allSubs.findIndex(s => /zh|chi|zho|chs|cht|简|繁|中|双语/i.test((s.label || '') + ' ' + (s.lang || '')));
+      if (pick < 0) pick = 0;
+      setTimeout(() => setCineSub(pick), 180);
+    }
+  }
+
+  function startCineStream(mode, startSec = 0) {
+    const v = cineV();
+    if (!CINE.cur || !v) return;
+    CINE.mode = mode;
+    CINE.offset = mode === 'remux' ? Math.max(0, Number(startSec) || 0) : 0;
+    $('cine-err').classList.add('hidden');
+    $('cine-spin').classList.remove('hidden');
+    if (mode === 'remux') {
+      v.src = `/api/stream_video?path=${encodeURIComponent(CINE.cur.path)}&start=${CINE.offset.toFixed(2)}&_t=${Date.now()}`;
+    } else {
+      v.src = CINE.cur.play_url;
+    }
+    v.playbackRate = Number($('cine-rate').value || 1);
+    v.load();
+    if (mode === 'direct' && startSec > 1) {
+      const onMeta = () => {
+        v.removeEventListener('loadedmetadata', onMeta);
+        if (isFinite(v.duration) && startSec < v.duration - 2) v.currentTime = startSec;
+      };
+      v.addEventListener('loadedmetadata', onMeta);
+    }
+    v.play().catch(() => {});
+    updateCineQualityBadge();
+  }
+
+  function switchCineMode(mode, keepPos = true) {
+    if (!CINE.cur) return;
+    const pos = keepPos ? getCineCurTime() : 0;
+    if (mode === 'remux') CINE.autoTriedRemux = true;
+    startCineStream(mode, pos);
+    cineOsd(mode === 'remux' ? '💎 原画无损直封 (-c:v copy)' : '💎 原画直出 (零压缩)');
+  }
+  window.switchCineMode = switchCineMode;
+  function toggleCineMode() {
+    if (!CINE.cur) return;
+    switchCineMode(CINE.mode === 'remux' ? 'direct' : 'remux', true);
+  }
+  window.toggleCineMode = toggleCineMode;
+
+  async function loadCinemaLib(silent = false) {
+    if (CINE.loading) return;
+    CINE.loading = true;
+    const btn = $('cine-refresh'); if (btn) btn.disabled = true;
+    const j = await act('video_library', {}, true);
+    CINE.loading = false; if (btn) btn.disabled = false;
+    if (!j || !Array.isArray(j.items)) { toast((j && j.msg) || '片库加载失败', 'rose'); return; }
+    CINE.items = j.items;
+    CINE.loaded = true;
+    if (CINE.cur) CINE.cur = CINE.items.find(it => it.path === CINE.cur.path) || CINE.cur;
+    renderCinemaLib();
+    if (CINE.drawerOpen) renderCinemaDrawer();
+    if (!silent && j.msg) toast(j.msg, j.ok ? 'violet' : 'rose');
+    if (CINE.pendingHash || CINE.pendingName) {
+      const h = CINE.pendingHash, nm = CINE.pendingName, pFs = CINE.pendingFs, pImm = CINE.pendingImm;
+      CINE.pendingHash = ''; CINE.pendingName = ''; CINE.pendingFs = false; CINE.pendingImm = false;
+      playCinemaByMatch(h, nm, pFs, pImm);
+    }
+  }
+  window.loadCinemaLib = loadCinemaLib;
+
+  function renderCinemaLib() {
+    const box = $('cine-list'); if (!box) return;
+    $('cine-cnt').textContent = CINE.items.length;
+    const kw = (($('cine-filter') || {}).value || '').trim().toLowerCase();
+    const list = CINE.items.map((it, i) => ({ it, i }))
+      .filter(({ it }) => !kw || (it.name + ' ' + (it.torrent || '')).toLowerCase().includes(kw));
+    if (!list.length) {
+      box.innerHTML = `<div class="c-dim" style="padding:14px;font-size:12px;">${CINE.items.length ? '没有匹配的影片' : '暂未发现视频文件 · 种子下载完成后会自动出现在这里'}</div>`;
+      return;
+    }
+    box.innerHTML = list.map(({ it, i }) => {
+      const on = CINE.cur && CINE.cur.path === it.path;
+      const pos = Number(localStorage.getItem(cinePosKey(it.path)) || 0);
+      const meta = [it.source, (it.ext || '').replace('.', '').toUpperCase(), fmtBytes(it.size)];
+      if (!it.ready) meta.push('下载中 ' + it.pct + '%');
+      if (pos > 30) meta.push('看到 ' + fmtClock(pos));
+      if ((it.subs || []).length) meta.push('字幕×' + it.subs.length);
+      return `<div class="cine-item ${on ? 'on' : ''} ${it.ready ? '' : 'pending'}" onclick="playCinemaItem(${i})" title="${esc(it.path)}">
+        <div class="cine-item-ico">${on ? '▶' : (it.ready ? '🎬' : '⏳')}</div>
+        <div style="min-width:0;flex:1;">
+          <div class="row-name" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(it.name)}</div>
+          <div class="mono c-dim" style="font-size:10.5px;margin-top:2px;">${esc(meta.join(' · '))}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  window.renderCinemaLib = renderCinemaLib;
+
+  function saveCinePos(force) {
+    const dur = getCineDur();
+    if (!CINE.cur || !dur) return;
+    const now = Date.now();
+    if (!force && now - CINE.lastSave < 4000) return;
+    CINE.lastSave = now;
+    const t = getCineCurTime();
+    if (t > 30 && t < dur - 90) localStorage.setItem(cinePosKey(CINE.cur.path), String(Math.floor(t)));
+    else if (t >= dur - 90) localStorage.removeItem(cinePosKey(CINE.cur.path));
+  }
+
+  async function playCinemaItem(i, autoFs = false, autoImm = false) {
+    const it = CINE.items[i]; if (!it) return;
+    if (!it.ready && !confirm(`该种子尚未下载完成（${it.pct}%），未下载的片段无法播放，仍要尝试吗？`)) return;
+    saveCinePos(true);
+    const ga = $('global-audio'); if (ga && !ga.paused) ga.pause();
+    CINE.cur = it;
+    CINE.probe = null;
+    CINE.duration = 0;
+    CINE.offset = 0;
+    CINE.autoTriedRemux = false;
+    $('cine-empty').classList.add('hidden');
+    $('cine-err').classList.add('hidden');
+    $('cine-title').textContent = it.name;
+    $('cine-meta').textContent = [it.source, (it.ext || '').replace('.', '').toUpperCase(), fmtBytes(it.size), it.torrent && it.torrent !== it.name ? it.torrent : ''].filter(Boolean).join(' · ');
+
+    const savedPos = Number(localStorage.getItem(cinePosKey(it.path)) || 0);
+    const initSubs = [...(it.subs || [])];
+    applyCineSubList(initSubs, initSubs.length > 0);
+    const initMode = it.web ? 'direct' : 'remux';
+    if (initMode === 'remux') CINE.autoTriedRemux = true;
+    startCineStream(initMode, savedPos > 30 ? savedPos : 0);
+
+    renderCinemaLib();
+    if (CINE.drawerOpen) renderCinemaDrawer();
+    if (autoImm) setCineImmersive(true);
+    if (autoFs) enterCineFs();
+    bumpCineIdle();
+
+    // 异步 ffprobe 探测原画质参数、总时长、音轨兼容性与内嵌字幕
+    const reqPath = it.path;
+    const pr = await act('video_probe', { path: reqPath }, true);
+    if (!CINE.cur || CINE.cur.path !== reqPath) return;
+    if (pr && pr.ok && pr.info) {
+      CINE.probe = pr.info;
+      if (pr.info.duration > 0) CINE.duration = pr.info.duration;
+      const mergedSubs = [...initSubs, ...(pr.info.embedded_subs || [])];
+      if ((pr.info.embedded_subs || []).length) applyCineSubList(mergedSubs, true);
+      updateCineQualityBadge();
+      // 若 MKV 含浏览器无声的 AC3/DTS/TrueHD 音轨，自动无缝切到原画无损直封 (-c:v copy)
+      if (pr.info.needs_remux && pr.info.has_ffmpeg && CINE.mode === 'direct' && !CINE.autoTriedRemux) {
+        CINE.autoTriedRemux = true;
+        const posNow = getCineCurTime();
+        startCineStream('remux', posNow > 2 ? posNow : (savedPos > 30 ? savedPos : 0));
+        toast(`已自动启用原画无损直封 (-c:v copy)，完整解码 ${(pr.info.acodec || '多声道').toUpperCase()} 音轨`, 'cyan');
+      }
+    }
+  }
+  window.playCinemaItem = playCinemaItem;
+
+  function playCinemaByMatch(h, nm, autoFs = false, autoImm = false) {
+    let idx = -1;
+    if (h) idx = CINE.items.findIndex(it => (it.hash || '').toLowerCase() === h.toLowerCase() && it.ready);
+    if (idx < 0 && nm) {
+      const low = nm.toLowerCase();
+      idx = CINE.items.findIndex(it => it.ready && ((it.name || '').toLowerCase().includes(low) || (it.torrent || '').toLowerCase().includes(low)));
+    }
+    if (idx < 0) { toast('该任务里暂未发现可播放的视频文件，可点左侧片库查看', 'amber'); return; }
+    playCinemaItem(idx, autoFs, autoImm);
+  }
+  function watchTorrent(h, goFs = false) {
+    closeDoneBanner();
+    switchView('cinema');
+    setCineImmersive(true);
+    if (goFs) enterCineFs();
+    CINE.pendingHash = h || '';
+    CINE.pendingName = '';
+    CINE.pendingFs = false;
+    CINE.pendingImm = true;
+    loadCinemaLib(true);
+  }
+  window.watchTorrent = watchTorrent;
+
+  function watchByName(nm, goFs = false) {
+    closeDoneBanner();
+    switchView('cinema');
+    setCineImmersive(true);
+    if (goFs) enterCineFs();
+    CINE.pendingHash = '';
+    CINE.pendingName = nm || '';
+    CINE.pendingFs = false;
+    CINE.pendingImm = true;
+    loadCinemaLib(true);
+  }
+  window.watchByName = watchByName;
+
+  function showDoneBanner(hash, name) {
+    CINE.doneBannerHash = hash || '';
+    const box = $('cine-done-banner');
+    if (!box) return;
+    if ($('cine-done-title')) $('cine-done-title').textContent = `《${name || '种子影片'}》下载完成`;
+    box.classList.remove('hidden');
+    clearTimeout(CINE.doneBannerTimer);
+    CINE.doneBannerTimer = setTimeout(() => box.classList.add('hidden'), 18000);
+  }
+  function closeDoneBanner() {
+    const box = $('cine-done-banner');
+    if (box) box.classList.add('hidden');
+  }
+  window.closeDoneBanner = closeDoneBanner;
+  function watchDoneBanner(goFs = true) {
+    const h = CINE.doneBannerHash;
+    closeDoneBanner();
+    if (h) watchTorrent(h, goFs);
+    else { switchView('cinema'); setCineImmersive(true); if (goFs) enterCineFs(); loadCinemaLib(true); }
+  }
+  window.watchDoneBanner = watchDoneBanner;
+
+  function stepCine(d) {
+    if (!CINE.items.length) return;
+    let i = CINE.cur ? CINE.items.findIndex(it => it.path === CINE.cur.path) : -1;
+    for (let k = 0; k < CINE.items.length; k++) {
+      i = (i + d + CINE.items.length) % CINE.items.length;
+      if (CINE.items[i].ready) { playCinemaItem(i, isCineFs(), CINE.immersive); return; }
+    }
+  }
+  window.stepCine = stepCine;
+
+  function cineOsd(text) {
+    const o = $('cine-osd'); if (!o) return;
+    o.textContent = text; o.classList.add('show');
+    clearTimeout(CINE.osdTimer);
+    CINE.osdTimer = setTimeout(() => o.classList.remove('show'), 850);
+  }
+  function bumpCineIdle() {
+    const st = $('cine-stage'); if (!st) return;
+    st.classList.remove('idle');
+    clearTimeout(CINE.idleTimer);
+    CINE.idleTimer = setTimeout(() => {
+      const v = cineV();
+      if (v && !v.paused && CINE.cur && !CINE.drawerOpen) st.classList.add('idle');
+    }, 2500);
+  }
+  function cineToggle() {
+    const v = cineV(); if (!CINE.cur) { if (CINE.items.length) stepCine(1); return; }
+    if (v.paused) { v.play().catch(e => toast('播放失败：' + e.message, 'rose')); cineOsd('▶'); }
+    else { v.pause(); cineOsd('⏸'); }
+  }
+  window.cineToggle = cineToggle;
+  function cineSeekTo(targetSec) {
+    const dur = getCineDur();
+    const t = Math.max(0, dur ? Math.min(dur - 0.5, targetSec) : Math.max(0, targetSec));
+    if (CINE.mode === 'remux') {
+      startCineStream('remux', t);
+    } else {
+      const v = cineV();
+      if (v && isFinite(v.duration)) v.currentTime = t;
+    }
+  }
+  function cineSeekBy(s) {
+    if (!CINE.cur) return;
+    const dur = getCineDur();
+    if (!dur) return;
+    cineSeekTo(getCineCurTime() + s);
+    cineOsd((s > 0 ? '⏩ +' : '⏪ ') + s + ' 秒');
+  }
+  window.cineSeekBy = cineSeekBy;
+  function cineSeekPreview(val) {
+    const dur = getCineDur(); if (!dur) return;
+    CINE.seeking = true;
+    $('cine-time').textContent = fmtClock(val / 1000 * dur) + ' / ' + fmtClock(dur);
+  }
+  function cineSeekCommit(val) {
+    const dur = getCineDur(); CINE.seeking = false;
+    if (dur) cineSeekTo(val / 1000 * dur);
+  }
+  window.cineSeekPreview = cineSeekPreview; window.cineSeekCommit = cineSeekCommit;
+  function cineSetVol(x) {
+    const v = cineV(); v.volume = Math.max(0, Math.min(1, Number(x)));
+    if (v.volume > 0) v.muted = false;
+    localStorage.setItem('cine_vol', String(v.volume));
+  }
+  window.cineSetVol = cineSetVol;
+  function cineVolBy(d) { const v = cineV(); cineSetVol(v.volume + d); $('cine-vol').value = v.volume; cineOsd('🔊 ' + Math.round(v.volume * 100) + '%'); }
+  function cineMute() { const v = cineV(); v.muted = !v.muted; cineOsd(v.muted ? '🔇 静音' : '🔊 ' + Math.round(v.volume * 100) + '%'); }
+  window.cineMute = cineMute;
+  function cineSetRate(r) { const v = cineV(); v.playbackRate = Number(r) || 1; cineOsd(v.playbackRate + '×'); }
+  window.cineSetRate = cineSetRate;
+  function cineRateBy(d) {
+    const opts = [0.5, 0.75, 1, 1.25, 1.5, 2];
+    const v = cineV(); let i = opts.indexOf(v.playbackRate); if (i < 0) i = 2;
+    i = Math.max(0, Math.min(opts.length - 1, i + d));
+    $('cine-rate').value = String(opts[i]); cineSetRate(opts[i]);
+  }
+  function setCineSub(k) {
+    k = Number(k);
+    const tt = cineV().textTracks;
+    for (let i = 0; i < tt.length; i++) tt[i].mode = (i === k) ? 'showing' : 'disabled';
+    if ($('cine-subsel')) $('cine-subsel').value = String(k);
+    cineOsd(k < 0 ? '字幕：关' : '字幕：' + (tt[k] ? tt[k].label : k + 1));
+  }
+  window.setCineSub = setCineSub;
+  function cycleCineSub() {
+    const n = cineV().textTracks.length; if (!n) { cineOsd('无字幕轨'); return; }
+    const cur = Number($('cine-subsel').value);
+    setCineSub(cur + 1 >= n ? -1 : cur + 1);
+  }
+  async function cinePip() {
+    const v = cineV(); if (!CINE.cur) return;
+    try { if (document.pictureInPictureElement) await document.exitPictureInPicture(); else await v.requestPictureInPicture(); }
+    catch (e) { toast('画中画不可用：' + e.message, 'amber'); }
+  }
+  window.cinePip = cinePip;
+  function cineExternal() {
+    if (!CINE.cur) { toast('请先选择影片', 'amber'); return; }
+    cineV().pause();
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    act('video_open_external', { path: CINE.cur.path });
+  }
+  window.cineExternal = cineExternal;
+  function cineFolder() { if (CINE.cur) act('video_open_folder', { path: CINE.cur.path }); }
+  window.cineFolder = cineFolder;
+  function isCineFs() { return document.fullscreenElement === $('cine-stage'); }
+  function enterCineFs() {
+    const st = $('cine-stage');
+    if (st && st.requestFullscreen && !isCineFs()) st.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
+  }
+  function toggleCineFs() {
+    if (isCineFs()) document.exitFullscreen().catch(() => {});
+    else enterCineFs();
+  }
+  window.toggleCineFs = toggleCineFs;
+  function cineOnLeave() {
+    setCineImmersive(false);
+    toggleCineDrawer(false);
+    const v = cineV();
+    if (v && !v.paused && document.pictureInPictureElement !== v) { saveCinePos(true); v.pause(); }
+  }
+  function cineTrackQbit(qT) {
+    const now = {};
+    qT.forEach(t => { now[t.hash] = Number(t.pct || 0); });
+    if (CINE.qPct) {
+      qT.forEach(t => {
+        const p = CINE.qPct[t.hash];
+        if (p != null && p < 100 && now[t.hash] >= 100) {
+          showDoneBanner(t.hash, t.name);
+          if (S.view !== 'cinema') CINE.newDone++;
+          CINE.loaded = false;
+          if (S.view === 'cinema') loadCinemaLib(true);
+        }
+      });
+    }
+    CINE.qPct = now;
+    const b = $('nav-cine-cnt');
+    if (b) { b.textContent = CINE.newDone ? '+' + CINE.newDone : ''; b.classList.toggle('hidden', !CINE.newDone); }
+  }
+
+  function initCinema() {
+    const v = cineV(), st = $('cine-stage');
+    if (!v || !st) return;
+    const vol = Number(localStorage.getItem('cine_vol'));
+    if (localStorage.getItem('cine_vol') != null && isFinite(vol)) { v.volume = vol; $('cine-vol').value = vol; }
+    v.addEventListener('loadedmetadata', () => {
+      if (CINE.mode === 'direct' && isFinite(v.duration) && v.duration > 0) CINE.duration = v.duration;
+      if (CINE.mode === 'direct') {
+        const pos = Number(localStorage.getItem(cinePosKey(CINE.cur ? CINE.cur.path : '')) || 0);
+        if (pos > 30 && isFinite(v.duration) && pos < v.duration - 90 && v.currentTime < 5) {
+          v.currentTime = pos;
+          cineOsd('⏯ 从 ' + fmtClock(pos) + ' 继续');
+        }
+      }
+      updateCineQualityBadge();
+    });
+    v.addEventListener('timeupdate', () => {
+      const dur = getCineDur();
+      if (!dur) return;
+      const cur = getCineCurTime();
+      if (!CINE.seeking) {
+        $('cine-seek').value = String(Math.min(1000, Math.round(cur / dur * 1000)));
+        $('cine-time').textContent = fmtClock(cur) + ' / ' + fmtClock(dur);
+      }
+      saveCinePos(false);
+    });
+    v.addEventListener('progress', () => {
+      try {
+        const dur = getCineDur();
+        if (!dur || !v.buffered.length) return;
+        let end = 0;
+        for (let i = 0; i < v.buffered.length; i++) if (v.buffered.start(i) <= v.currentTime + 1) end = Math.max(end, v.buffered.end(i));
+        const absEnd = CINE.mode === 'remux' ? (CINE.offset + end) : end;
+        $('cine-buf').style.width = Math.min(100, absEnd / dur * 100).toFixed(2) + '%';
+      } catch (_) {}
+    });
+    v.addEventListener('play', () => { $('cine-play').textContent = '⏸'; bumpCineIdle(); });
+    v.addEventListener('pause', () => { $('cine-play').textContent = '▶'; $('cine-stage').classList.remove('idle'); saveCinePos(true); });
+    v.addEventListener('waiting', () => $('cine-spin').classList.remove('hidden'));
+    v.addEventListener('playing', () => {
+      $('cine-spin').classList.add('hidden');
+      clearTimeout(CINE.audioTimer);
+      CINE.audioTimer = setTimeout(() => {
+        if (!v.paused && !v.muted && v.currentTime > 2 && v.webkitAudioDecodedByteCount === 0 && CINE.mode === 'direct' && !CINE.autoTriedRemux) {
+          CINE.autoTriedRemux = true;
+          switchCineMode('remux', true);
+          toast('检测到浏览器原生音轨无声，已自动切换「原画无损直封 (-c:v copy)」恢复声音', 'cyan');
+        }
+      }, 4200);
+    });
+    v.addEventListener('canplay', () => $('cine-spin').classList.add('hidden'));
+    v.addEventListener('volumechange', () => { $('cine-mute').textContent = (v.muted || v.volume === 0) ? '🔇' : '🔊'; });
+    v.addEventListener('ended', () => {
+      if (CINE.cur) localStorage.removeItem(cinePosKey(CINE.cur.path));
+      $('cine-stage').classList.remove('idle');
+      renderCinemaLib();
+    });
+    v.addEventListener('error', () => {
+      if (!CINE.cur || !v.getAttribute('src')) return;
+      if (CINE.mode === 'direct' && !CINE.autoTriedRemux) {
+        CINE.autoTriedRemux = true;
+        startCineStream('remux', getCineCurTime());
+        toast('原生封装不兼容，已自动切换「原画无损直封 (-c:v copy)」站内播放', 'cyan');
+        return;
+      }
+      $('cine-spin').classList.add('hidden');
+      const code = v.error ? v.error.code : 0;
+      const why = { 1: '播放被中止', 2: '网络/读取错误（文件可能被占用或未下载完整）', 3: '解码失败', 4: '浏览器不支持该编码' }[code] || '未知错误';
+      $('cine-err-msg').textContent = '无法在站内播放：' + why;
+      $('cine-err').classList.remove('hidden');
+    });
+    st.addEventListener('mousemove', bumpCineIdle, { passive: true });
+    st.addEventListener('click', e => {
+      if (e.target.closest('.cine-ctrl, .cine-top, .cine-cover button, .cine-drawer')) return;
+      clearTimeout(CINE.clickTimer);
+      CINE.clickTimer = setTimeout(cineToggle, 230);
+    });
+    st.addEventListener('dblclick', e => {
+      if (e.target.closest('.cine-ctrl, .cine-top, .cine-drawer')) return;
+      clearTimeout(CINE.clickTimer);
+      toggleCineFs();
+    });
+    st.addEventListener('wheel', e => { if (!CINE.cur || e.target.closest('.cine-drawer')) return; e.preventDefault(); cineVolBy(e.deltaY < 0 ? 0.05 : -0.05); bumpCineIdle(); }, { passive: false });
+    document.addEventListener('fullscreenchange', () => {
+      const on = isCineFs();
+      $('cine-fs').textContent = on ? '🗗' : '⛶';
+      $('cine-fs-x').textContent = on ? '✕ 退出全屏' : '⛶ 全屏';
+      bumpCineIdle();
+    });
+    window.addEventListener('keydown', e => {
+      if (S.view !== 'cinema') return;
+      const ae = document.activeElement;
+      if (ae && (/TEXTAREA|SELECT/.test(ae.tagName) || (ae.tagName === 'INPUT' && ae.type !== 'range'))) return;
+      let hit = true;
+      switch (e.key) {
+        case ' ': case 'k': case 'K': cineToggle(); break;
+        case 'ArrowRight': cineSeekBy(e.shiftKey ? 60 : 10); break;
+        case 'ArrowLeft': cineSeekBy(e.shiftKey ? -60 : -10); break;
+        case 'ArrowUp': cineVolBy(0.05); break;
+        case 'ArrowDown': cineVolBy(-0.05); break;
+        case 'f': case 'F': case 'Enter': toggleCineFs(); break;
+        case 'i': case 'I': toggleCineImmersive(); break;
+        case 'd': case 'D': toggleCineDrawer(); break;
+        case 'Escape': if (CINE.immersive && !isCineFs()) setCineImmersive(false); else hit = false; break;
+        case 'm': case 'M': cineMute(); break;
+        case 'c': case 'C': cycleCineSub(); break;
+        case 'n': case 'N': stepCine(1); break;
+        case '>': case '.': cineRateBy(1); break;
+        case '<': case ',': cineRateBy(-1); break;
+        default: hit = false;
+      }
+      if (hit) { e.preventDefault(); bumpCineIdle(); }
+    });
+    window.addEventListener('beforeunload', () => saveCinePos(true));
+  }
+  initCinema();
+
   /* ===================== NAVIGATION & VIEW SWITCHING (100% IN-APP) ===================== */
   function moveNavPill(btn) {
     const pill = $('nav-pill');
@@ -2907,6 +3648,13 @@
     if (v === 'aigc' && !S.aiPromptsLoaded) searchAigcPrompts('', 'all', true);
     if (v === 'downloads') setDlTab(S.dlTab);
     if (v === 'tutorial') renderTutorialHub();
+    if (v === 'cinema') {
+      CINE.newDone = 0;
+      const nb = $('nav-cine-cnt'); if (nb) nb.classList.add('hidden');
+      if (!CINE.loaded) loadCinemaLib(true);
+    } else {
+      cineOnLeave();
+    }
     updateMiniPlayerVisibility();
     requestAnimationFrame(resizeAllCanvases);
   }
@@ -4987,6 +5735,7 @@
     $('p-dl-sub').textContent = (aT.length + qT.length) ? `${aT.length + qT.length} 任务 · ${fmt(totDn)}` : '0 任务 · 待命';
     $('cnt-a-tasks').textContent = aT.length;
     $('cnt-q-tasks').textContent = qT.length;
+    cineTrackQbit(qT);
     const allT = [
       ...qT.map(t => ({
         src: 'qB', id: t.hash, name: t.name, pct: t.pct, speed: t.speed,
@@ -5015,6 +5764,7 @@
           <div class="eng-meta mono">
             <span>${esc(t.st)} · ${t.meta}</span>
             <span style="display:flex;gap:4px;">
+              ${t.pct >= 100 ? (t.src === 'qB' ? `<button class="btn btn-xs btn-violet" onclick="watchTorrent('${escJs(t.id)}', true)" title="原画全屏沉浸观看">🎬 全屏看</button>` : `<button class="btn btn-xs btn-violet" onclick="watchByName('${escJs(t.name)}', true)" title="原画全屏沉浸观看">🎬 全屏看</button>`) : ''}
               <button class="btn btn-xs" onclick="act('${t.src === 'A2' ? 'aria2_pause' : 'qbit_pause'}',{${t.src === 'A2' ? 'gid' : 'hash'}:'${escJs(t.id)}'})">⏸</button>
               <button class="btn btn-xs btn-mint" onclick="act('${t.src === 'A2' ? 'aria2_resume' : 'qbit_resume'}',{${t.src === 'A2' ? 'gid' : 'hash'}:'${escJs(t.id)}'})">▶</button>
               <button class="btn btn-xs btn-rose" onclick="act('${t.src === 'A2' ? 'aria2_remove' : 'qbit_delete'}',{${t.src === 'A2' ? 'gid' : 'hash'}:'${escJs(t.id)}'})">✕</button>
@@ -5043,6 +5793,7 @@
         <div class="eng-meta mono">
           <span>${fmtBytes(t.done)} / ${fmtBytes(t.total)} · ${t.conn} 连接${t.seeders ? ' · 🌱' + t.seeders : ''} · ${esc(fmtSt(t.status, t.is_meta))}</span>
           <span style="display:flex;gap:4px;">
+            ${t.status === 'complete' ? `<button class="btn btn-xs btn-violet" onclick="watchByName('${escJs(t.name)}', true)">🎬 原画全屏</button>` : ''}
             <button class="btn btn-xs" onclick="act('aria2_pause',{gid:'${escJs(t.gid)}'})">暂停</button>
             <button class="btn btn-xs btn-mint" onclick="act('aria2_resume',{gid:'${escJs(t.gid)}'})">继续</button>
             <button class="btn btn-xs btn-rose" onclick="act('aria2_remove',{gid:'${escJs(t.gid)}'})">移除</button>
@@ -5060,6 +5811,7 @@
         <div class="eng-meta mono">
           <span>${fmtBytes(t.done || 0)} / ${fmtBytes(t.size)} · 🌱${t.seeds || 0}/${t.peers || 0} · 分享率 ${t.ratio}${fmtEta(t.eta)} · ${esc(fmtSt(t.state, isMeta))}</span>
           <span style="display:flex;gap:4px;">
+            ${t.pct >= 100 ? `<button class="btn btn-xs btn-violet" onclick="watchTorrent('${escJs(t.hash)}', false)">🎬 沉浸观看</button><button class="btn btn-xs btn-cyan" onclick="watchTorrent('${escJs(t.hash)}', true)">⛶ 全屏看</button>` : ''}
             <button class="btn btn-xs" onclick="act('qbit_pause',{hash:'${escJs(t.hash)}'})">暂停</button>
             <button class="btn btn-xs btn-cyan" onclick="act('qbit_resume',{hash:'${escJs(t.hash)}'})">继续</button>
             <button class="btn btn-xs btn-rose" onclick="act('qbit_delete',{hash:'${escJs(t.hash)}'})">删除</button>

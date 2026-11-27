@@ -714,6 +714,7 @@ class ControlBackend:
             Path(self.aigc_output()),
             CACHE,
         ]
+        cands.extend(getattr(self, "_cine_roots", set()) or set())
         comfy_root = (self.cfg.get("comfyui") or {}).get("root") or ""
         if comfy_root:
             cands.append(Path(comfy_root) / "output")
@@ -753,7 +754,7 @@ class ControlBackend:
             return None
         allowed_exts = {
             ".mp3", ".flac", ".wav", ".m4a", ".ogg", ".aac", ".opus",
-            ".webm", ".mp4", ".mkv", ".mov",
+            ".webm", ".mp4", ".mkv", ".mov", ".m4v", ".avi", ".ts", ".wmv", ".flv",
             ".png", ".jpg", ".jpeg", ".webp", ".gif",
         }
         if target.suffix.lower() not in allowed_exts:
@@ -765,6 +766,306 @@ class ControlBackend:
             except ValueError:
                 continue
         return None
+
+    # ===================== CINEMA: in-app video library =====================
+    _VIDEO_EXTS = {".mkv", ".mp4", ".webm", ".mov", ".m4v", ".avi", ".ts", ".m2ts", ".wmv", ".flv", ".rmvb"}
+    _WEB_VIDEO_EXTS = {".mkv", ".mp4", ".webm", ".mov", ".m4v"}
+    _SUB_EXTS = {".srt", ".vtt", ".ass", ".ssa"}
+    _COPY_VCODECS = {"h264", "hevc", "h265", "vp9", "vp8", "av1"}
+    _COPY_ACODECS = {"aac", "mp3", "opus"}
+    _TEXT_SUB_CODECS = {"subrip", "srt", "ass", "ssa", "webvtt", "mov_text", "text"}
+
+    def _is_allowed_sub(self, raw_path: str):
+        if not raw_path:
+            return None
+        try:
+            target = Path(raw_path).resolve()
+        except Exception:
+            return None
+        if not target.is_file() or target.suffix.lower() not in self._SUB_EXTS:
+            return None
+        try:
+            if target.stat().st_size > 8 * 1024 * 1024:
+                return None
+        except Exception:
+            return None
+        for rt in self._allowed_media_roots():
+            try:
+                target.relative_to(rt)
+                return target
+            except ValueError:
+                continue
+        return None
+
+    def _walk_videos(self, root: Path, max_depth=4, min_size=1 << 20, cap=400):
+        out = []
+        try:
+            root = Path(root).resolve()
+        except Exception:
+            return out
+        if root.is_file():
+            if root.suffix.lower() in self._VIDEO_EXTS:
+                try:
+                    if root.stat().st_size >= min_size:
+                        out.append(root)
+                except Exception:
+                    pass
+            return out
+        if not root.is_dir():
+            return out
+        base_depth = len(root.parts)
+        for dp, dns, fns in os.walk(root):
+            if len(Path(dp).parts) - base_depth >= max_depth:
+                dns[:] = []
+            dns[:] = [d for d in dns if not d.startswith(".") and d.lower() not in ("$recycle.bin", "node_modules", "__pycache__")]
+            for fn in fns:
+                if os.path.splitext(fn)[1].lower() not in self._VIDEO_EXTS:
+                    continue
+                if os.path.exists(os.path.join(dp, fn + ".aria2")):
+                    continue  # aria2 still downloading
+                fp = Path(dp) / fn
+                try:
+                    if fp.stat().st_size < min_size:
+                        continue
+                except Exception:
+                    continue
+                out.append(fp)
+                if len(out) >= cap:
+                    return out
+        return out
+
+    def _video_subs(self, p: Path, single_video: bool):
+        from urllib.parse import quote
+        subs = []
+        stem = p.stem.lower()
+        dirs = [p.parent] + [p.parent / d for d in ("Subs", "subs", "Subtitles", "subtitles")]
+        for d in dirs:
+            if not d.is_dir():
+                continue
+            try:
+                entries = sorted(d.iterdir())
+            except Exception:
+                continue
+            for sib in entries:
+                if not sib.is_file() or sib.suffix.lower() not in self._SUB_EXTS:
+                    continue
+                nm = sib.name.lower()
+                if not (nm.startswith(stem) or single_video or d != p.parent):
+                    continue
+                label = sib.stem[len(p.stem):].strip(" ._-") if nm.startswith(stem) else sib.stem
+                subs.append({"label": label or "字幕", "url": "/api/subtitle?path=" + quote(str(sib), safe="")})
+                if len(subs) >= 12:
+                    return subs
+        return subs
+
+    def _video_item(self, p: Path, source: str, extra=None, single_video=False):
+        from urllib.parse import quote
+        try:
+            st = p.stat()
+        except Exception:
+            return None
+        ext = p.suffix.lower()
+        it = {
+            "name": p.name, "path": str(p), "size": int(st.st_size), "mtime": int(st.st_mtime),
+            "ext": ext, "source": source, "hash": "", "torrent": "", "ready": True, "pct": 100.0,
+            "web": ext in self._WEB_VIDEO_EXTS,
+            "play_url": "/api/media?path=" + quote(str(p), safe=""),
+            "subs": [],
+        }
+        try:
+            it["subs"] = self._video_subs(p, single_video)
+        except Exception:
+            pass
+        if extra:
+            it.update(extra)
+        return it
+
+    def video_library(self):
+        items, seen = [], set()
+        new_roots = set()
+        try:
+            s, base = self.pr.q_login()
+            ts = s.get(base + "/api/v2/torrents/info", timeout=4.0, headers={"Referer": base + "/"}).json() or []
+        except Exception:
+            ts = []
+        for t in ts:
+            cp = str(t.get("content_path") or "").strip()
+            if not cp:
+                continue
+            pct = round(float(t.get("progress") or 0) * 100, 1)
+            vids = self._walk_videos(Path(cp), max_depth=3, min_size=20 << 20, cap=200)
+            sized = []
+            for v in vids:
+                try:
+                    sized.append((v.stat().st_size, v))
+                except Exception:
+                    pass
+            sized.sort(key=lambda x: -x[0])
+            for _, v in sized:
+                key = str(v).lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                new_roots.add(v.parent)
+                it = self._video_item(v, "qB", {
+                    "hash": str(t.get("hash") or ""), "torrent": str(t.get("name") or ""),
+                    "ready": pct >= 100, "pct": pct,
+                }, single_video=len(sized) == 1)
+                if it:
+                    items.append(it)
+        self._cine_roots = new_roots
+        base = Path(self.cfg.get("paths", {}).get("downloads") or str(DL_HOME))
+        aria_dir = base / "aria2"
+        yt_dir = Path(self.yt_output())
+        roots = [(Path(self.cfg.get("qbit", {}).get("save_dir") or str(base / "qBittorrent")), "qB"),
+                 (aria_dir, "aria2"), (yt_dir, "YT"), (base, "本地")]
+        for r, label in roots:
+            for v in self._walk_videos(r):
+                key = str(v).lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                it = self._video_item(v, label)
+                if it:
+                    items.append(it)
+                if len(items) >= 600:
+                    break
+        items.sort(key=lambda i: (0 if i["ready"] else 1, -i["mtime"]))
+        return items
+
+    def probe_video(self, raw_path: str) -> dict:
+        """使用 ffprobe 实时探测视频真实画质参数与内嵌字幕轨（带文件 mtime 缓存）。"""
+        from urllib.parse import quote
+        target = self._is_allowed_media(raw_path)
+        if target is None:
+            return {"ok": False, "msg": "文件不存在或不在允许目录内"}
+        try:
+            st = target.stat()
+            cache_key = (str(target), int(st.st_mtime), int(st.st_size))
+        except Exception:
+            return {"ok": False, "msg": "无法读取文件信息"}
+        cache = getattr(self, "_probe_cache", None)
+        if cache is None:
+            cache = {}
+            self._probe_cache = cache
+        if cache_key in cache:
+            return dict(cache[cache_key])
+
+        ff_dir = self._find_ffmpeg()
+        ffprobe = ""
+        if ff_dir:
+            cand = Path(ff_dir) / ("ffprobe.exe" if IS_WIN else "ffprobe")
+            if cand.is_file():
+                ffprobe = str(cand)
+        if not ffprobe:
+            ffprobe = shutil.which("ffprobe") or ""
+
+        ext = target.suffix.lower()
+        info = {
+            "ok": True,
+            "path": str(target),
+            "size": int(st.st_size),
+            "ext": ext,
+            "width": 0, "height": 0, "res_label": "",
+            "vcodec": "", "pix_fmt": "", "bit_depth": "", "fps": 0.0,
+            "bitrate_mbps": 0.0, "duration": 0.0,
+            "acodec": "", "achannels": 0,
+            "can_copy_video": True,
+            "needs_remux": ext not in self._WEB_VIDEO_EXTS,
+            "has_ffmpeg": bool(ff_dir or shutil.which("ffmpeg")),
+            "embedded_subs": [],
+        }
+        if not ffprobe:
+            return info
+
+        try:
+            r = subprocess.run(
+                [ffprobe, "-v", "error", "-print_format", "json", "-show_format", "-show_streams", str(target)],
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=8,
+                creationflags=(0x08000000 if IS_WIN else 0),
+            )
+            if r.returncode == 0 and (r.stdout or "").strip():
+                meta = json.loads(r.stdout)
+                fmt = meta.get("format") or {}
+                try:
+                    info["duration"] = round(float(fmt.get("duration") or 0), 2)
+                except Exception:
+                    pass
+                try:
+                    br = float(fmt.get("bit_rate") or 0)
+                    if br > 0:
+                        info["bitrate_mbps"] = round(br / 1_000_000.0, 2)
+                except Exception:
+                    pass
+                streams = meta.get("streams") or []
+                v_st = next((x for x in streams if x.get("codec_type") == "video"
+                             and (x.get("disposition") or {}).get("attached_pic", 0) == 0), None)
+                a_st = next((x for x in streams if x.get("codec_type") == "audio"), None)
+                if v_st:
+                    w = int(v_st.get("width") or 0)
+                    h = int(v_st.get("height") or 0)
+                    vc = str(v_st.get("codec_name") or "").lower()
+                    pf = str(v_st.get("pix_fmt") or "").lower()
+                    info["width"] = w
+                    info["height"] = h
+                    info["vcodec"] = vc
+                    info["pix_fmt"] = pf
+                    info["bit_depth"] = "10bit" if ("10" in pf or "p010" in pf) else ("12bit" if "12" in pf else "8bit")
+                    if max(w, h) >= 3800 or h >= 2100:
+                        info["res_label"] = "4K UHD"
+                    elif max(w, h) >= 2500 or h >= 1400:
+                        info["res_label"] = "2K QHD"
+                    elif max(w, h) >= 1900 or h >= 1000:
+                        info["res_label"] = "1080P FHD"
+                    elif max(w, h) >= 1200 or h >= 700:
+                        info["res_label"] = "720P HD"
+                    elif w and h:
+                        info["res_label"] = "%dx%d" % (w, h)
+                    fr = str(v_st.get("avg_frame_rate") or v_st.get("r_frame_rate") or "")
+                    if "/" in fr:
+                        try:
+                            a_n, b_n = fr.split("/", 1)
+                            if float(b_n) > 0:
+                                info["fps"] = round(float(a_n) / float(b_n), 2)
+                        except Exception:
+                            pass
+                    info["can_copy_video"] = vc in self._COPY_VCODECS
+                if a_st:
+                    ac = str(a_st.get("codec_name") or "").lower()
+                    info["acodec"] = ac
+                    info["achannels"] = int(a_st.get("channels") or 0)
+                    # AC3/EAC3/DTS/TrueHD/PCM/WMA 在浏览器原生直出常无声，自动走无损视频直封 (-c:v copy)
+                    if ac and ac not in self._COPY_ACODECS and ac not in ("vorbis", "flac"):
+                        info["needs_remux"] = True
+                # 提取内嵌文本字幕轨
+                emb_subs = []
+                for idx_s, s_st in enumerate(streams):
+                    if s_st.get("codec_type") != "subtitle":
+                        continue
+                    sc = str(s_st.get("codec_name") or "").lower()
+                    if sc not in self._TEXT_SUB_CODECS:
+                        continue
+                    s_idx = int(s_st.get("index", idx_s))
+                    tags = s_st.get("tags") or {}
+                    title = str(tags.get("title") or tags.get("TITLE") or "").strip()
+                    lang = str(tags.get("language") or tags.get("LANGUAGE") or "").strip()
+                    lbl = " · ".join(x for x in (title, lang) if x) or ("内嵌字幕 #%d" % (len(emb_subs) + 1))
+                    emb_subs.append({
+                        "stream": s_idx,
+                        "label": "内嵌·" + lbl,
+                        "lang": lang.lower(),
+                        "url": "/api/subtitle?path=%s&stream=%d" % (quote(str(target), safe=""), s_idx),
+                    })
+                    if len(emb_subs) >= 12:
+                        break
+                info["embedded_subs"] = emb_subs
+        except Exception:
+            pass
+
+        if len(cache) > 80:
+            cache.clear()
+        cache[cache_key] = dict(info)
+        return info
 
     @staticmethod
     def _pick_folder_dialog(initial: str = "") -> str:
@@ -2175,6 +2476,32 @@ class ControlBackend:
 
     def handle_action(self, body):
         act = (body.get("action") or "").strip()
+        if act == "video_library":
+            try:
+                items = self.video_library()
+            except Exception as ex:
+                return False, "片库扫描失败：%s" % ex, {"items": []}
+            ready = sum(1 for i in items if i.get("ready"))
+            return True, "片库共 %d 部影片（可播放 %d）" % (len(items), ready), {"items": items}
+        if act == "video_probe":
+            info = self.probe_video(str(body.get("path") or ""))
+            return bool(info.get("ok")), info.get("msg") or "探测完成", {"info": info}
+        if act in ("video_open_external", "video_open_folder"):
+            target = self._is_allowed_media(str(body.get("path") or ""))
+            if target is None or target.suffix.lower() not in self._VIDEO_EXTS:
+                return False, "文件不在允许的下载目录内或不存在", {}
+            if act == "video_open_external":
+                open_path(target)
+                self.log("系统播放器打开 %s" % target.name, "OK")
+                return True, "已用系统默认播放器打开", {}
+            if IS_WIN:
+                try:
+                    subprocess.Popen(["explorer", "/select,", str(target)])
+                except Exception:
+                    open_path(target.parent)
+            else:
+                open_path(target.parent)
+            return True, "已打开所在文件夹", {}
         if act == "start_a":
             if port_open(self.cfg["aria2"]["host"], self.cfg["aria2"]["port"]):
                 self.log("Aria2 已在线，已切换内置 AriaNg 管理舱", "OK")
@@ -3626,6 +3953,154 @@ def run_3d_server(open_browser=True):
                     except Exception:
                         pass
                 return
+            if req_path == "/api/subtitle":
+                from urllib.parse import parse_qs, urlsplit
+                import re as _re
+                qs = parse_qs(urlsplit(self.path).query)
+                raw_p = (qs.get("path") or [""])[0]
+                stream_param = (qs.get("stream") or [""])[0].strip()
+                ff_dir = backend._find_ffmpeg()
+                ffmpeg_exe = (str(Path(ff_dir) / ("ffmpeg.exe" if IS_WIN else "ffmpeg")) if ff_dir else (shutil.which("ffmpeg") or ""))
+
+                # 模式 A：从视频文件内嵌字幕轨提取 WebVTT
+                if stream_param != "":
+                    v_target = backend._is_allowed_media(raw_p)
+                    if v_target is None or not ffmpeg_exe or not stream_param.isdigit():
+                        self.send_error(403, "Embedded subtitle not accessible")
+                        return
+                    try:
+                        r = subprocess.run(
+                            [ffmpeg_exe, "-v", "error", "-i", str(v_target),
+                             "-map", "0:" + stream_param, "-f", "webvtt", "pipe:1"],
+                            capture_output=True, timeout=20,
+                            creationflags=(0x08000000 if IS_WIN else 0),
+                        )
+                        data = r.stdout or b"WEBVTT\n\n"
+                    except Exception:
+                        data = b"WEBVTT\n\n"
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/vtt; charset=utf-8")
+                    self.send_header("Cache-Control", "no-store")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.end_headers()
+                    self.wfile.write(data)
+                    return
+
+                # 模式 B：外挂 .srt / .vtt / .ass / .ssa 字幕
+                target = backend._is_allowed_sub(raw_p)
+                if target is None:
+                    self.send_error(403, "Subtitle not accessible")
+                    return
+                if target.suffix.lower() in (".ass", ".ssa") and ffmpeg_exe:
+                    try:
+                        r = subprocess.run(
+                            [ffmpeg_exe, "-v", "error", "-i", str(target), "-f", "webvtt", "pipe:1"],
+                            capture_output=True, timeout=12,
+                            creationflags=(0x08000000 if IS_WIN else 0),
+                        )
+                        data = r.stdout if (r.returncode == 0 and r.stdout) else b"WEBVTT\n\n"
+                    except Exception:
+                        data = b"WEBVTT\n\n"
+                else:
+                    raw = target.read_bytes()
+                    txt = None
+                    for enc in ("utf-8-sig", "utf-16", "gb18030", "big5"):
+                        try:
+                            txt = raw.decode(enc)
+                            if enc == "utf-16" and not raw[:2] in (b"\xff\xfe", b"\xfe\xff"):
+                                txt = None
+                                continue
+                            break
+                        except Exception:
+                            txt = None
+                    if txt is None:
+                        txt = raw.decode("utf-8", "replace")
+                    txt = txt.replace("\r\n", "\n").replace("\r", "\n")
+                    if target.suffix.lower() == ".srt":
+                        txt = _re.sub(r"(\d{1,2}:\d{2}:\d{2}),(\d{1,3})", r"\1.\2", txt)
+                        txt = "WEBVTT\n\n" + txt.lstrip("\ufeff")
+                    data = txt.encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/vtt; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
+
+            if req_path == "/api/stream_video":
+                from urllib.parse import parse_qs, urlsplit
+                qs = parse_qs(urlsplit(self.path).query)
+                raw_p = (qs.get("path") or [""])[0]
+                target = backend._is_allowed_media(raw_p)
+                if target is None:
+                    self.send_error(403, "Media not accessible")
+                    return
+                ff_dir = backend._find_ffmpeg()
+                ffmpeg_exe = (str(Path(ff_dir) / ("ffmpeg.exe" if IS_WIN else "ffmpeg")) if ff_dir else (shutil.which("ffmpeg") or ""))
+                if not ffmpeg_exe:
+                    self.send_error(503, "ffmpeg not available")
+                    return
+                try:
+                    start_sec = max(0.0, float((qs.get("start") or ["0"])[0] or 0))
+                except Exception:
+                    start_sec = 0.0
+                pinfo = backend.probe_video(str(target))
+                vcodec = str(pinfo.get("vcodec") or "").lower()
+                acodec = str(pinfo.get("acodec") or "").lower()
+                # 原画质零压缩：现代编码 (H.264/HEVC/AV1/VP9) 一律 -c:v copy 比特级直出！
+                can_copy_v = (not vcodec) or (vcodec in backend._COPY_VCODECS)
+                can_copy_a = acodec in backend._COPY_ACODECS
+                cmd = [ffmpeg_exe, "-v", "error", "-nostdin"]
+                if start_sec > 0.2:
+                    cmd += ["-ss", "%.3f" % start_sec]
+                cmd += ["-i", str(target), "-map", "0:v:0", "-map", "0:a:0?"]
+                if can_copy_v:
+                    cmd += ["-c:v", "copy"]
+                    if vcodec in ("hevc", "h265"):
+                        cmd += ["-tag:v", "hvc1"]
+                else:
+                    # 仅对浏览器物理无法硬件解码的老旧编码 (如 RMVB/WMV) 高码率兜底
+                    cmd += ["-c:v", "libx264", "-crf", "14", "-preset", "veryfast", "-pix_fmt", "yuv420p"]
+                if can_copy_a:
+                    cmd += ["-c:a", "copy"]
+                else:
+                    cmd += ["-c:a", "aac", "-b:a", "320k", "-ac", "2"]
+                cmd += ["-movflags", "frag_keyframe+empty_moov+default_base_moof", "-f", "mp4", "pipe:1"]
+
+                proc = None
+                try:
+                    proc = subprocess.Popen(
+                        cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                        bufsize=262144, creationflags=(0x08000000 if IS_WIN else 0),
+                    )
+                    self.send_response(200)
+                    self.send_header("Content-Type", "video/mp4")
+                    self.send_header("Cache-Control", "no-store")
+                    self.send_header("X-Cinema-Mode", "lossless-copy" if can_copy_v else "compat-hq")
+                    self.end_headers()
+                    while True:
+                        chunk = proc.stdout.read(131072)
+                        if not chunk:
+                            break
+                        try:
+                            self.wfile.write(chunk)
+                        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                            break
+                except Exception:
+                    pass
+                finally:
+                    if proc is not None:
+                        try:
+                            proc.terminate()
+                            proc.wait(timeout=2)
+                        except Exception:
+                            try:
+                                proc.kill()
+                            except Exception:
+                                pass
+                return
+
             if req_path == "/api/media":
                 from urllib.parse import parse_qs, urlsplit
                 qs = parse_qs(urlsplit(self.path).query)
@@ -3635,7 +4110,8 @@ def run_3d_server(open_browser=True):
                     self.send_error(403, "Media not accessible")
                     return
                 size = target.stat().st_size
-                ctype = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
+                ctype = {".mkv": "video/webm", ".m4v": "video/mp4", ".ts": "video/mp2t"}.get(
+                    target.suffix.lower()) or mimetypes.guess_type(str(target))[0] or "application/octet-stream"
                 rng = self.headers.get("Range")
                 start, end = 0, size - 1
                 code = 200
@@ -3668,7 +4144,7 @@ def run_3d_server(open_browser=True):
                             break
                         try:
                             self.wfile.write(chunk)
-                        except BrokenPipeError:
+                        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                             break
                         rem -= len(chunk)
                 return
