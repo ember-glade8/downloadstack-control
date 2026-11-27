@@ -2572,48 +2572,68 @@
 
       <!-- SUB-TAB 4: MAGNET SEARCH ENGINE & DHT LAB -->
       <div id="dl-pane-magnet" class="split-2-wide hidden" style="flex:1;">
-        <!-- LEFT: 5-SOURCE IN-APP MAGNET SEARCH ENGINE -->
+        <!-- LEFT: 14-SOURCE MULTI-CATEGORY IN-APP MAGNET SEARCH ENGINE -->
         <div class="holo-card" style="display:flex;flex-direction:column;min-height:0;">
           <div class="card-hd">
-            <div class="card-title c-cyan">🔍 站内全网磁力搜索引擎 <span class="nav-badge mono" id="mag-res-cnt">0</span></div>
-            <span class="mono c-dim" style="font-size:10.5px;">5源并发 · 去重排序 · 一键直投 qB / Aria2</span>
+            <div class="card-title c-cyan">🔍 站内 14 源全品类磁力搜索引擎 <span class="nav-badge mono" id="mag-res-cnt">0</span></div>
+            <span class="mono c-dim" style="font-size:10.5px;">视频 · 漫画 · 软件 · 动漫 · 音乐 · 14源并发去重</span>
           </div>
-          <div class="card-body" style="gap:8px;min-height:0;">
+          <div class="card-body" style="gap:7px;min-height:0;">
             <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
-              <input id="mag-search-q" class="inp" placeholder="输入开源镜像 / CC 公共素材 / 合法授权资源关键词（如 Ubuntu 24.04、Blender、Debian）…" onkeydown="if(event.key==='Enter')searchMagnetsUI()" />
-              <button id="btn-mag-search" class="btn btn-cyan" onclick="searchMagnetsUI()">🔍 搜索磁力</button>
+              <input id="mag-search-q" class="inp" placeholder="输入关键词搜索全品类公开磁力源（视频 / 漫画 / 电子书 / 开源软件 / 系统镜像 / 音频）…" onkeydown="if(event.key==='Enter')searchMagnetsUI()" />
+              <button id="btn-mag-search" class="btn btn-cyan" onclick="searchMagnetsUI()">🔍 14源检索</button>
             </div>
-            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;flex-shrink:0;">
-              <div class="pill-row" id="mag-src-pills">
-                <span class="chip active" data-magsrc="all" onclick="setMagSrc('all')">🌐 全网5源</span>
-                <span class="chip" data-magsrc="knaben" onclick="setMagSrc('knaben')">⚡ Knaben聚合</span>
-                <span class="chip" data-magsrc="apibay" onclick="setMagSrc('apibay')">🏴 APIBay</span>
-                <span class="chip" data-magsrc="solid" onclick="setMagSrc('solid')">💎 Solid</span>
-                <span class="chip" data-magsrc="mikan" onclick="setMagSrc('mikan')">🍊 蜜柑中文动漫</span>
-                <span class="chip" data-magsrc="nyaa" onclick="setMagSrc('nyaa')">🎌 Nyaa</span>
+            <!-- Category Row + Sort Row -->
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;flex-shrink:0;">
+              <div class="pill-row" id="mag-cat-pills" style="gap:4px;">
+                <span class="chip active-cyan" data-magcat="all" style="padding:2px 8px;font-size:10.5px;" onclick="setMagCat('all')">🌐 全部品类</span>
+                <span class="chip" data-magcat="video" style="padding:2px 8px;font-size:10.5px;" onclick="setMagCat('video')">🎬 视频影视</span>
+                <span class="chip" data-magcat="manga" style="padding:2px 8px;font-size:10.5px;" onclick="setMagCat('manga')">📚 漫画电子书</span>
+                <span class="chip" data-magcat="software" style="padding:2px 8px;font-size:10.5px;" onclick="setMagCat('software')">💻 软件/系统</span>
+                <span class="chip" data-magcat="anime" style="padding:2px 8px;font-size:10.5px;" onclick="setMagCat('anime')">🎌 动画番剧</span>
+                <span class="chip" data-magcat="audio" style="padding:2px 8px;font-size:10.5px;" onclick="setMagCat('audio')">🎵 无损音乐</span>
               </div>
-              <div class="pill-row" id="mag-sort-pills">
-                <span class="chip active" data-magsort="seeders" onclick="setMagSort('seeders')">🔥 做种最多</span>
-                <span class="chip" data-magsort="size" onclick="setMagSort('size')">📦 体积最大</span>
-                <span class="chip" data-magsort="latest" onclick="setMagSort('latest')">🕒 最新</span>
+              <div class="pill-row" id="mag-sort-pills" style="gap:4px;">
+                <span class="chip active" data-magsort="seeders" style="padding:2px 7px;font-size:10.5px;" onclick="setMagSort('seeders')">🔥 做种</span>
+                <span class="chip" data-magsort="size" style="padding:2px 7px;font-size:10.5px;" onclick="setMagSort('size')">📦 体积</span>
+                <span class="chip" data-magsort="latest" style="padding:2px 7px;font-size:10.5px;" onclick="setMagSort('latest')">🕒 最新</span>
               </div>
+            </div>
+            <!-- 14-Source Selector Strip -->
+            <div class="pill-row" id="mag-src-pills" style="flex-shrink:0;gap:4px;max-height:54px;overflow-y:auto;">
+              <span class="chip active" data-magsrc="all" style="padding:2px 7px;font-size:10.5px;" onclick="setMagSrc('all')">🌐 全部14源</span>
+              <span class="chip" data-magsrc="knaben" style="padding:2px 7px;font-size:10.5px;" onclick="setMagSrc('knaben')">⚡ Knaben聚合</span>
+              <span class="chip" data-magsrc="bt4g" style="padding:2px 7px;font-size:10.5px;" onclick="setMagSrc('bt4g')">🌊 BT4G全网</span>
+              <span class="chip" data-magsrc="tcsv" style="padding:2px 7px;font-size:10.5px;" onclick="setMagSrc('tcsv')">📦 TorrentsCSV</span>
+              <span class="chip" data-magsrc="bitsearch" style="padding:2px 7px;font-size:10.5px;" onclick="setMagSrc('bitsearch')">🌐 BitSearch</span>
+              <span class="chip" data-magsrc="solid" style="padding:2px 7px;font-size:10.5px;" onclick="setMagSrc('solid')">💎 Solid</span>
+              <span class="chip" data-magsrc="tdl" style="padding:2px 7px;font-size:10.5px;" onclick="setMagSrc('tdl')">🔥 TorrentDL</span>
+              <span class="chip" data-magsrc="lime" style="padding:2px 7px;font-size:10.5px;" onclick="setMagSrc('lime')">🍋 Lime</span>
+              <span class="chip" data-magsrc="yts" style="padding:2px 7px;font-size:10.5px;" onclick="setMagSrc('yts')">🎬 YTS高清</span>
+              <span class="chip" data-magsrc="dmhy" style="padding:2px 7px;font-size:10.5px;" onclick="setMagSrc('dmhy')">🌸 动漫花园</span>
+              <span class="chip" data-magsrc="acgnx" style="padding:2px 7px;font-size:10.5px;" onclick="setMagSrc('acgnx')">📚 末日动漫</span>
+              <span class="chip" data-magsrc="mikan" style="padding:2px 7px;font-size:10.5px;" onclick="setMagSrc('mikan')">🍊 蜜柑计划</span>
+              <span class="chip" data-magsrc="nyaa" style="padding:2px 7px;font-size:10.5px;" onclick="setMagSrc('nyaa')">🎌 Nyaa</span>
+              <span class="chip" data-magsrc="tosho" style="padding:2px 7px;font-size:10.5px;" onclick="setMagSrc('tosho')">🗼 Tosho</span>
+              <span class="chip" data-magsrc="apibay" style="padding:2px 7px;font-size:10.5px;" onclick="setMagSrc('apibay')">🏴 APIBay</span>
             </div>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;flex-shrink:0;">
-              <div class="pill-row">
-                <span class="c-dim" style="font-size:10.5px;">开源示例：</span>
-                <span class="chip" onclick="quickMagSearch('Ubuntu 24.04')">Ubuntu 24.04</span>
-                <span class="chip" onclick="quickMagSearch('Debian')">Debian ISO</span>
-                <span class="chip" onclick="quickMagSearch('Blender')">Blender 开源</span>
-                <span class="chip" onclick="quickMagSearch('Big Buck Bunny')">CC 4K 样片</span>
-                <span class="chip" onclick="quickMagSearch('Arch Linux')">Arch Linux</span>
+              <div class="pill-row" style="gap:4px;">
+                <span class="c-dim" style="font-size:10.5px;">示例：</span>
+                <span class="chip" style="padding:2px 7px;font-size:10px;" onclick="quickMagSearch('Ubuntu 24.04')">Ubuntu 24.04</span>
+                <span class="chip" style="padding:2px 7px;font-size:10px;" onclick="quickMagSearch('Blender')">Blender 软件</span>
+                <span class="chip" style="padding:2px 7px;font-size:10px;" onclick="quickMagSearch('Big Buck Bunny')">CC 4K 样片</span>
+                <span class="chip" style="padding:2px 7px;font-size:10px;" onclick="quickMagSearch('LibreOffice')">LibreOffice</span>
+                <span class="chip" style="padding:2px 7px;font-size:10px;" onclick="quickMagSearch('Debian')">Debian ISO</span>
               </div>
-              <span id="mag-search-meta" class="mono c-dim" style="font-size:10.5px;">输入关键词即刻检索全网公开磁力源</span>
+              <span id="mag-search-meta" class="mono c-dim" style="font-size:10.5px;">已接入 14 大公开磁力/DHT/RSS 索引源</span>
             </div>
             <div id="mag-search-list" class="list-scroll">
               <div class="eng-tile" style="font-size:12px;color:var(--text-2);line-height:1.75;">
-                <div class="c-cyan" style="font-weight:800;margin-bottom:4px;">🧲 站内 5 源磁力协议聚合检索引擎已就绪</div>
-                <div>• 并发查询 5 大公开 BitTorrent / RSS 索引接口，自动按 InfoHash 去重、按实时做种数/体积/时间排序。</div>
-                <div>• 投递至 <b>🌀 qBittorrent</b> 或 <b>🌐 Aria2</b> 时，后端自动补全高速公共 Tracker 并尝试秒级预取 `.torrent` 元数据。</div>
+                <div class="c-cyan" style="font-weight:800;margin-bottom:4px;">🧲 站内 14 源全品类磁力聚合检索引擎已就绪</div>
+                <div>• 并发查询 <b>Knaben / BT4G / TorrentsCSV / BitSearch / Solid / TorrentDL / Lime / YTS / 动漫花园 / 末日动漫 / 蜜柑 / Nyaa / TokyoTosho / APIBay</b> 14 大公开源。</div>
+                <div>• 支持按 <b>🎬 视频影视 / 📚 漫画电子书 / 💻 软件系统 / 🎌 动画番剧 / 🎵 无损音乐</b> 智能路由专属分类频道，自动按 40 位 InfoHash（兼容 Base32）去重排序。</div>
+                <div>• 投递至 <b>🌀 qBittorrent</b> 或 <b>🌐 Aria2</b> 时，自动补全公共 Tracker 并尝试秒级预取 `.torrent` 元数据。</div>
                 <div class="c-amber" style="font-size:11px;">⚖️ 合法合规提示：本工具仅提供中立协议检索，不托管任何资源，请仅下载开源镜像、CC 公共素材或您拥有合法授权的内容。</div>
               </div>
             </div>
@@ -5982,7 +6002,14 @@
       S.mediaRecorder.start();
       btn.textContent = '⏹ 停止录制并上传';
       toast('麦克风录音中，请朗读 5~10 秒…', 'magenta');
-    } catch (ex) { toast('无法访问麦克风：' + ex.message, 'rose'); }
+    } catch (ex) {
+      const name = String((ex && ex.name) || '');
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError' || /denied|permission/i.test(String(ex && ex.message))) {
+        toast('麦克风权限被当前应用窗口拦截：请点窗口右上角「···」→「应用信息 / 站点权限」→「麦克风」设为「允许」，再按 F5 刷新即可 ✔', 'amber');
+      } else {
+        toast('无法访问麦克风：' + (ex && ex.message ? ex.message : ex), 'rose');
+      }
+    }
   }
   window.toggleMicRecord = toggleMicRecord;
 
@@ -6078,7 +6105,16 @@
   }
   window.submitMagnet = submitMagnet;
 
-  /* ===================== 5-SOURCE IN-APP MAGNET SEARCH ENGINE ===================== */
+  /* ===================== 14-SOURCE MULTI-CATEGORY IN-APP MAGNET SEARCH ENGINE ===================== */
+  S.magCat = 'all';
+
+  function setMagCat(cat) {
+    S.magCat = cat || 'all';
+    document.querySelectorAll('#mag-cat-pills .chip').forEach(c => c.classList.toggle('active-cyan', c.dataset.magcat === S.magCat));
+    if (($('mag-search-q')?.value || '').trim()) searchMagnetsUI();
+  }
+  window.setMagCat = setMagCat;
+
   function setMagSrc(src) {
     S.magSrc = src || 'all';
     document.querySelectorAll('#mag-src-pills .chip').forEach(c => c.classList.toggle('active', c.dataset.magsrc === S.magSrc));
@@ -6126,22 +6162,23 @@
     const btn = $('btn-mag-search');
     const meta = $('mag-search-meta');
     const box = $('mag-search-list');
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ 5源检索中…'; }
-    if (meta) meta.textContent = `正在并发检索「${q}」…`;
-    if (box) box.innerHTML = `<div class="eng-tile c-cyan mono" style="font-size:12px;">🛰️ 正在并发扫描 Knaben / APIBay / Solid / 蜜柑计划 / Nyaa 公开磁力源…</div>`;
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ 14源检索中…'; }
+    if (meta) meta.textContent = `正在并发检索 14 大公开磁力源「${q}」…`;
+    if (box) box.innerHTML = `<div class="eng-tile c-cyan mono" style="font-size:12px;">🛰️ 正在并发扫描 Knaben / BT4G / TorrentsCSV / BitSearch / Solid / TorrentDL / Lime / YTS / 动漫花园 / 末日动漫 / 蜜柑 / Nyaa / TokyoTosho / APIBay…</div>`;
     try {
-      const res = await act('magnet_search', { query: q, source: S.magSrc, sort: S.magSort, limit: 25 }, true);
+      const res = await act('magnet_search', { query: q, source: S.magSrc, category: S.magCat, sort: S.magSort, limit: 25 }, true);
       const list = (res && res.results) || [];
       const srcs = (res && res.sources) || [];
       S.magResults = list;
       if ($('mag-res-cnt')) $('mag-res-cnt').textContent = String(list.length);
-      const srcStr = srcs.map(s => `${s.name}:${s.ok ? s.count : '×'}`).join(' · ');
-      if (meta) meta.textContent = srcStr || (res && res.msg) || '搜索完成';
+      const hitSrcs = srcs.filter(s => s.count > 0).map(s => `${s.name}:${s.count}`);
+      const okCnt = srcs.filter(s => s.ok).length;
+      if (meta) meta.textContent = (hitSrcs.length ? `命中 ${list.length} 条 · ` + hitSrcs.join(' · ') : `已扫描 ${okCnt}/${srcs.length} 源 · 未命中`);
       renderMagnetResults();
-      if (!list.length) toast((res && res.msg) || '未搜到相关磁力，可换个英文名或短词试试', 'amber');
+      if (!list.length) toast((res && res.msg) || '未搜到相关磁力，可切换品类或换英文原名试试', 'amber');
     } finally {
       S.magSearching = false;
-      if (btn) { btn.disabled = false; btn.textContent = '🔍 搜索磁力'; }
+      if (btn) { btn.disabled = false; btn.textContent = '🔍 14源检索'; }
     }
   }
   window.searchMagnetsUI = searchMagnetsUI;
@@ -6151,15 +6188,15 @@
     if (!box) return;
     const list = S.magResults || [];
     if (!list.length) {
-      box.innerHTML = `<div class="eng-tile c-dim" style="font-size:12px;">暂未找到匹配磁力。提示：国际开源镜像或 CC 素材推荐用英文关键词（如 <code>Ubuntu 24.04</code>、<code>Big Buck Bunny</code>），中文关键词支持多源并发检索。</div>`;
+      box.innerHTML = `<div class="eng-tile c-dim" style="font-size:12px;">暂未找到匹配磁力。提示：国际软件/影视推荐英文关键词（如 <code>Ubuntu 24.04</code>、<code>Blender</code>、<code>Big Buck Bunny</code>），漫画/动漫支持中文与日文罗马音并发检索。</div>`;
       return;
     }
     box.innerHTML = list.map((it, i) => {
-      const isMikan = it.source_id === 'mikan';
-      const seedBadge = isMikan
-        ? `<span class="mag-badge mikan">🍊 蜜柑热源</span>`
+      const isRssNoSeed = Number(it.seeders) < 0;
+      const seedBadge = isRssNoSeed
+        ? `<span class="mag-badge mikan">📡 活跃热源</span>`
         : `<span class="mag-badge seed mono">🌱 ${Number(it.seeders || 0)} 做种</span>`;
-      const peerBadge = (!isMikan && Number(it.leechers || 0) > 0)
+      const peerBadge = (!isRssNoSeed && Number(it.leechers || 0) > 0)
         ? `<span class="mono c-dim">↓ ${Number(it.leechers)} 下载</span>` : '';
       const catBadge = it.category ? `<span class="c-dim">${esc(it.category)}</span>` : '';
       const dateBadge = it.date ? `<span class="mono c-dim">🕒 ${esc(it.date)}</span>` : '';

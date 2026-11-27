@@ -600,6 +600,16 @@ def _extract_hex_hash(text: str) -> str:
     m = re.search(r"btih:([0-9a-fA-F]{40})", text, re.I)
     if m:
         return m.group(1).lower()
+    # Support 32-char Base32 InfoHashes (e.g., DMHY / TokyoTosho) -> convert to 40-char hex
+    m_b32 = re.search(r"btih:([A-Z2-7]{32})(?![A-Z0-9])", text, re.I)
+    if m_b32:
+        import base64
+        try:
+            hx = base64.b32decode(m_b32.group(1).upper()).hex().lower()
+            if len(hx) == 40:
+                return hx
+        except Exception:
+            pass
     m = re.search(r"(?<![0-9a-fA-F])([0-9a-fA-F]{40})(?![0-9a-fA-F])", text)
     if m:
         return m.group(1).lower()
@@ -667,13 +677,23 @@ def _http_fetch_bytes(
     raise last_err if last_err else RuntimeError("http fetch failed")
 
 
-def _search_knaben(query: str, limit: int = 25, proxy: str = "", timeout: float = 9.0) -> list:
-    payload = json.dumps({
+def _search_knaben(query: str, limit: int = 25, proxy: str = "", timeout: float = 9.0, category: str = "all") -> list:
+    req_body = {
         "query": query,
-        "size": max(10, min(50, int(limit))),
+        "size": max(10, min(60, int(limit))),
         "order_by": "seeders",
         "order_direction": "desc",
-    }).encode("utf-8")
+    }
+    knaben_cats = {
+        "video": [2000000, 3000000],
+        "software": [4000000, 5000000],
+        "manga": [9000000],
+        "anime": [6000000],
+        "audio": [1000000],
+    }
+    if category in knaben_cats:
+        req_body["categories"] = knaben_cats[category]
+    payload = json.dumps(req_body).encode("utf-8")
     raw = _http_fetch_bytes(
         "https://api.knaben.org/v1",
         method="POST",
@@ -715,10 +735,11 @@ def _search_knaben(query: str, limit: int = 25, proxy: str = "", timeout: float 
     return out
 
 
-def _search_apibay(query: str, limit: int = 25, proxy: str = "", timeout: float = 6.5) -> list:
-    # APIBay 后端仅索引拉丁字符，纯中文查询会错误返回全站热门榜；此处做相关性拦截
-    url = "https://apibay.org/q.php?q=%s&cat=" % urllib.parse.quote(query)
-    raw = _http_fetch_bytes(url, headers={"Accept": "application/json"}, proxy=proxy, timeout=timeout)
+def _search_apibay(query: str, limit: int = 25, proxy: str = "", timeout: float = 5.0, category: str = "all") -> list:
+    cat_map = {"video": "200", "software": "300", "manga": "601", "audio": "100"}
+    cat_code = cat_map.get(category, "")
+    url = "https://apibay.org/q.php?q=%s&cat=%s" % (urllib.parse.quote(query), cat_code)
+    raw = _http_fetch_bytes(url, headers={"Accept": "application/json"}, proxy=proxy, timeout=min(timeout, 5.0))
     items = json.loads(raw.decode("utf-8", errors="replace"))
     if not isinstance(items, list):
         return []
@@ -755,8 +776,10 @@ def _search_apibay(query: str, limit: int = 25, proxy: str = "", timeout: float 
     return out
 
 
-def _search_solidtorrents(query: str, limit: int = 25, proxy: str = "", timeout: float = 6.5) -> list:
-    url = "https://solidtorrents.to/api/v1/search?q=%s&sort=seeders" % urllib.parse.quote(query)
+def _search_solidtorrents(query: str, limit: int = 25, proxy: str = "", timeout: float = 6.5, category: str = "all") -> list:
+    cat_map = {"video": "Video", "software": "Software", "manga": "Ebook", "audio": "Audio"}
+    cat_q = ("&category=" + cat_map[category]) if category in cat_map else ""
+    url = "https://solidtorrents.to/api/v1/search?q=%s&sort=seeders%s" % (urllib.parse.quote(query), cat_q)
     raw = _http_fetch_bytes(url, headers={"Accept": "application/json"}, proxy=proxy, timeout=timeout)
     data = json.loads(raw.decode("utf-8", errors="replace"))
     out = []
@@ -794,7 +817,7 @@ def _search_solidtorrents(query: str, limit: int = 25, proxy: str = "", timeout:
     return out
 
 
-def _search_mikan(query: str, limit: int = 25, proxy: str = "", timeout: float = 9.0) -> list:
+def _search_mikan(query: str, limit: int = 25, proxy: str = "", timeout: float = 8.0, category: str = "all") -> list:
     url = "https://mikanani.me/RSS/Search?searchstr=%s" % urllib.parse.quote(query)
     raw = _http_fetch_bytes(url, headers={"Accept": "application/rss+xml, application/xml, text/xml"}, proxy=proxy, timeout=timeout)
     root = ET.fromstring(raw.decode("utf-8", errors="replace"))
@@ -840,8 +863,10 @@ def _search_mikan(query: str, limit: int = 25, proxy: str = "", timeout: float =
     return out
 
 
-def _search_nyaa(query: str, limit: int = 25, proxy: str = "", timeout: float = 9.0) -> list:
-    url = "https://nyaa.si/?page=rss&q=%s&c=0_0&f=0" % urllib.parse.quote(query)
+def _search_nyaa(query: str, limit: int = 25, proxy: str = "", timeout: float = 8.0, category: str = "all") -> list:
+    cat_map = {"anime": "1_0", "audio": "2_0", "manga": "3_0", "video": "4_0", "software": "6_0"}
+    ncat = cat_map.get(category, "0_0")
+    url = "https://nyaa.si/?page=rss&q=%s&c=%s&f=0" % (urllib.parse.quote(query), ncat)
     raw = _http_fetch_bytes(url, headers={"Accept": "application/rss+xml, application/xml, text/xml"}, proxy=proxy, timeout=timeout)
     root = ET.fromstring(raw.decode("utf-8", errors="replace"))
     ns = {"nyaa": "https://nyaa.si/xmlns/nyaa"}
@@ -882,13 +907,411 @@ def _search_nyaa(query: str, limit: int = 25, proxy: str = "", timeout: float = 
     return out
 
 
+def _search_bt4g(query: str, limit: int = 25, proxy: str = "", timeout: float = 6.5, category: str = "all") -> list:
+    cat_map = {"video": "movie", "software": "app", "manga": "doc", "audio": "audio"}
+    c_param = ("&category=" + cat_map[category]) if category in cat_map else ""
+    url = "https://bt4gprx.com/search?q=%s&page=rss%s" % (urllib.parse.quote(query), c_param)
+    raw = _http_fetch_bytes(url, headers={"Accept": "application/rss+xml, application/xml, text/xml"}, proxy=proxy, timeout=timeout)
+    txt = raw.decode("utf-8", errors="replace")
+    end_idx = txt.rfind("</rss>")
+    if end_idx > 0:
+        txt = txt[:end_idx + 6]
+    root = ET.fromstring(txt)
+    out = []
+    for item in root.findall(".//item"):
+        if len(out) >= limit:
+            break
+        title = (item.findtext("title") or "").strip()
+        link = (item.findtext("link") or "").strip()
+        desc = (item.findtext("description") or "").strip()
+        ih = _extract_hex_hash(link) or _extract_hex_hash(desc)
+        if not ih:
+            continue
+        mag = link if link.lower().startswith("magnet:?") else _build_magnet_uri(ih, title)
+        m_sz = re.search(r"(\d+(?:\.\d+)?\s*(?:KB|MB|GB|TB))", desc, re.I)
+        sz_str = m_sz.group(1) if m_sz else ""
+        sz_bytes = _parse_size_text(sz_str)
+        ts, date_s = _parse_date_ts(item.findtext("pubDate") or "")
+        out.append({
+            "title": title or ih,
+            "infohash": ih,
+            "magnet": mag,
+            "size_bytes": sz_bytes,
+            "size_str": sz_str or _fmt_size_bytes(sz_bytes),
+            "seeders": -1,
+            "leechers": 0,
+            "date": date_s,
+            "timestamp": ts,
+            "category": "DHT全网",
+            "source_id": "bt4g",
+            "source": "BT4G全网",
+        })
+    return out
+
+
+def _search_torrentscsv(query: str, limit: int = 25, proxy: str = "", timeout: float = 6.5, category: str = "all") -> list:
+    url = "https://torrents-csv.com/service/search?q=%s&size=%d" % (urllib.parse.quote(query), max(10, min(50, limit)))
+    raw = _http_fetch_bytes(url, headers={"Accept": "application/json"}, proxy=proxy, timeout=timeout)
+    data = json.loads(raw.decode("utf-8", errors="replace"))
+    rows = data.get("torrents") if isinstance(data, dict) else (data if isinstance(data, list) else [])
+    out = []
+    for it in (rows or [])[:limit]:
+        title = str(it.get("name") or "").strip()
+        ih = str(it.get("infohash") or "").strip().lower()
+        if len(ih) != 40 or ih == "0" * 40:
+            continue
+        if _query_has_cjk(query) and not _title_matches_query(query, title):
+            continue
+        sz = int(it.get("size_bytes") or 0)
+        seeders = int(it.get("seeders") or 0)
+        leechers = int(it.get("leechers") or 0)
+        ts, date_s = _parse_date_ts(it.get("created_unix"))
+        out.append({
+            "title": title or ih,
+            "infohash": ih,
+            "magnet": _build_magnet_uri(ih, title),
+            "size_bytes": sz,
+            "size_str": _fmt_size_bytes(sz),
+            "seeders": seeders,
+            "leechers": leechers,
+            "date": date_s,
+            "timestamp": ts,
+            "category": "DHT开源索引",
+            "source_id": "tcsv",
+            "source": "TorrentsCSV",
+        })
+    return out
+
+
+def _search_bitsearch(query: str, limit: int = 25, proxy: str = "", timeout: float = 7.0, category: str = "all") -> list:
+    import html as _html
+    url = "https://bitsearch.to/search?q=%s&sort=seeders" % urllib.parse.quote(query)
+    raw = _http_fetch_bytes(url, headers={"Accept": "text/html"}, proxy=proxy, timeout=timeout)
+    txt = _html.unescape(raw.decode("utf-8", errors="replace"))
+    out = []
+    seen = set()
+    # Extract magnet links and inspect surrounding card text for title/size/seeders
+    for m in re.finditer(r'href="(magnet:\?xt=urn:btih:([0-9a-fA-F]{40})[^"]*)"', txt, re.I):
+        if len(out) >= limit:
+            break
+        mag = m.group(1)
+        ih = m.group(2).lower()
+        if ih in seen or ih == "0" * 40:
+            continue
+        seen.add(ih)
+        dn_m = re.search(r"[?&]dn=([^&]+)", mag)
+        title = urllib.parse.unquote_plus(dn_m.group(1)) if dn_m else ""
+        title = re.sub(r"^\[bitsearch\.to\]\s*", "", title, flags=re.I).strip()
+        # Look backwards in HTML chunk for size/seeders/title
+        ctx = txt[max(0, m.start() - 1800):m.start()]
+        if not title:
+            tm = re.findall(r"<h5[^>]*>[\s\S]*?<a[^>]*>(.*?)</a>", ctx, re.I)
+            if tm:
+                title = re.sub(r"<[^>]+>", "", tm[-1]).strip()
+        if _query_has_cjk(query) and title and not _title_matches_query(query, title):
+            continue
+        sz_m = re.findall(r"(\d+(?:\.\d+)?\s*(?:KB|MB|GB|TB))", ctx, re.I)
+        sz_str = sz_m[-1] if sz_m else ""
+        sz_bytes = _parse_size_text(sz_str)
+        out.append({
+            "title": title or ih,
+            "infohash": ih,
+            "magnet": _build_magnet_uri(ih, title or ih),
+            "size_bytes": sz_bytes,
+            "size_str": sz_str or _fmt_size_bytes(sz_bytes),
+            "seeders": -1,
+            "leechers": 0,
+            "date": "",
+            "timestamp": 0,
+            "category": "DHT全网",
+            "source_id": "bitsearch",
+            "source": "BitSearch",
+        })
+    return out
+
+
+def _search_torrentdownload(query: str, limit: int = 25, proxy: str = "", timeout: float = 6.5, category: str = "all") -> list:
+    import html as _html
+    url = "https://www.torrentdownload.info/feed?q=%s" % urllib.parse.quote(query)
+    raw = _http_fetch_bytes(url, headers={"Accept": "application/rss+xml, text/xml"}, proxy=proxy, timeout=timeout)
+    txt = raw.decode("utf-8", errors="replace")
+    out = []
+    for blk in re.findall(r"<item>([\s\S]*?)</item>", txt, re.I):
+        if len(out) >= limit:
+            break
+        tm = re.search(r"<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?</title>", blk, re.I)
+        dm = re.search(r"<description>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?</description>", blk, re.I)
+        pm = re.search(r"<pubDate>([\s\S]*?)</pubDate>", blk, re.I)
+        title = _html.unescape((tm.group(1) if tm else "").strip())
+        desc = _html.unescape((dm.group(1) if dm else "").strip())
+        ih = _extract_hex_hash(desc) or _extract_hex_hash(blk)
+        if not ih or (_query_has_cjk(query) and not _title_matches_query(query, title)):
+            continue
+        msz = re.search(r"Size:\s*([\d.]+\s*[KMGTP]?B)", desc, re.I)
+        mse = re.search(r"Seeds:\s*(\d+)", desc, re.I)
+        mpe = re.search(r"Peers:\s*(\d+)", desc, re.I)
+        sz_str = msz.group(1) if msz else ""
+        sz_bytes = _parse_size_text(sz_str)
+        ts, date_s = _parse_date_ts((pm.group(1) if pm else "").strip())
+        out.append({
+            "title": title or ih,
+            "infohash": ih,
+            "magnet": _build_magnet_uri(ih, title),
+            "size_bytes": sz_bytes,
+            "size_str": sz_str or _fmt_size_bytes(sz_bytes),
+            "seeders": int(mse.group(1)) if mse else 0,
+            "leechers": int(mpe.group(1)) if mpe else 0,
+            "date": date_s,
+            "timestamp": ts,
+            "category": "综合库",
+            "source_id": "tdl",
+            "source": "TorrentDL",
+        })
+    return out
+
+
+def _search_limetorrents(query: str, limit: int = 25, proxy: str = "", timeout: float = 7.0, category: str = "all") -> list:
+    import html as _html
+    q_slug = urllib.parse.quote(query.replace("/", " ").strip())
+    url = "https://www.limetorrents.lol/searchrss/%s/" % q_slug
+    raw = _http_fetch_bytes(url, headers={"Accept": "application/rss+xml, text/xml"}, proxy=proxy, timeout=timeout)
+    txt = raw.decode("utf-8", errors="replace")
+    out = []
+    for blk in re.findall(r"<item>([\s\S]*?)</item>", txt, re.I):
+        if len(out) >= limit:
+            break
+        tm = re.search(r"<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?</title>", blk, re.I)
+        dm = re.search(r"<description>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?</description>", blk, re.I)
+        sm = re.search(r"<size>(\d+)</size>", blk, re.I)
+        cm = re.search(r"<category>(.*?)</category>", blk, re.I)
+        pm = re.search(r"<pubDate>([\s\S]*?)</pubDate>", blk, re.I)
+        title = _html.unescape((tm.group(1) if tm else "").strip())
+        desc = _html.unescape((dm.group(1) if dm else "").strip())
+        ih = _extract_hex_hash(blk)
+        if not ih or (_query_has_cjk(query) and not _title_matches_query(query, title)):
+            continue
+        sz_bytes = int(sm.group(1)) if sm else 0
+        mse = re.search(r"Seeds:\s*(\d+)", desc, re.I)
+        mle = re.search(r"Leechers\s*:?\s*(\d+)", desc, re.I)
+        ts, date_s = _parse_date_ts((pm.group(1) if pm else "").strip())
+        out.append({
+            "title": title or ih,
+            "infohash": ih,
+            "magnet": _build_magnet_uri(ih, title),
+            "size_bytes": sz_bytes,
+            "size_str": _fmt_size_bytes(sz_bytes),
+            "seeders": int(mse.group(1)) if mse else 0,
+            "leechers": int(mle.group(1)) if mle else 0,
+            "date": date_s,
+            "timestamp": ts,
+            "category": _html.unescape((cm.group(1) if cm else "").strip()),
+            "source_id": "lime",
+            "source": "LimeTorrents",
+        })
+    return out
+
+
+def _search_yts(query: str, limit: int = 25, proxy: str = "", timeout: float = 6.5, category: str = "all") -> list:
+    if _query_has_cjk(query):
+        return []
+    urls = [
+        "https://yts.lt/api/v2/list_movies.json?query_term=%s&limit=12&sort_by=seeds" % urllib.parse.quote(query),
+        "https://movies-api.accel.li/api/v2/list_movies.json?query_term=%s&limit=12&sort_by=seeds" % urllib.parse.quote(query),
+    ]
+    data = None
+    for u in urls:
+        try:
+            raw = _http_fetch_bytes(u, headers={"Accept": "application/json"}, proxy=proxy, timeout=timeout)
+            data = json.loads(raw.decode("utf-8", errors="replace"))
+            if isinstance(data, dict) and data.get("status") == "ok":
+                break
+        except Exception:
+            continue
+    if not data:
+        return []
+    movies = (data.get("data") or {}).get("movies") or []
+    out = []
+    for mv in movies:
+        base_title = str(mv.get("title_long") or mv.get("title") or "").strip()
+        for t in (mv.get("torrents") or []):
+            if len(out) >= limit:
+                break
+            ih = str(t.get("hash") or "").strip().lower()
+            if len(ih) != 40:
+                continue
+            qual = str(t.get("quality") or "").strip()
+            ttype = str(t.get("type") or "").strip()
+            codec = str(t.get("video_codec") or "").strip()
+            full_title = ("%s [%s %s %s]" % (base_title, qual, ttype, codec)).strip()
+            sz = int(t.get("size_bytes") or 0)
+            ts, date_s = _parse_date_ts(t.get("date_uploaded_unix") or t.get("date_uploaded"))
+            out.append({
+                "title": full_title,
+                "infohash": ih,
+                "magnet": _build_magnet_uri(ih, full_title),
+                "size_bytes": sz,
+                "size_str": str(t.get("size") or "") or _fmt_size_bytes(sz),
+                "seeders": int(t.get("seeds") or 0),
+                "leechers": int(t.get("peers") or 0),
+                "date": date_s,
+                "timestamp": ts,
+                "category": "高清影视",
+                "source_id": "yts",
+                "source": "YTS高清",
+            })
+    return out
+
+
+def _search_dmhy(query: str, limit: int = 25, proxy: str = "", timeout: float = 8.0, category: str = "all") -> list:
+    # DMHY sort_id: 2=动画, 3=漫画, 4=音乐, 9=游戏/软件
+    sort_map = {"anime": "2", "manga": "3", "audio": "4", "software": "9"}
+    sid = sort_map.get(category, "")
+    url = "https://share.dmhy.org/topics/rss/rss.xml?keyword=%s%s" % (
+        urllib.parse.quote(query),
+        ("&sort_id=" + sid) if sid else "",
+    )
+    raw = _http_fetch_bytes(url, headers={"Accept": "application/rss+xml, application/xml, text/xml"}, proxy=proxy, timeout=timeout)
+    root = ET.fromstring(raw.decode("utf-8", errors="replace"))
+    out = []
+    for item in root.findall(".//item"):
+        if len(out) >= limit:
+            break
+        title = (item.findtext("title") or "").strip()
+        enc = item.find("enclosure")
+        enc_url = enc.attrib.get("url", "") if enc is not None else ""
+        ih = _extract_hex_hash(enc_url)
+        if not ih:
+            continue
+        cat = (item.findtext("category") or "").strip() or "动漫/漫画"
+        ts, date_s = _parse_date_ts(item.findtext("pubDate") or "")
+        out.append({
+            "title": title or ih,
+            "infohash": ih,
+            "magnet": _build_magnet_uri(ih, title),
+            "size_bytes": 0,
+            "size_str": "-",
+            "seeders": -1,
+            "leechers": 0,
+            "date": date_s,
+            "timestamp": ts,
+            "category": cat,
+            "source_id": "dmhy",
+            "source": "动漫花园",
+        })
+    return out
+
+
+def _search_acgnx(query: str, limit: int = 25, proxy: str = "", timeout: float = 8.0, category: str = "all") -> list:
+    sort_map = {"anime": "1", "manga": "3", "audio": "4", "software": "5"}
+    sid = sort_map.get(category, "")
+    url = "https://share.acgnx.se/rss.xml?keyword=%s%s" % (
+        urllib.parse.quote(query),
+        ("&sort_id=" + sid) if sid else "",
+    )
+    raw = _http_fetch_bytes(url, headers={"Accept": "application/rss+xml, application/xml, text/xml"}, proxy=proxy, timeout=timeout)
+    root = ET.fromstring(raw.decode("utf-8", errors="replace"))
+    out = []
+    for item in root.findall(".//item"):
+        if len(out) >= limit:
+            break
+        title = (item.findtext("title") or "").strip()
+        desc = (item.findtext("description") or "").strip()
+        enc = item.find("enclosure")
+        enc_url = enc.attrib.get("url", "") if enc is not None else ""
+        ih = _extract_hex_hash(enc_url) or _extract_hex_hash(desc)
+        if not ih:
+            continue
+        msz = re.search(r"\|\s*([\d.]+\s*[KMGTP]?B)\s*\|", desc, re.I)
+        sz_str = msz.group(1) if msz else ""
+        sz_bytes = _parse_size_text(sz_str)
+        ts, date_s = _parse_date_ts(item.findtext("pubDate") or "")
+        out.append({
+            "title": title or ih,
+            "infohash": ih,
+            "magnet": _build_magnet_uri(ih, title),
+            "size_bytes": sz_bytes,
+            "size_str": sz_str or _fmt_size_bytes(sz_bytes),
+            "seeders": -1,
+            "leechers": 0,
+            "date": date_s,
+            "timestamp": ts,
+            "category": "中文漫游",
+            "source_id": "acgnx",
+            "source": "末日动漫",
+        })
+    return out
+
+
+def _search_tokyotosho(query: str, limit: int = 25, proxy: str = "", timeout: float = 7.0, category: str = "all") -> list:
+    type_map = {"anime": "1", "manga": "3", "audio": "2", "video": "8", "software": "14"}
+    tcode = type_map.get(category, "")
+    url = "https://www.tokyotosho.info/rss.php?terms=%s%s" % (
+        urllib.parse.quote(query),
+        ("&type=" + tcode) if tcode else "",
+    )
+    raw = _http_fetch_bytes(url, headers={"Accept": "application/rss+xml, application/xml, text/xml"}, proxy=proxy, timeout=timeout)
+    root = ET.fromstring(raw.decode("utf-8", errors="replace"))
+    out = []
+    for item in root.findall(".//item"):
+        if len(out) >= limit:
+            break
+        cat = (item.findtext("category") or "").strip()
+        if "hentai" in cat.lower():
+            continue
+        title = (item.findtext("title") or "").strip()
+        desc = (item.findtext("description") or "").strip()
+        ih = _extract_hex_hash(desc)
+        if not ih:
+            continue
+        msz = re.search(r"Size:\s*([\d.]+\s*[KMGTP]?i?B)", desc, re.I)
+        sz_str = msz.group(1) if msz else ""
+        sz_bytes = _parse_size_text(sz_str)
+        ts, date_s = _parse_date_ts(item.findtext("pubDate") or "")
+        out.append({
+            "title": title or ih,
+            "infohash": ih,
+            "magnet": _build_magnet_uri(ih, title),
+            "size_bytes": sz_bytes,
+            "size_str": sz_str or _fmt_size_bytes(sz_bytes),
+            "seeders": -1,
+            "leechers": 0,
+            "date": date_s,
+            "timestamp": ts,
+            "category": cat or "Manga/Anime",
+            "source_id": "tosho",
+            "source": "TokyoTosho",
+        })
+    return out
+
+
 MAGNET_SEARCH_ENGINES = [
-    ("knaben", "Knaben聚合", _search_knaben),
-    ("apibay", "APIBay", _search_apibay),
-    ("solid", "Solid", _search_solidtorrents),
-    ("mikan", "蜜柑计划", _search_mikan),
-    ("nyaa", "Nyaa", _search_nyaa),
+    ("knaben",    "Knaben聚合", _search_knaben),
+    ("bt4g",      "BT4G全网",   _search_bt4g),
+    ("tcsv",      "TorrentsCSV", _search_torrentscsv),
+    ("bitsearch", "BitSearch",  _search_bitsearch),
+    ("solid",     "Solid",      _search_solidtorrents),
+    ("tdl",       "TorrentDL",  _search_torrentdownload),
+    ("lime",      "LimeTorrents", _search_limetorrents),
+    ("yts",       "YTS高清",    _search_yts),
+    ("dmhy",      "动漫花园",   _search_dmhy),
+    ("acgnx",     "末日动漫",   _search_acgnx),
+    ("mikan",     "蜜柑计划",   _search_mikan),
+    ("nyaa",      "Nyaa",       _search_nyaa),
+    ("tosho",     "TokyoTosho", _search_tokyotosho),
+    ("apibay",    "APIBay",     _search_apibay),
 ]
+
+# 按品类路由最高命中率引擎子集（加速并发、提高相关性）
+CATEGORY_ENGINE_MAP = {
+    "all":      None,  # 全部 14 源并发
+    "video":    {"knaben", "bt4g", "tcsv", "bitsearch", "solid", "tdl", "lime", "yts", "nyaa", "apibay"},
+    "manga":    {"nyaa", "dmhy", "acgnx", "tosho", "knaben", "bt4g", "tcsv", "bitsearch", "solid", "apibay"},
+    "software": {"knaben", "tcsv", "bt4g", "bitsearch", "solid", "tdl", "lime", "apibay", "nyaa", "dmhy", "acgnx"},
+    "anime":    {"mikan", "dmhy", "acgnx", "nyaa", "tosho", "bt4g", "knaben"},
+    "audio":    {"knaben", "tcsv", "bt4g", "solid", "bitsearch", "nyaa", "dmhy", "acgnx", "apibay"},
+}
+
+RSS_ACTIVE_SOURCES = {"mikan", "dmhy", "acgnx", "bt4g", "tosho", "bitsearch"}
 
 
 def search_magnets(
@@ -898,16 +1321,24 @@ def search_magnets(
     proxy: str = "",
     limit: int = 25,
     timeout: float = 6.5,
+    category: str = "all",
 ) -> dict:
-    """并发检索 5 大公开磁力/种子数据源并去重排序（100% 站内直出，不跳转外部浏览器）。"""
+    """并发检索 14 大公开磁力/种子数据源（覆盖视频/漫画/软件/动漫/音乐全品类）并去重排序。"""
     q = (query or "").strip()
     if not q:
         return {"ok": False, "msg": "请输入搜索关键词", "results": [], "sources": []}
     src = (source or "all").strip().lower()
+    cat = (category or "all").strip().lower()
+    if cat not in CATEGORY_ENGINE_MAP:
+        cat = "all"
     sort_by = (sort or "seeders").strip().lower()
     per_limit = max(10, min(50, int(limit or 25)))
 
-    engines = [e for e in MAGNET_SEARCH_ENGINES if src in ("all", "", e[0])]
+    if src not in ("all", ""):
+        engines = [e for e in MAGNET_SEARCH_ENGINES if e[0] == src]
+    else:
+        allowed_ids = CATEGORY_ENGINE_MAP.get(cat)
+        engines = [e for e in MAGNET_SEARCH_ENGINES if (allowed_ids is None or e[0] in allowed_ids)]
     if not engines:
         engines = list(MAGNET_SEARCH_ENGINES)
 
@@ -917,12 +1348,12 @@ def search_magnets(
     def _run_one(eng):
         eid, ename, fn = eng
         try:
-            items = fn(q, limit=per_limit, proxy=proxy, timeout=timeout)
+            items = fn(q, limit=per_limit, proxy=proxy, timeout=timeout, category=cat)
             return eid, ename, items, ""
         except Exception as ex:
             return eid, ename, [], str(ex)[:120]
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=len(engines)) as pool:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(14, len(engines))) as pool:
         futs = [pool.submit(_run_one, e) for e in engines]
         for fut in concurrent.futures.as_completed(futs):
             eid, ename, items, err = fut.result()
@@ -939,11 +1370,9 @@ def search_magnets(
                 if prev is None:
                     by_hash[ih] = it
                 else:
-                    # 保留做种数更高或体积信息更完整的记录
                     if it["seeders"] > prev["seeders"] or (prev["size_bytes"] <= 0 < it["size_bytes"]):
                         by_hash[ih] = it
 
-    # 按引擎定义顺序整理 sources_meta
     order_idx = {e[0]: i for i, e in enumerate(MAGNET_SEARCH_ENGINES)}
     sources_meta.sort(key=lambda x: order_idx.get(x["id"], 99))
 
@@ -953,10 +1382,9 @@ def search_magnets(
     elif sort_by == "latest":
         results.sort(key=lambda r: (r["timestamp"], r["seeders"]), reverse=True)
     else:
-        # 做种优先：高做种排最前，蜜柑热源（RSS无做种数）排在死种之前
         results.sort(
             key=lambda r: (
-                1 if (r["seeders"] > 0 or r["source_id"] == "mikan") else 0,
+                1 if (r["seeders"] > 0 or r["source_id"] in RSS_ACTIVE_SOURCES) else 0,
                 r["seeders"] if r["seeders"] >= 0 else 5,
                 r["size_bytes"],
                 r["timestamp"],
@@ -964,14 +1392,14 @@ def search_magnets(
             reverse=True,
         )
 
-    max_total = min(max(per_limit * 3, 45), 100)
+    max_total = min(max(per_limit * 5, 80), 150)
     results = results[:max_total]
 
     ok_sources = [s for s in sources_meta if s["ok"]]
     hit_summary = " / ".join("%s:%d" % (s["name"], s["count"]) for s in sources_meta if s["count"] > 0)
     if results:
-        msg = "已命中 %d 条磁力（%s）" % (len(results), hit_summary or "已去重")
+        msg = "已命中 %d 条去重磁力（%s）" % (len(results), hit_summary or "已去重")
         return {"ok": True, "msg": msg, "results": results, "sources": sources_meta}
     if ok_sources:
-        return {"ok": True, "msg": "未搜到「%s」相关磁力，可尝试英文原名或缩短关键词" % q, "results": [], "sources": sources_meta}
+        return {"ok": True, "msg": "未搜到「%s」相关磁力，可尝试英文原名、切换品类或缩短关键词" % q, "results": [], "sources": sources_meta}
     return {"ok": False, "msg": "磁力搜索引擎暂不可达，请检查网络或代理状态", "results": [], "sources": sources_meta}

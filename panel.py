@@ -3495,12 +3495,13 @@ class ControlBackend:
             if not q:
                 return False, "请输入搜索关键词（影视 / 动漫 / 软件 / 游戏等）", {"results": [], "sources": []}
             src = str(body.get("source") or "all").strip().lower()
+            cat = str(body.get("category") or "all").strip().lower()
             sort_by = str(body.get("sort") or "seeders").strip().lower()
             try:
                 lim = max(10, min(50, int(body.get("limit") or 25)))
             except Exception:
                 lim = 25
-            res = MT.search_magnets(q, source=src, sort=sort_by, proxy=self._sys_proxy(), limit=lim)
+            res = MT.search_magnets(q, source=src, sort=sort_by, proxy=self._sys_proxy(), limit=lim, category=cat)
             if res.get("ok") and res.get("results"):
                 self.log("磁力搜索「%s」命中 %d 条（%s）" % (q, len(res.get("results") or []), res.get("msg", "")), "OK")
             return bool(res.get("ok")), str(res.get("msg") or ""), {

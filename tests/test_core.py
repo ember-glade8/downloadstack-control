@@ -117,6 +117,14 @@ class TestMagnetTools(unittest.TestCase):
         self.assertEqual(res["infohash"], ih)
         self.assertEqual(res["uri"], "magnet:?xt=urn:btih:" + ih)
 
+    def test_base32_hash_decode_and_14_engines(self):
+        import magnet_tools
+        self.assertGreaterEqual(len(magnet_tools.MAGNET_SEARCH_ENGINES), 14)
+        hx = magnet_tools._extract_hex_hash("magnet:?xt=urn:btih:QQRXWVKCGRUCVMSQLWFFHQDYXKDQ4SDU&dn=test")
+        self.assertEqual(len(hx), 40)
+        for cat in ("all", "video", "manga", "software", "anime", "audio"):
+            self.assertIn(cat, magnet_tools.CATEGORY_ENGINE_MAP)
+
 
 class TestMediaStudio(unittest.TestCase):
     @classmethod
