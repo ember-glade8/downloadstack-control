@@ -605,7 +605,7 @@ def gui():
     root.geometry("880x620")
     root.configure(bg="#0B0E11")
 
-    fg, dim, ok, bad, warn = "#E6EDF3", "#7A8A99", "#00E5A0", "#FF6B6B", "#FFB020"
+    fg, dim, ok, _bad, warn = "#E6EDF3", "#7A8A99", "#00E5A0", "#FF6B6B", "#FFB020"
 
     head = tk.Label(root, text="DownloadStack 安装引导", bg="#0B0E11", fg=ok,
                     font=("Consolas", 16, "bold"))
@@ -851,7 +851,6 @@ def auto_mode():
     print("==== DownloadStack 一键配置 ====")
     print("目录:", APP)
     items = scan()
-    miss = [x[0] for x in items if not x[1]]
     print("扫描结果:")
     for name, good, info, _a in items:
         print(("  [OK] " if good else "  [缺] ") + name)
