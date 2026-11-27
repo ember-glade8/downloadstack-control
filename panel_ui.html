@@ -834,12 +834,36 @@
     box-shadow: 0 10px 26px rgba(0, 229, 255, 0.16);
   }
   .prompt-card.ai-hi { border-color: rgba(0, 229, 255, 0.48); }
+  .prompt-card-body {
+    display: flex; gap: 10px; align-items: flex-start; min-width: 0;
+  }
+  .prompt-thumb {
+    width: 108px; height: 108px; flex-shrink: 0; border-radius: 10px;
+    object-fit: cover; cursor: zoom-in;
+    border: 1px solid rgba(0, 229, 255, 0.32);
+    background: rgba(5, 11, 28, 0.9);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+    transition: transform 0.2s, border-color 0.2s;
+  }
+  .prompt-thumb:hover {
+    transform: scale(1.04);
+    border-color: rgba(0, 245, 184, 0.78);
+  }
   .prompt-text-box {
-    font-size: 11.5px; color: #dbeafe; line-height: 1.58;
+    flex: 1; min-width: 0;
+    font-size: 11.5px; color: #dbeafe; line-height: 1.56;
     background: rgba(2, 6, 17, 0.82);
-    padding: 9px 11px; border-radius: 9px;
+    padding: 8px 10px; border-radius: 9px;
     border: 1px solid rgba(120, 190, 255, 0.16);
     white-space: normal; word-break: break-word;
+    max-height: 132px; overflow-y: auto;
+  }
+  .prompt-skill-bar {
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+    padding: 6px 10px; border-radius: 10px;
+    background: linear-gradient(90deg, rgba(124, 58, 237, 0.16), rgba(0, 229, 255, 0.10));
+    border: 1px solid rgba(167, 139, 250, 0.34);
   }
 
   /* Magnet Search Result Cards (NEVER shrink or clip!) */
@@ -2021,7 +2045,7 @@
               <div style="display:flex;gap:8px;align-items:center;">
                 <input id="ai-ff-file" type="file" accept="image/png,image/jpeg,image/webp" class="hidden" onchange="uploadAigcFirstFrame(this)" />
                 <button class="btn btn-xs btn-cyan" onclick="document.getElementById('ai-ff-file').click()">📤 上传首帧图</button>
-                <span class="c-dim" style="font-size:10.5px;">Wan2.2 14B 在 8G 显存预计耗时 5~15 分钟，请耐心等待</span>
+                <span class="c-dim" style="font-size:10.5px;">已深度适配 8G 显存，通常 1 分钟内即可流畅出片</span>
               </div>
             </div>
 
@@ -2087,17 +2111,35 @@
             <div class="card-body" style="min-height:0;">
               <div class="prog-track" style="height:6px;flex-shrink:0;"><div class="prog-fill" id="ai-bar" style="background:linear-gradient(90deg,#a78bfa,#00e5ff,#00f5b8);"></div></div>
 
-              <!-- PANE A: PRO PROMPT SEARCH ENGINE + AI OPTIMIZER RESULTS -->
-              <div id="ai-pane-prompts" class="col-stack" style="flex:1;min-height:0;gap:7px;">
-                <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
-                  <input id="ai-ps-query" class="inp" style="padding:7px 10px;font-size:12px;" placeholder="输入任意关键词搜提示词模板（如：雨夜 少女 / 仙侠 剑客 / 跑车 / 香水 / 海边 运镜）…" onkeydown="if(event.key==='Enter')searchAigcPrompts()" />
-                  <button class="btn btn-sm btn-violet" onclick="searchAigcPrompts()">🔍 搜索模板</button>
-                  <button id="ai-ps-ai-btn" class="btn btn-sm btn-cyan" onclick="aiExpandSearchKeyword()" title="用 Codex 针对你输入的关键词实时创作 4 套大师级定制提示词">🧠 AI 定制4套</button>
+              <!-- PANE A: PRO PROMPT SEARCH ENGINE + 20,000+ SKILL LIBRARY + AI REMIX -->
+              <div id="ai-pane-prompts" class="col-stack" style="flex:1;min-height:0;gap:6px;">
+                <!-- Live Skill Mount Status & External Sync Bar -->
+                <div class="prompt-skill-bar">
+                  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0;">
+                    <span class="mono" style="font-size:11px;font-weight:800;color:#c4b5fd;" id="ai-skill-badge">🧩 正在检测本机提示词 Skill 库…</span>
+                  </div>
+                  <div style="display:flex;gap:5px;flex-shrink:0;">
+                    <button class="btn btn-xs" onclick="shuffleAigcPrompts()" title="从 15,800+ 社区实战 Skill 词库随机抽取新一轮高赞灵感">🎲 换一批</button>
+                    <button id="ai-skill-sync-btn" class="btn btn-xs btn-cyan" onclick="syncAigcPromptSkill()" title="从公开 GitHub 仓库一键同步/更新最新 20,000+ 社区提示词 Skill 词库">🔄 同步2万+库</button>
+                  </div>
                 </div>
-                <div class="pill-row" id="ai-ps-cats" style="flex-shrink:0;gap:4px;"></div>
-                <div style="display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
-                  <span class="mono c-dim" style="font-size:10.5px;" id="ai-ps-meta">加载大师级提示词库中…</span>
-                  <span class="mono c-cyan" style="font-size:10px;">专为 Z-Image Turbo / Wan2.2 调优 · 点击一键填入</span>
+                <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
+                  <input id="ai-ps-query" class="inp" style="padding:7px 10px;font-size:12px;" placeholder="中文/英文搜 2万+ 提示词 Skill 库（如：赛博女孩 / 香水广告 / 头像 / 小红书 / 漫画分镜 / 游戏角色 / 运镜）…" onkeydown="if(event.key==='Enter')searchAigcPrompts()" />
+                  <button class="btn btn-sm btn-violet" onclick="searchAigcPrompts()">🔍 搜索</button>
+                  <button id="ai-ps-ai-btn" class="btn btn-sm btn-cyan" onclick="aiExpandSearchKeyword()" title="融合 2万+ Skill 骨架 + Codex 实时创作 4 套高精准定制提示词">🧠 Skill-AI定制</button>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;flex-shrink:0;">
+                  <div class="pill-row" id="ai-ps-sources" style="gap:4px;">
+                    <span class="chip active-cyan" data-psrc="all" style="padding:2px 8px;font-size:10.5px;" onclick="pickPromptSource('all')">🔥 全部融合</span>
+                    <span class="chip" data-psrc="skill" style="padding:2px 8px;font-size:10.5px;" onclick="pickPromptSource('skill')">🧩 2万+社区Skill库</span>
+                    <span class="chip" data-psrc="builtin" style="padding:2px 8px;font-size:10.5px;" onclick="pickPromptSource('builtin')">🎬 大师 &amp; Wan2.2库</span>
+                  </div>
+                  <span id="ai-ps-img-chip" class="chip" style="padding:2px 8px;font-size:10.5px;" onclick="togglePromptImgOnly()">🖼️ 仅看带样图</span>
+                </div>
+                <div class="pill-row" id="ai-ps-cats" style="flex-shrink:0;gap:4px;max-height:62px;overflow-y:auto;"></div>
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-shrink:0;flex-wrap:wrap;">
+                  <span class="mono c-dim" style="font-size:10.5px;" id="ai-ps-meta">加载 20,000+ 提示词 Skill 引擎中…</span>
+                  <span class="mono c-cyan" style="font-size:10px;" id="ai-ps-attr">提示词由 YouMind.com 通过公开社区搜集 ❤️</span>
                 </div>
                 <div class="list-scroll" id="ai-ps-list" style="gap:8px;"></div>
               </div>
@@ -5188,13 +5230,18 @@
   S.aiPromptCat = 'all';
   S.aiPromptItems = [];
   S.aiPromptsLoaded = false;
+  S.aiPromptSource = 'all';
+  S.aiPromptOnlyImg = false;
+  S.aiPromptPage = 1;
+  S.aiPromptHasMore = false;
+  S.aiPromptShuffle = 0;
 
   function setAigcRightTab(tab) {
     S.aiRightTab = tab || 'prompts';
     document.querySelectorAll('#ai-right-tabs .chip').forEach(c => c.classList.toggle('active-violet', c.dataset.artab === S.aiRightTab));
     $('ai-pane-prompts').classList.toggle('hidden', S.aiRightTab !== 'prompts');
     $('ai-pane-gallery').classList.toggle('hidden', S.aiRightTab !== 'gallery');
-    if (S.aiRightTab === 'prompts' && !S.aiPromptsLoaded) searchAigcPrompts('', 'all', true);
+    if (S.aiRightTab === 'prompts' && !S.aiPromptsLoaded) searchAigcPrompts('', 'all', true, false);
   }
   window.setAigcRightTab = setAigcRightTab;
 
@@ -5210,66 +5257,203 @@
   }
   window.appendPromptMod = appendPromptMod;
 
+  function updateSkillBanner(st) {
+    const badge = $('ai-skill-badge');
+    if (!badge || !st) return;
+    if (st.mounted) {
+      const uniq = Number(st.unique_skill_prompts || 0).toLocaleString();
+      const totalAll = Number(st.total_available || 0).toLocaleString();
+      badge.innerHTML = `🧩 已挂载 <b>${esc(st.source_label || 'Skill 词库')}</b> · <span class="c-mint">${uniq}</span> 条去重实战模板（含大师库共 ${totalAll} 条）`;
+    } else {
+      badge.innerHTML = `🧩 当前仅启用大师库（${Number(st.builtin_prompts || 0)} 套）· 点右侧「🔄 同步2万+库」一键注入社区实战 Skill`;
+    }
+  }
+
   function renderPromptCategories(cats) {
     const box = $('ai-ps-cats');
     if (!box || !Array.isArray(cats) || !cats.length) return;
-    box.innerHTML = cats.map(c => `
-      <span class="chip ${c.id === S.aiPromptCat ? 'active-violet' : ''}" style="padding:3px 8px;font-size:10.5px;" onclick="pickPromptCat('${escJs(c.id)}')">${esc(c.icon || '')} ${esc(c.name)}</span>
-    `).join('');
+    const filtered = S.aiPromptSource === 'builtin'
+      ? cats.filter(c => c.group !== 'skill')
+      : (S.aiPromptSource === 'skill' ? cats.filter(c => c.id === 'all' || c.group === 'skill') : cats);
+    box.innerHTML = filtered.map(c => {
+      const cntTxt = c.count ? ` <span class="c-dim">${c.count >= 1000 ? (c.count / 1000).toFixed(1) + 'k' : c.count}</span>` : '';
+      const activeCls = c.id === S.aiPromptCat ? (c.group === 'skill' ? 'active-cyan' : 'active-violet') : '';
+      return `<span class="chip ${activeCls}" style="padding:2px 7px;font-size:10.5px;" onclick="pickPromptCat('${escJs(c.id)}')">${esc(c.icon || '')} ${esc(c.name)}${cntTxt}</span>`;
+    }).join('');
   }
 
-  function renderPromptCards(list, isAiHighlight = false) {
-    S.aiPromptItems = Array.isArray(list) ? list : [];
+  function _promptCardHtml(it, i, isAiHighlight) {
+    const mLbl = it.mode === 't2v' ? '🎬 文生视频' : (it.mode === 'i2v' ? '🎞️ 图生视频' : '🖼️ 文生图');
+    const sTxt = String(it.source || '');
+    const srcCol = (sTxt.includes('Codex') || sTxt.includes('Remix') || sTxt.includes('Skill-RAG'))
+      ? 'background:rgba(0,229,255,0.22);color:#67e8f9'
+      : (sTxt.includes('Skill ·') ? 'background:rgba(16,185,129,0.22);color:#6ee7b7'
+        : (sTxt.includes('合成') ? 'background:rgba(255,179,71,0.22);color:#fcd34d' : 'background:rgba(167,139,250,0.22);color:#ddd6fe'));
+    const refBadge = it.need_ref
+      ? '<span class="tag-pill mono" style="background:rgba(251,191,36,0.18);color:#fde68a;" title="原模板含参考图指令，点「🎭 Skill 精改」可一键转为纯文生直出">🖼️ 含参考图</span>'
+      : '';
+    const thumbHtml = it.preview_url
+      ? `<img class="prompt-thumb" loading="lazy" src="/api/prompt_preview?url=${encodeURIComponent(it.preview_url)}" alt="${esc(it.title || '样图')}" title="点击站内放大实拍样图" onclick="openPreviewLightbox('${escJs(it.preview_url)}','${escJs(it.title || 'Skill 实拍样图')}')" onerror="this.style.display='none'" />`
+      : '';
+    return `<div class="prompt-card ${isAiHighlight ? 'ai-hi' : ''}">
+      <div class="eng-top" style="flex-wrap:wrap;gap:6px;">
+        <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;min-width:0;flex:1;">
+          <span style="font-size:12.5px;font-weight:800;color:#fff;">${esc(it.title || '提示词模板')}</span>
+          <span class="tag-pill mono" style="${srcCol};">${esc(it.style_tag || it.source || '精选')}</span>
+          <span class="tag-pill mono" style="background:rgba(0,245,184,0.14);color:#6ee7b7;">⚡ ${esc(it.vram_tag || '8G极速')}</span>
+          <span class="tag-pill mono" style="background:rgba(255,255,255,0.08);color:#cbd5e1;">${mLbl} · ${esc(it.size || '896x512')}</span>
+          ${refBadge}
+        </div>
+        <div style="display:flex;gap:5px;flex-shrink:0;flex-wrap:wrap;">
+          <button class="btn btn-xs" style="border-color:rgba(244,114,182,0.5);color:#f9a8d4;" onclick="remixPromptCard(${i})" title="按 ai-image-prompts-skill Remix 规范：保留此模板光影构图骨架，替换成你自己的主题">🎭 Skill 精改</button>
+          <button class="btn btn-xs btn-cyan" onclick="applyPromptCard(${i}, false)">📥 填入</button>
+          <button class="btn btn-xs btn-violet" onclick="applyPromptCard(${i}, true)">⚡ 生成</button>
+        </div>
+      </div>
+      <div style="font-size:11.5px;color:#93c5fd;line-height:1.45;">${esc(it.summary || '')}</div>
+      <div class="prompt-card-body">
+        ${thumbHtml}
+        <div class="mono selectable prompt-text-box">${esc(it.prompt || '')}</div>
+      </div>
+    </div>`;
+  }
+
+  function renderPromptCards(list, isAiHighlight = false, append = false) {
+    const incoming = Array.isArray(list) ? list : [];
     const box = $('ai-ps-list');
     if (!box) return;
-    if (!S.aiPromptItems.length) {
-      box.innerHTML = '<div class="c-dim" style="margin:auto;text-align:center;font-size:12px;">暂无匹配模板，点「🧠 AI 定制4套」让智能体为你量身创作</div>';
-      return;
+    if (append) {
+      const baseIdx = S.aiPromptItems.length;
+      S.aiPromptItems = S.aiPromptItems.concat(incoming);
+      const oldMore = box.querySelector('.prompt-more-wrap');
+      if (oldMore) oldMore.remove();
+      box.insertAdjacentHTML('beforeend', incoming.map((it, k) => _promptCardHtml(it, baseIdx + k, isAiHighlight)).join(''));
+    } else {
+      S.aiPromptItems = incoming;
+      if (!S.aiPromptItems.length) {
+        box.innerHTML = '<div class="c-dim" style="margin:auto;text-align:center;font-size:12px;line-height:1.8;">暂无匹配模板，点「🧠 Skill-AI定制」融合 2万+ 骨架为你量身创作</div>';
+        return;
+      }
+      box.innerHTML = S.aiPromptItems.map((it, i) => _promptCardHtml(it, i, isAiHighlight)).join('');
+      box.scrollTop = 0;
     }
-    box.innerHTML = S.aiPromptItems.map((it, i) => {
-      const mLbl = it.mode === 't2v' ? '🎬 文生视频' : (it.mode === 'i2v' ? '🎞️ 图生视频' : '🖼️ 文生图');
-      const srcCol = String(it.source || '').includes('Codex')
-        ? 'background:rgba(0,229,255,0.22);color:#67e8f9'
-        : (String(it.source || '').includes('合成') ? 'background:rgba(255,179,71,0.22);color:#fcd34d' : 'background:rgba(167,139,250,0.22);color:#ddd6fe');
-      return `<div class="prompt-card ${isAiHighlight ? 'ai-hi' : ''}">
-        <div class="eng-top" style="flex-wrap:wrap;gap:6px;">
-          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0;">
-            <span style="font-size:13px;font-weight:800;color:#fff;">${esc(it.title || '提示词模板')}</span>
-            <span class="tag-pill mono" style="${srcCol};">${esc(it.style_tag || it.source || '精选')}</span>
-            <span class="tag-pill mono" style="background:rgba(0,245,184,0.16);color:#6ee7b7;">🛡️ ${esc(it.vram_tag || '8G极稳')}</span>
-            <span class="tag-pill mono" style="background:rgba(255,255,255,0.08);color:#cbd5e1;">${mLbl} · ${esc(it.size || '896x512')}</span>
-          </div>
-          <div style="display:flex;gap:6px;flex-shrink:0;">
-            <button class="btn btn-xs btn-cyan" onclick="applyPromptCard(${i}, false)">📥 填入使用</button>
-            <button class="btn btn-xs btn-violet" onclick="applyPromptCard(${i}, true)">⚡ 填入并生成</button>
-          </div>
-        </div>
-        <div style="font-size:11.5px;color:#93c5fd;line-height:1.5;">${esc(it.summary || '')}</div>
-        <div class="mono selectable prompt-text-box">${esc(it.prompt || '')}</div>
-      </div>`;
-    }).join('');
-    box.scrollTop = 0;
+    if (!isAiHighlight && S.aiPromptHasMore) {
+      box.insertAdjacentHTML('beforeend',
+        `<div class="prompt-more-wrap" style="flex-shrink:0;display:flex;justify-content:center;padding:4px 0 8px;">
+          <button class="btn btn-sm btn-cyan" onclick="loadMoreAigcPrompts()">➕ 继续加载更多 2万+ 社区 Skill 模板（第 ${S.aiPromptPage + 1} 页）</button>
+        </div>`
+      );
+    }
   }
 
-  async function searchAigcPrompts(qOverride, catOverride, silent = false) {
+  async function searchAigcPrompts(qOverride, catOverride, silent = false, append = false) {
     const q = typeof qOverride === 'string' ? qOverride : (($('ai-ps-query').value || '').trim());
     if (typeof catOverride === 'string') S.aiPromptCat = catOverride;
-    $('ai-ps-meta').textContent = q ? `正在检索「${q}」…` : '正在加载大师模板库…';
-    const res = await act('aigc_prompt_search', { query: q, category: S.aiPromptCat, mode: S.aigcMode, limit: 36 }, silent);
+    if (!append) S.aiPromptPage = 1;
+    $('ai-ps-meta').textContent = q ? `正在检索 20,000+ 提示词 Skill 库「${q}」…` : '正在加载 20,000+ 提示词 Skill 库…';
+    const res = await act('aigc_prompt_search', {
+      query: q,
+      category: S.aiPromptCat,
+      mode: S.aigcMode,
+      source: S.aiPromptSource,
+      only_with_image: S.aiPromptOnlyImg,
+      page: S.aiPromptPage,
+      limit: 24,
+      shuffle_seed: S.aiPromptShuffle,
+    }, silent);
     if (res && res.ok) {
       S.aiPromptsLoaded = true;
+      S.aiPromptHasMore = !!res.has_more;
+      if (res.skill_status) updateSkillBanner(res.skill_status);
       if (res.categories && res.categories.length) renderPromptCategories(res.categories);
       $('ai-ps-meta').textContent = res.msg || `共 ${res.results.length} 套模板`;
-      renderPromptCards(res.results || [], false);
+      if (res.attribution && $('ai-ps-attr')) $('ai-ps-attr').textContent = res.attribution;
+      renderPromptCards(res.results || [], false, append);
     }
   }
   window.searchAigcPrompts = searchAigcPrompts;
 
+  function loadMoreAigcPrompts() {
+    S.aiPromptPage += 1;
+    searchAigcPrompts(undefined, undefined, true, true);
+  }
+  window.loadMoreAigcPrompts = loadMoreAigcPrompts;
+
   function pickPromptCat(catId) {
     S.aiPromptCat = catId || 'all';
-    searchAigcPrompts(undefined, S.aiPromptCat, true);
+    S.aiPromptShuffle = 0;
+    searchAigcPrompts(undefined, S.aiPromptCat, true, false);
   }
   window.pickPromptCat = pickPromptCat;
+
+  function pickPromptSource(src) {
+    S.aiPromptSource = src || 'all';
+    S.aiPromptCat = 'all';
+    S.aiPromptShuffle = 0;
+    document.querySelectorAll('#ai-ps-sources .chip').forEach(c => c.classList.toggle('active-cyan', c.dataset.psrc === S.aiPromptSource));
+    searchAigcPrompts(undefined, 'all', true, false);
+  }
+  window.pickPromptSource = pickPromptSource;
+
+  function togglePromptImgOnly() {
+    S.aiPromptOnlyImg = !S.aiPromptOnlyImg;
+    const el = $('ai-ps-img-chip');
+    if (el) el.classList.toggle('active-mint', S.aiPromptOnlyImg);
+    searchAigcPrompts(undefined, undefined, true, false);
+  }
+  window.togglePromptImgOnly = togglePromptImgOnly;
+
+  function shuffleAigcPrompts() {
+    S.aiPromptShuffle = Math.floor(Math.random() * 999999) + 1;
+    searchAigcPrompts(undefined, undefined, true, false);
+    toast('🎲 已从 20,000+ 提示词 Skill 库随机抽取新一轮灵感', 'cyan');
+  }
+  window.shuffleAigcPrompts = shuffleAigcPrompts;
+
+  async function syncAigcPromptSkill() {
+    const btn = $('ai-skill-sync-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ 同步2万+词库中…'; }
+    toast('正在从公开 GitHub 仓库拉取最新 20,000+ 社区提示词 Skill…', 'cyan');
+    const res = await act('aigc_prompt_sync', {}, false);
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 同步2万+库'; }
+    if (res && res.skill_status) updateSkillBanner(res.skill_status);
+    if (res && res.ok) {
+      S.aiPromptShuffle = 0;
+      searchAigcPrompts(undefined, S.aiPromptCat, true, false);
+    }
+  }
+  window.syncAigcPromptSkill = syncAigcPromptSkill;
+
+  async function remixPromptCard(idx) {
+    const it = S.aiPromptItems[idx];
+    if (!it) return;
+    const defaultIdea = (($('ai-prompt').value || '').trim() && $('ai-prompt').value.trim().length <= 120)
+      ? $('ai-prompt').value.trim()
+      : ($('ai-ps-query').value || '').trim();
+    const userIdea = window.prompt(
+      `🎭 Skill 模板精改（保留「${it.title}」的光影、镜头与构图骨架）\n\n请输入你想替换的新主体/场景/文字（中文即可；留空则直接去除参考图依赖并优化为 Z-Image / Wan2.2 直出大片词）：`,
+      defaultIdea
+    );
+    if (userIdea === null) return;
+    setAigcRightTab('prompts');
+    $('ai-ps-meta').textContent = `🎭 正在用 Skill Remix 引擎精改「${(it.title || '').slice(0, 26)}」…`;
+    $('ai-ps-list').innerHTML = '<div class="c-cyan mono" style="margin:auto;text-align:center;font-size:12px;line-height:1.9;">🎭 正在完整保留原模板视觉骨架，精准替换主体并适配 Z-Image Turbo / Wan2.2…<br/>约 3~8 秒内出炉</div>';
+    const res = await act('aigc_prompt_remix', {
+      template_prompt: it.prompt || '',
+      template_title: it.title || '',
+      user_idea: userIdea.trim(),
+      mode: S.aigcMode,
+    }, false);
+    if (res && res.ok && res.variants && res.variants.length) {
+      S.aiPromptHasMore = false;
+      $('ai-ps-meta').textContent = res.msg || '🎭 Skill 精改完成';
+      renderPromptCards(res.variants, true, false);
+    } else {
+      toast('模板精改失败，已恢复原列表', 'rose');
+      searchAigcPrompts(undefined, undefined, true, false);
+    }
+  }
+  window.remixPromptCard = remixPromptCard;
 
   function applyPromptCard(idx, runNow = false) {
     const it = S.aiPromptItems[idx];
@@ -5285,7 +5469,7 @@
     if (it.steps) $('ai-steps').value = it.steps;
     if (it.length) $('ai-length').value = Math.min(25, Number(it.length));
     updateAigcVramGuard();
-    toast(`已填入「${it.title}」（已锁定 8G 安全参数）✔`, 'mint');
+    toast(`已填入「${it.title}」（已锁定 8G 极速参数）✔`, 'mint');
     if (runNow) {
       setAigcRightTab('gallery');
       startAigcGenerate();
@@ -5298,16 +5482,17 @@
     if (!raw) { toast('请先输入你的画面想法或关键词（中文即可）', 'amber'); return; }
     setAigcRightTab('prompts');
     const b1 = $('ai-opt-btn'), b2 = $('ai-ps-ai-btn');
-    if (b1) { b1.disabled = true; b1.textContent = '⏳ AI 构思大片提示词中…'; }
+    if (b1) { b1.disabled = true; b1.textContent = '⏳ Skill-RAG 构思中…'; }
     if (b2) { b2.disabled = true; b2.textContent = '⏳ AI 创作中…'; }
-    $('ai-ps-meta').textContent = `🧠 正在调用 Codex 提示词架构师为「${raw.slice(0, 26)}」深度定制 ${count} 套大师方案…`;
-    $('ai-ps-list').innerHTML = '<div class="c-cyan mono" style="margin:auto;text-align:center;font-size:12px;line-height:1.9;">✨ 正在拆解构图、物理光线、电影镜头与 Wan2.2 运镜…<br/>约 3~8 秒内出炉</div>';
+    $('ai-ps-meta').textContent = `🧠 正在从 2万+ Skill 库检索范本骨架并调用 Codex 定制 ${count} 套高精准方案…`;
+    $('ai-ps-list').innerHTML = '<div class="c-cyan mono" style="margin:auto;text-align:center;font-size:12px;line-height:1.9;">✨ 正在执行 Skill-RAG 检索 + 7 层摄影结构精炼（主体/构图/物理光影/Wan2.2 运镜）…<br/>约 3~8 秒内出炉</div>';
     const res = await act('aigc_prompt_optimize', { prompt: raw, mode: S.aigcMode, count }, false);
     if (b1) { b1.disabled = false; b1.textContent = '✨ AI 大师优化'; }
-    if (b2) { b2.disabled = false; b2.textContent = '🧠 AI 定制4套'; }
+    if (b2) { b2.disabled = false; b2.textContent = '🧠 Skill-AI定制'; }
     if (res && res.ok && res.variants && res.variants.length) {
+      S.aiPromptHasMore = false;
       $('ai-ps-meta').textContent = res.msg || `AI 已定制 ${res.variants.length} 套大师方案`;
-      renderPromptCards(res.variants, true);
+      renderPromptCards(res.variants, true, false);
     } else {
       $('ai-ps-meta').textContent = '优化失败，可重试或使用本地模板检索';
     }
@@ -5408,15 +5593,26 @@
     const src = '/api/media?path=' + encodeURIComponent(path) + '&t=' + Date.now();
     const isVid = kind === 'video' || /\.(mp4|webm|mov|mkv)$/i.test(name || path);
     $('lb-ff-btn').classList.toggle('hidden', isVid);
+    $('lb-dir-btn').classList.remove('hidden');
     $('lb-body').innerHTML = isVid
       ? `<video src="${src}" controls autoplay loop style="max-width:100%;max-height:70vh;border-radius:10px;"></video>`
       : `<img src="${src}" style="max-width:100%;max-height:70vh;border-radius:10px;object-fit:contain;" />`;
+    $('modal-lightbox').classList.remove('hidden');
+  }
+  function openPreviewLightbox(url, title) {
+    S.lightbox = null;
+    $('lb-title').textContent = title || 'Skill 实拍样图预览';
+    $('lb-ff-btn').classList.add('hidden');
+    $('lb-dir-btn').classList.add('hidden');
+    const src = '/api/prompt_preview?url=' + encodeURIComponent(url || '');
+    $('lb-body').innerHTML = `<img src="${src}" style="max-width:100%;max-height:74vh;border-radius:10px;object-fit:contain;" />`;
     $('modal-lightbox').classList.remove('hidden');
   }
   function closeLightbox() { $('modal-lightbox').classList.add('hidden'); $('lb-body').innerHTML = ''; }
   function lightboxSetFirstFrame() { if (S.lightbox) { useGalleryFrame(S.lightbox.path); closeLightbox(); switchView('aigc'); } }
   function lightboxRevealDir() { if (S.lightbox) act('open_path', { key: 'custom', path: S.lightbox.path, reveal: true }); }
   window.openLightbox = openLightbox;
+  window.openPreviewLightbox = openPreviewLightbox;
   window.closeLightbox = closeLightbox;
   window.lightboxSetFirstFrame = lightboxSetFirstFrame;
   window.lightboxRevealDir = lightboxRevealDir;

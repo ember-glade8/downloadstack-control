@@ -139,9 +139,35 @@ class TestMediaStudio(unittest.TestCase):
             self.assertEqual(items[0]["kind"], "audio")
 
 
+class TestPromptEngine(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.pe = _import_with_stubs("prompt_engine")
+
+    def test_preview_allowlist_blocks_ssrf(self):
+        self.assertTrue(self.pe.is_allowed_preview_url("https://cms-assets.youmind.com/media/sample.jpg"))
+        self.assertFalse(self.pe.is_allowed_preview_url("http://127.0.0.1:18550/api/state"))
+        self.assertFalse(self.pe.is_allowed_preview_url("http://169.254.169.254/latest/meta-data/"))
+        self.assertFalse(self.pe.is_allowed_preview_url("https://evil.com/cms-assets.youmind.com.jpg"))
+
+    def test_search_and_remix_work_without_external_network(self):
+        res = self.pe.search_prompts(query="赛博女孩", category="all", mode="t2i", limit=10)
+        self.assertTrue(res["ok"])
+        self.assertGreater(len(res["results"]), 0)
+        rm = self.pe.remix_prompt_with_skill(
+            template_prompt="Completely recreate the uploaded person. Editorial 85mm lighting.",
+            user_idea="古风白衣剑客",
+            template_title="Editorial",
+            mode="t2i",
+        )
+        self.assertTrue(rm["ok"])
+        self.assertEqual(len(rm["variants"]), 2)
+        self.assertNotIn("uploaded person", rm["variants"][0]["prompt"].lower())
+
+
 class TestSyntaxAll(unittest.TestCase):
     def test_all_python_files_parse(self):
-        for name in ("panel.py", "magnet_tools.py", "media_studio.py", "ytdl_gui.py", "setup_wizard.py", "scripts/scan_secrets.py"):
+        for name in ("panel.py", "prompt_engine.py", "magnet_tools.py", "media_studio.py", "ytdl_gui.py", "setup_wizard.py", "scripts/scan_secrets.py"):
             src = (ROOT / name).read_text(encoding="utf-8")
             ast.parse(src, filename=name)
 

@@ -4009,12 +4009,58 @@ class ControlBackend:
             q = str(body.get("query") or "").strip()
             cat = str(body.get("category") or "all").strip().lower()
             mode = str(body.get("mode") or "t2i").strip().lower()
-            limit = int(body.get("limit") or 36)
-            res = PE.search_prompts(query=q, category=cat, mode=mode, limit=limit)
+            source = str(body.get("source") or "all").strip().lower()
+            limit = int(body.get("limit") or 24)
+            page = int(body.get("page") or 1)
+            only_img = bool(body.get("only_with_image"))
+            shuffle_seed = int(body.get("shuffle_seed") or 0)
+            res = PE.search_prompts(
+                query=q, category=cat, mode=mode, limit=limit,
+                page=page, source=source, only_with_image=only_img, shuffle_seed=shuffle_seed,
+            )
             return bool(res.get("ok")), res.get("msg") or "提示词检索完成", {
                 "results": res.get("results") or [],
                 "categories": res.get("categories") or [],
                 "total": res.get("total") or 0,
+                "page": res.get("page") or 1,
+                "has_more": bool(res.get("has_more")),
+                "elapsed_ms": res.get("elapsed_ms") or 0,
+                "skill_status": res.get("skill_status") or {},
+                "attribution": res.get("attribution") or "",
+            }
+
+        if act == "aigc_prompt_sync":
+            if PE is None:
+                return False, "prompt_engine 模块不可用", {}
+            self.log("开始同步云端 20,000+ 社区提示词 Skill 词库...", "INFO")
+            res = PE.sync_skill_prompt_library(proxy=self._sys_proxy())
+            self.log(res.get("msg") or "提示词 Skill 同步完成", "OK" if res.get("ok") else "WARN")
+            return bool(res.get("ok")), res.get("msg") or "同步完成", {
+                "skill_status": res.get("skill_status") or {},
+            }
+
+        if act == "aigc_prompt_remix":
+            if PE is None:
+                return False, "prompt_engine 模块不可用", {}
+            tpl_prompt = str(body.get("template_prompt") or "").strip()
+            tpl_title = str(body.get("template_title") or "").strip()
+            user_idea = str(body.get("user_idea") or "").strip()
+            mode = str(body.get("mode") or "t2i").strip().lower()
+            cx = self.cfg.get("codex") or {}
+            chat_fn = MS.codex_chat_request if MS is not None else None
+            res = PE.remix_prompt_with_skill(
+                template_prompt=tpl_prompt,
+                user_idea=user_idea,
+                template_title=tpl_title,
+                mode=mode,
+                codex_cfg=cx,
+                chat_fn=chat_fn,
+                proxy=self._sys_proxy(),
+            )
+            if res.get("ok"):
+                self.log("Skill Remix 模板精改完成（%d 套方案）" % len(res.get("variants") or []), "OK")
+            return bool(res.get("ok")), res.get("msg") or "精改完成", {
+                "variants": res.get("variants") or [],
             }
 
         if act == "aigc_prompt_optimize":
@@ -4036,9 +4082,10 @@ class ControlBackend:
                 count=count,
             )
             if res.get("ok"):
-                self.log("AI 提示词优化完成（%d 套方案）" % len(res.get("variants") or []), "OK")
+                self.log("Skill-RAG AI 提示词优化完成（%d 套方案）" % len(res.get("variants") or []), "OK")
             return bool(res.get("ok")), res.get("msg") or "优化完成", {
                 "variants": res.get("variants") or [],
+                "rag_count": res.get("rag_count") or 0,
             }
 
         if act == "codex_save_cfg":
@@ -4779,6 +4826,53 @@ def run_3d_server(open_browser=True):
                                 proc.kill()
                             except Exception:
                                 pass
+                return
+
+            if req_path == "/api/prompt_preview":
+                import threading
+                from collections import OrderedDict
+                from urllib.parse import parse_qs, urlsplit
+                qs = parse_qs(urlsplit(self.path).query)
+                raw_u = (qs.get("url") or [""])[0].strip()
+                if PE is None or not PE.is_allowed_preview_url(raw_u):
+                    self.send_error(403, "Preview URL not allowed")
+                    return
+                if not hasattr(backend, "_prompt_preview_cache"):
+                    backend._prompt_preview_cache = OrderedDict()
+                    backend._prompt_preview_lock = threading.Lock()
+                hit = None
+                with backend._prompt_preview_lock:
+                    if raw_u in backend._prompt_preview_cache:
+                        backend._prompt_preview_cache.move_to_end(raw_u)
+                        hit = backend._prompt_preview_cache[raw_u]
+                if hit is None:
+                    ok_img, img_bytes, _ = PE._http_get_bytes(raw_u, proxy=backend._sys_proxy(), timeout=14.0)
+                    if not ok_img or not img_bytes or len(img_bytes) > 12 * 1024 * 1024:
+                        self.send_error(502, "Preview image unavailable")
+                        return
+                    if img_bytes[:4] == b"\x89PNG":
+                        ctype = "image/png"
+                    elif img_bytes[:4] == b"RIFF" and img_bytes[8:12] == b"WEBP":
+                        ctype = "image/webp"
+                    elif img_bytes[:4] == b"GIF8":
+                        ctype = "image/gif"
+                    else:
+                        ctype = "image/jpeg"
+                    hit = (ctype, img_bytes)
+                    with backend._prompt_preview_lock:
+                        backend._prompt_preview_cache[raw_u] = hit
+                        while len(backend._prompt_preview_cache) > 160:
+                            backend._prompt_preview_cache.popitem(last=False)
+                ctype, img_bytes = hit
+                self.send_response(200)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Cache-Control", "public, max-age=86400")
+                self.send_header("Content-Length", str(len(img_bytes)))
+                self.end_headers()
+                try:
+                    self.wfile.write(img_bytes)
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                    pass
                 return
 
             if req_path == "/api/media":

@@ -1,14 +1,42 @@
 # -*- coding: utf-8 -*-
-"""DownloadStack AI 画室专业提示词引擎：
-1) 72+ 电影/摄影/概念艺术/商业/Wan2.2运镜大师级精品模板库（专为 Z-Image Turbo / Lumina2 与 Wan2.2 I2V 调优）
-2) 中英双语语义同义词提示词搜索引擎 + 关键词动态多风格模板合成引擎（输入任何词都能秒出大量高质量定制模板）
-3) 接入本机 Codex 中转智能体的「AI 提示词大师优化器」：把任意口语输入一键升格为 3 套不同风格的大师级提示词
-   （电影写实版 / 概念美学版 / Wan2.2 电影运镜视频版），附中文拆解、精准负向词与推荐画幅。
+"""DownloadStack AI 画室 Skill 驱动超级提示词引擎 (v2.5 Skill Edition)：
+1) 自动发现并挂载本机已安装的提示词 Skill（兼容 ~/.workbuddy / ~/.agents / ~/.claude / ~/.codex / ~/.gemini
+   及面板自带缓存目录中的 ai-image-prompts-skill 15,847+ 唯一 / 23,000+ 分类社区实战提示词库 + 实拍样图）；
+   同时支持一键从公开 GitHub 仓库 (YouMind-OpenLab/ai-image-prompts-skill) 同步/更新完整词库，
+   并支持用户向 ControlPanel/skills/ 放入自定义 .json / .md 提示词包扩展。
+2) 72+ 原生电影/摄影/概念艺术/商业/Wan2.2运镜大师级精选模板库（专为 Z-Image Turbo 与 Wan2.2 调优）。
+3) 毫秒级内存索引 + 220+ 中英双语视觉语义扩展搜索引擎：中文输入即可精准命中 20,000+ 英文/中文实战模板，
+   支持按来源（全部 / Skill 2万+库 / 大师库 / 自定义）、11 大社区 Skill 分类、样图优先、随机灵感与分页加载。
+4) Skill 增强版 AI 大师优化器 & 模板精改 (Skill Remix)：
+   自动从 20,000+ 提示词 Skill 中 RAG 检索高分参考骨架 + 融合 7 层专业摄影结构与 Remix 替换纪律，
+   把粗略中文想法或任意选中的实拍模板一键精改为精准的 Z-Image Turbo / Wan 2.2 大片提示词。
 """
 
+import hashlib
 import json
+import os
+import random
 import re
-from typing import List, Dict, Any
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlparse
+
+try:
+    import requests
+except Exception:
+    requests = None
+
+APP_DIR = Path(__file__).resolve().parent
+SKILL_REPO_RAW_BASE = "https://raw.githubusercontent.com/YouMind-OpenLab/ai-image-prompts-skill/main/references"
+SKILL_ATTRIBUTION = "提示词由 YouMind.com 通过公开社区搜集 ❤️"
+ALLOWED_PREVIEW_HOSTS = (
+    "cms-assets.youmind.com",
+    "youmind.com",
+    "raw.githubusercontent.com",
+)
 
 DEFAULT_NEG_PHOTO = (
     "blurry, out of focus, lowres, oversaturated, plastic skin, waxy face, airbrushed, "
@@ -24,68 +52,163 @@ DEFAULT_NEG_VIDEO = (
 )
 
 PROMPT_CATEGORIES = [
-    {"id": "all",       "name": "全部精选", "icon": "✨"},
-    {"id": "portrait",  "name": "电影人像", "icon": "🎬"},
-    {"id": "video",     "name": "Wan2.2运镜", "icon": "🎥"},
-    {"id": "cyber",     "name": "赛博科幻", "icon": "🌆"},
-    {"id": "guofeng",   "name": "古风仙侠", "icon": "🏯"},
-    {"id": "anime",     "name": "唯美二次元", "icon": "🌸"},
-    {"id": "landscape", "name": "史诗风光", "icon": "🏔️"},
-    {"id": "product",   "name": "商业广告", "icon": "💎"},
-    {"id": "fantasy",   "name": "魔幻史诗", "icon": "🐉"},
-    {"id": "arch",      "name": "建筑空间", "icon": "🏛️"},
-    {"id": "food",      "name": "美食静物", "icon": "🍜"},
-    {"id": "creature",  "name": "萌宠神兽", "icon": "🦊"},
-    {"id": "abstract",  "name": "3D海报", "icon": "🌀"},
+    {"id": "all",       "name": "全部精选",   "icon": "✨", "group": "builtin"},
+    {"id": "portrait",  "name": "电影人像",   "icon": "🎬", "group": "builtin"},
+    {"id": "video",     "name": "Wan2.2运镜", "icon": "🎥", "group": "builtin"},
+    {"id": "cyber",     "name": "赛博科幻",   "icon": "🌆", "group": "builtin"},
+    {"id": "guofeng",   "name": "古风仙侠",   "icon": "🏯", "group": "builtin"},
+    {"id": "anime",     "name": "唯美二次元", "icon": "🌸", "group": "builtin"},
+    {"id": "landscape", "name": "史诗风光",   "icon": "🏔️", "group": "builtin"},
+    {"id": "product",   "name": "商业广告",   "icon": "💎", "group": "builtin"},
+    {"id": "fantasy",   "name": "魔幻史诗",   "icon": "🐉", "group": "builtin"},
+    {"id": "arch",      "name": "建筑空间",   "icon": "🏛️", "group": "builtin"},
+    {"id": "food",      "name": "美食静物",   "icon": "🍜", "group": "builtin"},
+    {"id": "creature",  "name": "萌宠神兽",   "icon": "🦊", "group": "builtin"},
+    {"id": "abstract",  "name": "3D海报",    "icon": "🌀", "group": "builtin"},
 ]
 
-# 中英文视觉概念双向语义映射（提升中文搜索命中率与动态模板精准度）
-CN_EN_CONCEPTS = {
-    "女孩": "young woman", "少女": "young East Asian girl", "美女": "elegant young woman",
-    "男人": "charismatic man", "少年": "young man", "剑客": "wandering swordsman",
-    "侠客": "martial arts hero", "仙女": "celestial fairy maiden", "机甲": "futuristic mecha",
-    "机娘": "cybernetic mecha girl", "机器人": "sleek humanoid robot", "宇航员": "astronaut",
-    "海边": "seaside coastline", "大海": "vast midnight ocean", "海滩": "sandy ocean beach",
-    "夕阳": "golden hour sunset", "晚霞": "crimson and amber twilight sky", "日出": "misty golden sunrise",
-    "雨夜": "rain-soaked midnight city street", "下雨": "falling rain", "暴雨": "heavy downpour storm",
-    "雪": "drifting winter snow", "雪山": "towering snow-capped alpine peaks", "星空": "milky way starry night sky",
-    "月亮": "luminous full moon", "极光": "shimmering emerald aurora borealis",
-    "赛博": "cyberpunk futuristic", "赛博朋克": "cyberpunk neon metropolis", "霓虹": "glowing neon reflections",
-    "科幻": "cinematic sci-fi", "宇宙": "deep space nebula", "飞船": "colossal starship", "黑洞": "gargantuan glowing black hole",
-    "古风": "traditional Chinese ink-wash elegance", "汉服": "flowing embroidered silk hanfu",
-    "仙侠": "ethereal Chinese xianxia fantasy", "江湖": "misty wuxia bamboo riverscape",
-    "江南": "misty Jiangnan water town", "长安": "imperial Tang dynasty Chang'an lantern night",
-    "樱花": "drifting cherry blossom petals", "森林": "sunlit ancient enchanted forest",
-    "花海": "endless blooming flower meadow", "沙漠": "sweeping golden desert dunes",
-    "跑车": "sleek aerodynamic hypercar", "汽车": "luxury sports car", "摩托": "futuristic cyber motorcycle",
-    "猫": "fluffy ragdoll cat", "狗": "expressive golden retriever", "狐狸": "mystical nine-tailed white fox",
-    "龙": "colossal eastern celestial dragon", "鲸鱼": "giant bioluminescent sky whale",
-    "咖啡": "artisan espresso latte", "拉面": "steaming artisanal Japanese ramen", "美食": "gourmet culinary dish",
-    "香水": "luxury faceted crystal perfume bottle", "手表": "Swiss mechanical luxury wristwatch",
-    "耳机": "flagship brushed-titanium studio headphones", "建筑": "minimalist architectural masterpiece",
-    "客厅": "serene wabi-sabi minimalist living room", "图书馆": "grand sunlit cathedral library",
-    "动漫": "high-budget Japanese anime film still", "二次元": "exquisite anime concept illustration",
-    "新海诚": "Makoto Shinkai luminous sky anime aesthetic", "吉卜力": "hand-painted Studio Ghibli pastoral warmth",
-    "写实": "photorealistic 35mm cinema still", "胶片": "Kodak Portra 400 analog film photography",
-    "暗黑": "moody dark chiaroscuro cinematography", "治愈": "warm peaceful sunlit healing atmosphere",
-    "特写": "intimate shallow-depth close-up shot", "航拍": "sweeping aerial drone cinematography",
-    "视频": "cinematic smooth camera movement video", "慢动作": "ultra-smooth high-speed slow motion",
-    "撑伞": "holding a translucent rain umbrella", "回眸": "gently turning back with an expressive gaze",
-    "奔跑": "running dynamically forward", "跳舞": "gracefully dancing in flowing fabric",
-    "战斗": "epic dynamic combat action", "魔法": "swirling luminous arcane magic",
-    "火焰": "glowing embers and rising firelight", "水下": "bioluminescent deep underwater world",
+SKILL_CATEGORY_META: Dict[str, Tuple[str, str, str]] = {
+    "profile-avatar":         ("头像写真",   "🪪", "portrait"),
+    "social-media-post":      ("社媒爆款",   "📱", "portrait"),
+    "product-marketing":      ("商业营销",   "💎", "product"),
+    "ecommerce-main-image":   ("电商主图",   "🛍️", "product"),
+    "poster-flyer":           ("海报视觉",   "🎨", "abstract"),
+    "comic-storyboard":       ("漫画分镜",   "📖", "anime"),
+    "game-asset":             ("游戏原画",   "🎮", "fantasy"),
+    "infographic-edu-visual": ("信息图表",   "📊", "abstract"),
+    "youtube-thumbnail":      ("视频封面",   "📺", "video"),
+    "app-web-design":         ("UI网页设计", "🖥️", "arch"),
+    "others":                 ("创意精选",   "🧩", "abstract"),
+}
+
+# 220+ 中英文视觉概念双向语义映射（让中文输入精准命中 20,000+ 英文/中文实战 Skill 提示词）
+CN_EN_CONCEPTS: Dict[str, str] = {
+    # 人物 / 人像 / 身份
+    "女孩": "young woman girl portrait", "少女": "young East Asian girl", "美女": "elegant young woman beauty",
+    "女神": "goddess ethereal woman", "模特": "fashion editorial model", "男人": "charismatic man male portrait",
+    "帅哥": "handsome young man", "少年": "young boy youth", "老人": "weathered elderly portrait",
+    "小孩": "cute child kid", "情侣": "romantic couple", "自拍": "mirror selfie candid photo",
+    "头像": "profile avatar headshot portrait", "证件照": "professional headshot studio portrait",
+    "写真": "editorial fashion portrait photoshoot", "街拍": "candid street style photography",
+    "半身": "upper body medium shot portrait", "全身": "full body standing shot",
+    "侧颜": "side profile portrait", "背影": "back view silhouette", "特写": "intimate close-up macro portrait",
+    "剑客": "wandering swordsman martial artist", "侠客": "martial arts hero wuxia",
+    "仙女": "celestial fairy maiden", "巫师": "arcane wizard mage", "骑士": "armored medieval knight",
+    "刺客": "hooded shadow assassin", "机甲": "futuristic mecha robot exoskeleton",
+    "机娘": "cybernetic mecha girl android", "机器人": "sleek humanoid robot android",
+    "宇航员": "astronaut spacesuit", "女仆": "anime maid outfit", "JK": "Japanese school uniform sailor",
+    "校服": "school uniform student", "婚纱": "white wedding dress bridal", "西装": "tailored luxury suit",
+    "礼服": "haute couture evening gown", "旗袍": "traditional silk qipao cheongsam",
+    "汉服": "flowing embroidered silk hanfu", "和服": "traditional Japanese kimono",
+    # 商业 / 设计 / 社媒 / Skill 高频场景
+    "小红书": "social media lifestyle aesthetic post", "封面": "thumbnail cover art hero banner",
+    "视频封面": "youtube thumbnail eye-catching cover", "海报": "graphic design poster typography flyer",
+    "电影海报": "cinematic movie poster key art", "广告": "luxury commercial advertising campaign",
+    "电商": "ecommerce hero product photography clean studio", "主图": "ecommerce product showcase studio",
+    "包装": "packaging design mockup box bottle", "品牌": "brand identity visual showcase",
+    "信息图": "infographic educational visual diagram", "科普": "educational diagram cutaway illustration",
+    "流程图": "clean infographic flowchart diagram", "漫画": "comic panel manga storyboard",
+    "四格": "four-panel comic strip storyboard", "分镜": "cinematic storyboard sequential panels",
+    "绘本": "children storybook watercolor illustration", "插画": "editorial digital illustration artwork",
+    "图标": "3D app icon isometric ui element", "网页": "modern web landing page ui design",
+    "界面": "mobile app ui ux interface design", "游戏": "AAA game asset concept art character",
+    "角色": "character design turnaround sheet game", "武器": "fantasy weapon prop concept art",
+    "道具": "isometric game item prop asset", "地图": "fantasy map isometric world",
+    "盲盒": "blind box cute vinyl toy figurine chibi", "手办": "collectible anime figurine diorama",
+    "潮玩": "designer vinyl art toy popmart style", "贴纸": "die-cut cute sticker pack illustration",
+    "表情包": "expressive chibi emoji sticker sheet", "徽章": "metallic enamel pin badge emblem",
+    "微缩": "miniature tilt-shift isometric diorama", "粘土": "cute claymation stop-motion 3D clay",
+    "毛毡": "needle felted wool plush texture", "折纸": "intricate layered paper craft origami",
+    "乐高": "brick-built toy miniature scene", "像素": "retro pixel art 16-bit sprite",
+    "皮克斯": "3D stylized Pixar Disney animated character", "泡泡玛特": "cute 3D chibi vinyl blind box figurine",
+    # 产品 / 商业品类
+    "香水": "luxury crystal perfume bottle fragrance", "化妆品": "skincare serum cosmetic bottle beauty",
+    "口红": "luxury lipstick cosmetic macro", "护肤品": "minimalist skincare dropper bottle",
+    "手表": "Swiss mechanical luxury wristwatch chronograph", "珠宝": "diamond gold jewelry macro luxury",
+    "戒指": "luxury gemstone ring macro", "项链": "fine jewelry pendant necklace",
+    "耳机": "flagship wireless studio headphones audio", "手机": "sleek flagship smartphone product mockup",
+    "相机": "vintage rangefinder camera product", "球鞋": "sneaker footwear commercial product shot",
+    "包包": "luxury leather handbag fashion product", "眼镜": "designer sunglasses eyewear studio",
+    "饮料": "refreshing sparkling beverage can splash", "奶茶": "iced boba milk tea beverage photography",
+    "咖啡": "artisan espresso latte coffee cup", "酒": "craft whiskey wine glass bottle moody",
+    "甜品": "artisan pastry cake dessert food photography", "蛋糕": "gourmet layered cake bakery photography",
+    "拉面": "steaming artisanal Japanese ramen bowl", "火锅": "steaming spicy hotpot culinary feast",
+    "寿司": "omakase sushi culinary fine dining", "美食": "gourmet culinary editorial food photography",
+    "茶": "traditional tea ceremony porcelain teapot", "水果": "fresh dewy fruit splash macro",
+    # 风景 / 自然 / 场景
+    "海边": "seaside coastline ocean shore", "大海": "vast ocean waves sea", "海滩": "sandy tropical ocean beach",
+    "夕阳": "golden hour sunset amber light", "晚霞": "crimson twilight sunset clouds",
+    "日出": "misty golden sunrise dawn", "雨夜": "rain-soaked midnight neon city street",
+    "下雨": "falling rain wet reflections", "暴雨": "heavy downpour storm rain",
+    "雪": "drifting winter snow snowflakes", "雪景": "snow-covered winter wonderland",
+    "雪山": "towering snow-capped alpine mountain peaks", "星空": "milky way starry night sky",
+    "月亮": "luminous full moon moonlight", "极光": "shimmering emerald aurora borealis",
+    "云海": "endless billowing sunlit sea of clouds", "瀑布": "cascading waterfall misty forest",
+    "森林": "sunlit ancient enchanted forest woods", "樱花": "drifting pink cherry blossom sakura petals",
+    "花海": "endless blooming flower meadow garden", "向日葵": "golden sunflower field sunlight",
+    "玫瑰": "velvet crimson rose botanical macro", "沙漠": "sweeping golden desert sand dunes",
+    "火山": "glowing volcanic lava dramatic mountain", "深海": "bioluminescent deep underwater ocean abyss",
+    "海底": "underwater coral reef caustic light", "水下": "underwater submerged sunlight rays",
+    "富士山": "Mount Fuji snow peak Japanese landscape", "冰岛": "Iceland black sand beach glacier",
+    "京都": "traditional Kyoto wooden street autumn", "东京": "Tokyo neon street Shibuya night",
+    "香港": "Hong Kong neon night cinematic retro", "江南": "misty Jiangnan ancient water town canal",
+    "长安": "imperial Tang dynasty Chang'an lantern night", "敦煌": "Dunhuang murals flying apsara mineral art",
+    # 风格 / 流派 / 美学
+    "赛博": "cyberpunk futuristic neon sci-fi", "赛博朋克": "cyberpunk neon metropolis dystopian",
+    "霓虹": "glowing neon reflections synthwave", "科幻": "cinematic hard sci-fi futuristic",
+    "宇宙": "deep space cosmos nebula galaxy", "飞船": "colossal sci-fi starship spaceship",
+    "黑洞": "gargantuan glowing black hole accretion disk", "蒸汽朋克": "Victorian brass steampunk airship gears",
+    "废土": "post-apocalyptic wasteland dusty ruined", "哥特": "dark gothic cathedral dramatic shadows",
+    "克苏鲁": "lovecraftian cosmic horror eldritch fog", "超现实": "surreal dreamlike Dali conceptual art",
+    "古风": "traditional Chinese aesthetic ink-wash elegance", "仙侠": "ethereal Chinese xianxia immortal fantasy",
+    "武侠": "classic Chinese wuxia martial arts cinema", "江湖": "misty wuxia bamboo riverscape",
+    "水墨": "Chinese ink-wash shanshui sumi-e painting", "国潮": "modern neo-Chinese guochao graphic art",
+    "工笔": "fine traditional gongbi brushwork painting", "青绿": "blue-green mineral landscape shanshui",
+    "动漫": "Japanese anime illustration cel shaded", "二次元": "exquisite anime character art illustration",
+    "新海诚": "Makoto Shinkai luminous sky clouds anime", "吉卜力": "hand-painted Studio Ghibli pastoral watercolor",
+    "宫崎骏": "Studio Ghibli whimsical painted anime", "厚涂": "rich painterly digital concept art impasto",
+    "水彩": "delicate translucent watercolor wash illustration", "油画": "classical oil painting brushwork impasto",
+    "素描": "graphite pencil sketch charcoal drawing", "版画": "woodblock ukiyo-e printmaking art",
+    "波普": "vibrant pop art retro halftone", "扁平": "minimalist flat vector editorial illustration",
+    "极简": "ultra-minimalist clean negative space", "侘寂": "Japanese wabi-sabi organic minimal interior",
+    "复古": "vintage retro nostalgic 1980s aesthetic", "港风": "1990s Hong Kong Wong Kar-wai cinema film",
+    "日系": "airy Japanese film photography pastel light", "法式": "romantic French editorial chic aesthetic",
+    "电影": "cinematic 35mm movie film still anamorphic", "写实": "photorealistic ultra-realistic photography",
+    "胶片": "Kodak Portra 400 analog 35mm film grain", "拍立得": "instant Polaroid flash candid photo",
+    "黑白": "high-contrast black and white monochrome film", "暗黑": "moody dark chiaroscuro low-key lighting",
+    "高级": "high-fashion luxury editorial refined aesthetic", "治愈": "warm peaceful sunlit cozy healing mood",
+    "梦幻": "ethereal dreamy pastel glow bokeh", "唯美": "poetic luminous aesthetic beauty",
+    "炫酷": "dynamic dramatic high-contrast sleek visual", "可爱": "adorable kawaii cute pastel charming",
+    "3D": "Cinema 4D Octane 3D render glossy materials", "流体": "iridescent liquid chrome abstract 3D fluid",
+    "玻璃": "translucent frosted crystal glass refraction", "金属": "brushed metallic chrome specular reflection",
+    # 建筑 / 交通 / 动物 / 动作运镜
+    "建筑": "modernist architectural photography exterior", "室内": "luxury architectural interior design",
+    "客厅": "minimalist sunlit living room interior", "卧室": "cozy sunlit aesthetic bedroom interior",
+    "书店": "warm wooden antique bookstore interior", "图书馆": "grand sunlit cathedral library",
+    "咖啡馆": "cozy aesthetic cafe interior morning light", "别墅": "cantilevered glass cliffside villa",
+    "古亭": "ancient wooden pavilion curved eaves", "竹林": "misty emerald bamboo forest",
+    "跑车": "sleek aerodynamic hypercar supercar", "汽车": "luxury automotive sports car photography",
+    "摩托": "futuristic cyber motorcycle rider", "火车": "scenic train railway coastal journey",
+    "猫": "fluffy cat feline cute portrait", "布偶猫": "fluffy blue-eyed ragdoll cat",
+    "狗": "expressive golden retriever puppy dog", "柴犬": "cute smiling shiba inu dog",
+    "狐狸": "mystical nine-tailed white fox", "狼": "majestic silver wolf moonlight",
+    "龙": "colossal eastern celestial dragon scales", "凤凰": "blazing mythical phoenix feathers",
+    "鲸鱼": "giant bioluminescent sky ocean whale", "蝴蝶": "iridescent glowing butterflies macro",
+    "猫头鹰": "detailed snowy owl wildlife photography", "水母": "translucent glowing bioluminescent jellyfish",
+    "航拍": "sweeping aerial drone overhead cinematography", "微距": "extreme macro lens shallow depth",
+    "广角": "dramatic wide-angle 24mm lens perspective", "景深": "creamy f/1.4 shallow depth of field bokeh",
+    "逆光": "luminous golden rim backlighting silhouette", "丁达尔": "dramatic volumetric god rays sunbeams",
+    "伦勃朗": "classic Rembrandt directional chiaroscuro lighting", "棚拍": "clean professional studio lighting setup",
+    "视频": "cinematic smooth camera movement video", "运镜": "smooth steady dolly tracking camera shot",
+    "慢动作": "ultra-smooth high-speed slow motion 24fps", "撑伞": "holding a translucent rain umbrella",
+    "回眸": "gently turning back looking over shoulder", "奔跑": "running dynamically forward motion",
+    "跳舞": "gracefully dancing flowing silk fabric", "战斗": "epic dynamic combat action sparks",
+    "魔法": "swirling luminous arcane magic particles", "火焰": "glowing embers rising firelight flames",
+    "雷电": "crackling bolts of celestial lightning storm", "烟花": "vibrant fireworks illuminating night sky",
     "一剑开天门": "a transcendent Chinese xianxia swordsman cleaving the storm-filled heavens open with a single blazing celestial sword arc, parting towering clouds to reveal a colossal golden heavenly gate",
     "天门": "colossal radiant celestial heavenly gate amidst parting thunderclouds",
     "剑": "gleaming ancient sword radiating ethereal energy",
-    "仙": "ethereal Chinese immortal xianxia realm",
-    "神": "mythic divine celestial majesty",
-    "武侠": "classic Chinese wuxia martial arts cinema",
-    "云海": "endless billowing sunlit sea of clouds",
-    "雷电": "crackling bolts of celestial lightning",
-    "雪夜": "quiet snow-covered midnight atmosphere",
-    "古亭": "ancient wooden pavilion with curved eaves",
-    "竹林": "misty emerald bamboo forest",
-    "水墨": "flowing traditional ink-wash cloud atmosphere",
+    "仙": "ethereal Chinese immortal xianxia realm", "神": "mythic divine celestial majesty",
     "海": "vast shimmering ocean", "雨": "falling rain", "花": "blooming delicate flowers",
     "月": "luminous glowing moon", "星": "glittering starry cosmos", "城": "towering atmospheric city",
 }
@@ -96,7 +219,7 @@ SAFE_VID_SIZES = ("640x384", "768x432")
 
 
 def _safe_spec(mode: str, size: str) -> tuple:
-    """强制把任何模板或 AI 返回的分辨率/步数/帧数收敛到 8G 显存防爆区间。"""
+    """将任何模板或 AI 返回的分辨率/步数/帧数收敛到 8G 显存极速流畅区间。"""
     m = (mode or "t2i").strip().lower()
     if m not in ("t2i", "t2v", "i2v"):
         m = "t2i"
@@ -105,7 +228,6 @@ def _safe_spec(mode: str, size: str) -> tuple:
         if s not in SAFE_VID_SIZES:
             s = "640x384"
         return m, s, 4, 21
-    # T2I: map legacy tall 576x1024 -> 512x896 (saves ~22% VRAM!) and 1024x576 -> 896x512 for fast safe headroom
     if s == "576x1024":
         s = "512x896"
     elif s == "1024x576":
@@ -115,9 +237,29 @@ def _safe_spec(mode: str, size: str) -> tuple:
     return "t2i", s, 8, 21
 
 
+def _guess_size_from_prompt(text: str, slug: str = "", mode: str = "t2i") -> str:
+    if mode in ("t2v", "i2v"):
+        return "640x384"
+    low = (text or "").lower()
+    if any(k in low for k in ("9:16", "vertical", "portrait aspect", "3:4", "4:5", "mobile story", "phone wallpaper")):
+        return "512x896"
+    if any(k in low for k in ("16:9", "horizontal", "widescreen", "panoramic", "banner", "thumbnail", "landscape")):
+        return "896x512"
+    if any(k in low for k in ("1:1", "square", "avatar", "icon", "album cover")):
+        return "768x768"
+    if slug in ("youtube-thumbnail", "app-web-design"):
+        return "896x512"
+    if slug in ("poster-flyer", "social-media-post"):
+        return "512x896"
+    if slug in ("profile-avatar", "ecommerce-main-image", "game-asset"):
+        return "768x768"
+    return "896x512"
+
+
 def _tpl(cid, title, tags, summary, prompt, neg=None, size="896x512", mode="t2i"):
     m, safe_s, safe_steps, safe_len = _safe_spec(mode, size)
     return {
+        "id": f"builtin:{cid}:{hashlib.md5(title.encode('utf-8')).hexdigest()[:8]}",
         "cat": cid,
         "title": title,
         "tags": tags,
@@ -127,13 +269,17 @@ def _tpl(cid, title, tags, summary, prompt, neg=None, size="896x512", mode="t2i"
         "size": safe_s,
         "steps": safe_steps,
         "length": safe_len,
-        "vram_tag": "8G极稳 · %d帧" % safe_len if m in ("t2v", "i2v") else "8G极稳",
+        "vram_tag": "8G极速 · %d帧" % safe_len if m in ("t2v", "i2v") else "8G极速",
         "mode": m,
         "source": "大师精选库",
+        "source_type": "builtin",
+        "preview_url": "",
+        "need_ref": False,
     }
 
+
 # ==================================================================
-# 72+ 电影/商业/艺术/运镜大师级精选模板库（专为 Z-Image Turbo & Wan2.2 精调）
+# 大师级原生精选模板库（专为 Z-Image Turbo & Wan2.2 深度调优）
 # ==================================================================
 MASTER_PROMPTS: List[Dict[str, Any]] = [
     # ---------- 1. 电影写实人像 (portrait) ----------
@@ -378,17 +524,431 @@ MASTER_PROMPTS: List[Dict[str, Any]] = [
 ]
 
 
+# ==================================================================
+# 本机 / 云端提示词 Skill 自动发现与毫秒级索引引擎
+# ==================================================================
+_SKILL_LOCK = threading.Lock()
+_SKILL_CACHE: Dict[str, Any] = {
+    "loaded_dir": "",
+    "loaded_mtime": 0.0,
+    "manifest": {},
+    "categories": {},       # slug -> list of normalized compact dicts
+    "all_unique": [],       # deduplicated flat list across all skill categories
+    "all_loaded": False,
+    "custom_items": [],
+    "custom_mtime": 0.0,
+    "rule_skills": [],      # detected SKILL.md names
+}
+
+
+def _candidate_skill_ref_dirs() -> List[Tuple[str, Path]]:
+    """跨平台自动探测本机与面板缓存中的 ai-image-prompts-skill/references（零硬编码个人路径）。"""
+    cands: List[Tuple[str, Path]] = []
+    env_dir = (os.environ.get("DOWNLOADSTACK_PROMPT_SKILLS_DIR") or "").strip()
+    if env_dir:
+        p = Path(env_dir)
+        cands.append(("环境变量 Skill 目录", p / "references" if (p / "references").is_dir() else p))
+
+    home = Path.home()
+    for dot, label in (
+        (".workbuddy", "本机 ~/.workbuddy Skill"),
+        (".agents",    "本机 ~/.agents Skill"),
+        (".claude",    "本机 ~/.claude Skill"),
+        (".codex",     "本机 ~/.codex Skill"),
+        (".gemini",    "本机 ~/.gemini Skill"),
+    ):
+        cands.append((label, home / dot / "skills" / "ai-image-prompts-skill" / "references"))
+
+    cands.append(("面板本地 Skill 缓存", APP_DIR / "cache" / "prompt_skills" / "ai-image-prompts-skill" / "references"))
+    cands.append(("面板 skills 目录", APP_DIR / "skills" / "ai-image-prompts-skill" / "references"))
+    return cands
+
+
+def _discover_skill_refs() -> Tuple[str, Optional[Path]]:
+    for label, p in _candidate_skill_ref_dirs():
+        try:
+            if (p / "manifest.json").is_file():
+                return label, p
+        except Exception:
+            pass
+    return "", None
+
+
+def _detect_rule_skills() -> List[str]:
+    """探测本机可用的提示词方法论 Skill（如 ai-image-prompts-skill、imagegen、用户自定义 .md）。"""
+    found: List[str] = []
+    home = Path.home()
+    checks = [
+        ("ai-image-prompts-skill (2万+实战词库 & Remix)", home / ".workbuddy" / "skills" / "ai-image-prompts-skill" / "SKILL.md"),
+        ("ai-image-prompts-skill (2万+实战词库 & Remix)", home / ".agents" / "skills" / "ai-image-prompts-skill" / "SKILL.md"),
+        ("ai-image-prompts-skill (2万+实战词库 & Remix)", APP_DIR / "cache" / "prompt_skills" / "ai-image-prompts-skill" / "references" / "manifest.json"),
+        ("imagegen (7层结构化摄影提示词规范)", home / ".codex" / "skills" / ".system" / "imagegen" / "SKILL.md"),
+    ]
+    for name, path in checks:
+        try:
+            if path.is_file() and name not in found:
+                found.append(name)
+        except Exception:
+            pass
+    custom_dir = APP_DIR / "skills"
+    if custom_dir.is_dir():
+        for fp in sorted(custom_dir.glob("*.md"))[:8]:
+            lbl = f"自定义 Skill: {fp.stem}"
+            if lbl not in found:
+                found.append(lbl)
+    return found
+
+
+def is_allowed_preview_url(url: str) -> bool:
+    """严格白名单校验样图代理 URL，防止任何 SSRF 风险。"""
+    u = (url or "").strip()
+    if not u.startswith(("https://", "http://")):
+        return False
+    try:
+        parsed = urlparse(u)
+        host = (parsed.hostname or "").lower()
+        if not host:
+            return False
+        for allowed in ALLOWED_PREVIEW_HOSTS:
+            if host == allowed or host.endswith("." + allowed):
+                return True
+    except Exception:
+        return False
+    return False
+
+
+def _ensure_manifest_loaded() -> Tuple[str, Optional[Path], Dict[str, Any]]:
+    label, ref_dir = _discover_skill_refs()
+    if ref_dir is None:
+        return "", None, {}
+    mf = ref_dir / "manifest.json"
+    try:
+        mtime = mf.stat().st_mtime
+    except Exception:
+        mtime = 0.0
+    with _SKILL_LOCK:
+        if _SKILL_CACHE["loaded_dir"] != str(ref_dir) or _SKILL_CACHE["loaded_mtime"] != mtime:
+            try:
+                manifest = json.loads(mf.read_text(encoding="utf-8"))
+            except Exception:
+                manifest = {}
+            _SKILL_CACHE["loaded_dir"] = str(ref_dir)
+            _SKILL_CACHE["loaded_mtime"] = mtime
+            _SKILL_CACHE["manifest"] = manifest
+            _SKILL_CACHE["categories"] = {}
+            _SKILL_CACHE["all_unique"] = []
+            _SKILL_CACHE["all_loaded"] = False
+        return label, ref_dir, _SKILL_CACHE["manifest"]
+
+
+def _normalize_skill_record(raw: Dict[str, Any], slug: str) -> Optional[Dict[str, Any]]:
+    content = str(raw.get("content") or "").strip()
+    if len(content) < 20:
+        return None
+    title = str(raw.get("title") or "").strip()
+    desc = str(raw.get("description") or "").strip()
+    if not title:
+        title = content.splitlines()[0][:64].strip("#* ") or f"Skill 模板 #{raw.get('id', '')}"
+    media = raw.get("sourceMedia") or []
+    preview_url = ""
+    if isinstance(media, list):
+        for m in media:
+            if isinstance(m, str) and is_allowed_preview_url(m):
+                preview_url = m
+                break
+    need_ref = bool(raw.get("needReferenceImages"))
+    cn_name, _, mapped_cat = SKILL_CATEGORY_META.get(slug, (slug, "🧩", "abstract"))
+    pid = str(raw.get("id") or hashlib.md5(content[:120].encode("utf-8", errors="ignore")).hexdigest()[:10])
+    # Compact search blob (kept lowercase for fast substring scan)
+    blob = (title + "\n" + desc + "\n" + content[:700] + "\n" + slug + " " + cn_name).lower()
+    return {
+        "uid": pid,
+        "slug": slug,
+        "mapped_cat": mapped_cat,
+        "cn_cat": cn_name,
+        "title": title,
+        "desc": desc,
+        "content": content,
+        "preview_url": preview_url,
+        "need_ref": need_ref,
+        "blob": blob,
+    }
+
+
+def _load_skill_category(ref_dir: Path, slug: str, filename: str) -> List[Dict[str, Any]]:
+    with _SKILL_LOCK:
+        cached = _SKILL_CACHE["categories"].get(slug)
+        if cached is not None:
+            return cached
+    fp = ref_dir / filename
+    items: List[Dict[str, Any]] = []
+    if fp.is_file():
+        try:
+            raw_list = json.loads(fp.read_text(encoding="utf-8"))
+            if isinstance(raw_list, list):
+                for r in raw_list:
+                    if isinstance(r, dict):
+                        norm = _normalize_skill_record(r, slug)
+                        if norm is not None:
+                            items.append(norm)
+        except Exception:
+            items = []
+    with _SKILL_LOCK:
+        _SKILL_CACHE["categories"][slug] = items
+    return items
+
+
+def _load_all_skill_prompts() -> List[Dict[str, Any]]:
+    _, ref_dir, manifest = _ensure_manifest_loaded()
+    if ref_dir is None or not manifest:
+        return []
+    with _SKILL_LOCK:
+        if _SKILL_CACHE["all_loaded"] and _SKILL_CACHE["all_unique"]:
+            return _SKILL_CACHE["all_unique"]
+
+    cats = manifest.get("categories") or []
+    seen = set()
+    flat: List[Dict[str, Any]] = []
+    for c in cats:
+        slug = str(c.get("slug") or "").strip()
+        fn = str(c.get("file") or "").strip()
+        if not slug or not fn:
+            continue
+        rows = _load_skill_category(ref_dir, slug, fn)
+        for r in rows:
+            uid = r["uid"]
+            if uid in seen:
+                continue
+            seen.add(uid)
+            flat.append(r)
+    with _SKILL_LOCK:
+        _SKILL_CACHE["all_unique"] = flat
+        _SKILL_CACHE["all_loaded"] = True
+    return flat
+
+
+def _load_custom_user_skills() -> List[Dict[str, Any]]:
+    """支持用户在 ControlPanel/skills/ 放置自定义 .json 提示词模板包。"""
+    custom_dir = APP_DIR / "skills"
+    if not custom_dir.is_dir():
+        return []
+    files = sorted(custom_dir.glob("*.json"))
+    mtime = sum(f.stat().st_mtime for f in files) if files else 0.0
+    with _SKILL_LOCK:
+        if _SKILL_CACHE["custom_mtime"] == mtime and _SKILL_CACHE["custom_items"]:
+            return _SKILL_CACHE["custom_items"]
+    out: List[Dict[str, Any]] = []
+    for fp in files:
+        try:
+            data = json.loads(fp.read_text(encoding="utf-8"))
+            rows = data if isinstance(data, list) else (data.get("prompts") if isinstance(data, dict) else [])
+            if not isinstance(rows, list):
+                continue
+            for idx, r in enumerate(rows):
+                if not isinstance(r, dict):
+                    continue
+                pr = str(r.get("prompt") or r.get("content") or "").strip()
+                if len(pr) < 12:
+                    continue
+                m, safe_s, safe_steps, safe_len = _safe_spec(str(r.get("mode") or "t2i"), str(r.get("size") or "896x512"))
+                out.append({
+                    "id": f"custom:{fp.stem}:{idx}",
+                    "cat": str(r.get("cat") or "abstract"),
+                    "title": str(r.get("title") or f"{fp.stem} #{idx + 1}").strip(),
+                    "tags": str(r.get("tags") or fp.stem).strip(),
+                    "summary": str(r.get("summary") or r.get("description") or f"来自自定义提示词包 {fp.name}").strip(),
+                    "prompt": pr,
+                    "neg_prompt": str(r.get("neg_prompt") or DEFAULT_NEG_PHOTO),
+                    "size": safe_s,
+                    "steps": safe_steps,
+                    "length": safe_len,
+                    "vram_tag": "8G极速",
+                    "mode": m,
+                    "source": f"自定义 Skill · {fp.stem}",
+                    "source_type": "custom",
+                    "preview_url": str(r.get("preview_url") or ""),
+                    "need_ref": bool(r.get("needReferenceImages") or r.get("need_ref")),
+                })
+        except Exception:
+            continue
+    with _SKILL_LOCK:
+        _SKILL_CACHE["custom_mtime"] = mtime
+        _SKILL_CACHE["custom_items"] = out
+    return out
+
+
+def _skill_record_to_card(rec: Dict[str, Any], target_mode: str = "t2i") -> Dict[str, Any]:
+    slug = rec["slug"]
+    cn_name = rec["cn_cat"]
+    inferred_mode = "i2v" if (target_mode == "i2v" or (target_mode == "t2v" and rec["need_ref"])) else ("t2v" if target_mode == "t2v" else "t2i")
+    raw_size = _guess_size_from_prompt(rec["content"], slug=slug, mode=inferred_mode)
+    m, safe_s, safe_steps, safe_len = _safe_spec(inferred_mode, raw_size)
+    neg = DEFAULT_NEG_VIDEO if m in ("t2v", "i2v") else (DEFAULT_NEG_ANIME if slug == "comic-storyboard" else DEFAULT_NEG_PHOTO)
+    summary = rec["desc"] or f"社区实战 {cn_name} 提示词模板（点击「🎭 Skill 精改」可将此模板光影/构图骨架精准替换为你的主体）"
+    return {
+        "id": f"skill:{slug}:{rec['uid']}",
+        "cat": f"skill:{slug}",
+        "title": rec["title"],
+        "tags": f"{cn_name} {slug} 社区Skill",
+        "summary": summary,
+        "prompt": rec["content"],
+        "neg_prompt": neg,
+        "size": safe_s,
+        "steps": safe_steps,
+        "length": safe_len,
+        "vram_tag": "8G极速 · %d帧" % safe_len if m in ("t2v", "i2v") else "8G极速",
+        "mode": m,
+        "source": f"Skill · {cn_name}",
+        "source_type": "skill",
+        "skill_slug": slug,
+        "preview_url": rec["preview_url"],
+        "need_ref": rec["need_ref"],
+    }
+
+
+def get_skill_status() -> Dict[str, Any]:
+    """返回当前已挂载的提示词 Skill 统计与分类清单（不含敏感个人路径）。"""
+    label, ref_dir, manifest = _ensure_manifest_loaded()
+    custom_items = _load_custom_user_skills()
+    rule_skills = _detect_rule_skills()
+    skill_cats = []
+    total_cat_entries = 0
+    for c in (manifest.get("categories") or []):
+        slug = str(c.get("slug") or "")
+        cnt = int(c.get("count") or 0)
+        total_cat_entries += cnt
+        cn_name, icon, _ = SKILL_CATEGORY_META.get(slug, (c.get("title") or slug, "🧩", "abstract"))
+        skill_cats.append({
+            "id": f"skill:{slug}",
+            "slug": slug,
+            "name": cn_name,
+            "icon": icon,
+            "count": cnt,
+            "group": "skill",
+        })
+    unique_total = int(manifest.get("totalPrompts") or 0)
+    return {
+        "mounted": bool(ref_dir is not None and unique_total > 0),
+        "source_label": label or "未挂载外部词库（可一键同步云端 15,800+ 库）",
+        "updated_at": str(manifest.get("updatedAt") or ""),
+        "unique_skill_prompts": unique_total,
+        "categorized_skill_prompts": total_cat_entries,
+        "builtin_prompts": len(MASTER_PROMPTS),
+        "custom_prompts": len(custom_items),
+        "total_available": unique_total + len(MASTER_PROMPTS) + len(custom_items),
+        "skill_categories": skill_cats,
+        "rule_skills": rule_skills,
+        "attribution": SKILL_ATTRIBUTION,
+    }
+
+
+def _http_get_bytes(url: str, proxy: str = "", timeout: float = 25.0) -> Tuple[bool, bytes, str]:
+    """安全拉取远程字节（代理优先失败自动直连回退，适配各类网络环境）。"""
+    headers = {"User-Agent": "DownloadStack-Control/2.5 (+https://github.com/ember-glade8/downloadstack-control)"}
+    attempts = []
+    if proxy:
+        attempts.append({"http": proxy, "https": proxy})
+    attempts.append(None)
+
+    last_err = "请求失败"
+    if requests is not None:
+        for px in attempts:
+            try:
+                s = requests.Session()
+                if px is None:
+                    s.trust_env = False
+                r = s.get(url, headers=headers, proxies=px, timeout=timeout)
+                if r.status_code == 200 and r.content:
+                    return True, r.content, ""
+                last_err = f"HTTP {r.status_code}"
+            except Exception as ex:
+                last_err = str(ex)
+        return False, b"", last_err
+
+    import urllib.request
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return True, resp.read(), ""
+    except Exception as ex:
+        return False, b"", str(ex)
+
+
+def sync_skill_prompt_library(cache_dir: Optional[Path] = None, proxy: str = "") -> Dict[str, Any]:
+    """一键从公开 GitHub 仓库 (YouMind-OpenLab/ai-image-prompts-skill) 同步/更新 20,000+ 社区提示词库。"""
+    target_dir = Path(cache_dir) if cache_dir else (APP_DIR / "cache" / "prompt_skills" / "ai-image-prompts-skill" / "references")
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    ok, raw_mf, err = _http_get_bytes(f"{SKILL_REPO_RAW_BASE}/manifest.json", proxy=proxy, timeout=20.0)
+    if not ok:
+        return {"ok": False, "msg": f"同步 manifest.json 失败：{err}", "skill_status": get_skill_status()}
+    try:
+        manifest = json.loads(raw_mf.decode("utf-8"))
+        cats = manifest.get("categories") or []
+        if not cats:
+            return {"ok": False, "msg": "远端 manifest 分类为空", "skill_status": get_skill_status()}
+    except Exception as ex:
+        return {"ok": False, "msg": f"解析 manifest.json 失败：{ex}", "skill_status": get_skill_status()}
+
+    (target_dir / "manifest.json").write_bytes(raw_mf)
+
+    def _dl_one(c: Dict[str, Any]) -> Tuple[str, bool, str]:
+        fn = str(c.get("file") or "").strip()
+        if not fn or "/" in fn or "\\" in fn or ".." in fn:
+            return fn, False, "非法文件名"
+        ok_f, raw_f, err_f = _http_get_bytes(f"{SKILL_REPO_RAW_BASE}/{fn}", proxy=proxy, timeout=45.0)
+        if not ok_f:
+            return fn, False, err_f
+        try:
+            json.loads(raw_f.decode("utf-8"))
+        except Exception as ex:
+            return fn, False, f"JSON 校验失败: {ex}"
+        (target_dir / fn).write_bytes(raw_f)
+        return fn, True, ""
+
+    ok_cnt = 0
+    errs: List[str] = []
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        futs = [ex.submit(_dl_one, c) for c in cats]
+        for fut in as_completed(futs):
+            fn, is_ok, e = fut.result()
+            if is_ok:
+                ok_cnt += 1
+            else:
+                errs.append(f"{fn}:{e}")
+
+    # Invalidate cache so new files take effect immediately
+    with _SKILL_LOCK:
+        _SKILL_CACHE["loaded_dir"] = ""
+        _SKILL_CACHE["loaded_mtime"] = 0.0
+        _SKILL_CACHE["categories"] = {}
+        _SKILL_CACHE["all_unique"] = []
+        _SKILL_CACHE["all_loaded"] = False
+
+    st = get_skill_status()
+    if ok_cnt == 0:
+        return {"ok": False, "msg": f"词库同步失败：{'; '.join(errs[:3])}", "skill_status": st}
+    msg = (
+        f"✔ 已同步最新社区提示词 Skill 库：{ok_cnt}/{len(cats)} 个分类文件，"
+        f"共 {st['unique_skill_prompts']:,} 条去重实战提示词"
+    )
+    if errs:
+        msg += f"（{len(errs)} 个分类稍后可重试）"
+    return {"ok": True, "msg": msg, "skill_status": st}
+
+
+# ==================================================================
+# 关键词双语展开 + 本地动态合成 + 20,000+ 极速混合检索引擎
+# ==================================================================
 def _translate_keywords_local(query: str) -> str:
     """将用户中文关键词精准映射为自然英文视觉核心描述（供离线/毫秒动态合成使用）。"""
     q = (query or "").strip()
     if not q:
         return ""
-    # If mostly English already, keep directly
     ascii_letters = sum(1 for ch in q if "a" <= ch.lower() <= "z")
     if ascii_letters >= len(q) * 0.55:
         return q
     hits = []
-    # Match longer Chinese keys first
     for cn in sorted(CN_EN_CONCEPTS.keys(), key=len, reverse=True):
         if cn in q:
             en = CN_EN_CONCEPTS[cn]
@@ -399,16 +959,64 @@ def _translate_keywords_local(query: str) -> str:
     return f"vivid cinematic scene depicting {q}"
 
 
+def _expand_query_terms(query: str) -> Tuple[List[str], List[str]]:
+    """返回 (核心权重词列表, 扩展同义词集合)，支持中英混合与中文二元分词。"""
+    q = (query or "").strip()
+    q_low = q.lower()
+    raw_tokens = [t for t in re.split(r"[\s,，、/|+]+", q_low) if t]
+    core_terms: List[str] = []
+    expanded: List[str] = []
+
+    def _add(lst: List[str], val: str):
+        v = val.strip().lower()
+        if v and v not in lst:
+            lst.append(v)
+
+    for tk in raw_tokens:
+        _add(core_terms, tk)
+        _add(expanded, tk)
+
+    # Match Chinese visual concepts longest-first and expand to English search tokens
+    matched_en_phrases: List[str] = []
+    for cn in sorted(CN_EN_CONCEPTS.keys(), key=len, reverse=True):
+        if cn in q:
+            _add(core_terms, cn)
+            en = CN_EN_CONCEPTS[cn]
+            matched_en_phrases.append(en)
+            for w in re.split(r"[\s,/()-]+", en.lower()):
+                if len(w) >= 3 and w not in ("the", "and", "for", "with", "into", "from", "shot", "art"):
+                    _add(expanded, w)
+        else:
+            for tk in raw_tokens:
+                if len(tk) >= 3 and tk in CN_EN_CONCEPTS[cn].lower():
+                    _add(expanded, cn)
+
+    # Chinese bigrams (only if short Chinese query without full concept match)
+    cn_only = re.sub(r"[^\u4e00-\u9fff]+", "", q)
+    for i in range(max(0, len(cn_only) - 1)):
+        bg = cn_only[i : i + 2]
+        _add(expanded, bg)
+
+    # Keep top English words from matched concepts in core_terms so English-only Skill prompts get multi-hit bonuses
+    for phrase in matched_en_phrases[:4]:
+        first_words = [w for w in re.split(r"[\s,/()-]+", phrase.lower()) if len(w) >= 3][:2]
+        for w in first_words:
+            _add(core_terms, w)
+
+    return core_terms[:14], expanded[:32]
+
+
 def _build_dynamic_templates(query: str, mode: str = "t2i") -> List[Dict[str, Any]]:
-    """根据用户输入的任意关键词，毫秒动态合成 6 套不同专业风格的定制提示词模板。"""
+    """根据用户输入的任意关键词，毫秒动态合成 4 套不同专业风格的定制提示词模板。"""
     q = (query or "").strip()
     if not q:
         return []
     subj = _translate_keywords_local(q)
-    out = [
+    return [
         {
+            "id": f"dyn:cinema:{hashlib.md5(q.encode('utf-8')).hexdigest()[:8]}",
             "cat": "portrait",
-            "title": f"【定制·电影写实】{q}",
+            "title": f"【即时定制·电影写实】{q}",
             "tags": f"{q} 电影写实 35mm 胶片 定制",
             "summary": "ARRI 电影机 35mm 宽银幕写实光影 + 真实材质肌理 + 浅景深叙事构图",
             "prompt": (
@@ -421,15 +1029,19 @@ def _build_dynamic_templates(query: str, mode: str = "t2i") -> List[Dict[str, An
             "size": "896x512",
             "steps": 8,
             "length": 21,
-            "vram_tag": "8G极稳",
+            "vram_tag": "8G极速",
             "mode": "t2i",
             "source": "关键词智能合成",
+            "source_type": "dynamic",
+            "preview_url": "",
+            "need_ref": False,
         },
         {
+            "id": f"dyn:video:{hashlib.md5(q.encode('utf-8')).hexdigest()[:8]}",
             "cat": "video",
-            "title": f"【定制·Wan2.2运镜】{q} 动态电影镜头",
+            "title": f"【即时定制·Wan2.2运镜】{q} 动态镜头",
             "tags": f"{q} 视频 运镜 Wan2.2 动态 慢动作",
-            "summary": "专为 8G 显存 Wan 2.2 调优（640×384 · 21帧 · 4步防爆）：平稳推镜 + 连续物理微动",
+            "summary": "专为 8G 显存 Wan 2.2 调优（640×384 · 21帧 · 4步极速）：平稳推镜 + 连续物理微动",
             "prompt": (
                 f"Cinematic 24fps film video shot of {subj}, smooth slow dolly-in camera movement with gentle parallax, "
                 f"natural continuous micro-motions in lighting, drifting atmospheric mist, wind-swept fabrics and subtle "
@@ -440,13 +1052,17 @@ def _build_dynamic_templates(query: str, mode: str = "t2i") -> List[Dict[str, An
             "size": "640x384",
             "steps": 4,
             "length": 21,
-            "vram_tag": "8G极稳 · 21帧",
+            "vram_tag": "8G极速 · 21帧",
             "mode": "t2v" if mode != "i2v" else "i2v",
             "source": "关键词智能合成",
+            "source_type": "dynamic",
+            "preview_url": "",
+            "need_ref": False,
         },
         {
+            "id": f"dyn:anime:{hashlib.md5(q.encode('utf-8')).hexdigest()[:8]}",
             "cat": "anime",
-            "title": f"【定制·唯美光影】{q} 剧场版概念原画",
+            "title": f"【即时定制·唯美光影】{q} 剧场版原画",
             "tags": f"{q} 二次元 唯美 新海诚 概念原画",
             "summary": "通透剧场版光影、高饱和冷暖氛围对比、精致手绘质感与层次景深",
             "prompt": (
@@ -459,56 +1075,22 @@ def _build_dynamic_templates(query: str, mode: str = "t2i") -> List[Dict[str, An
             "size": "896x512",
             "steps": 8,
             "length": 21,
-            "vram_tag": "8G极稳",
+            "vram_tag": "8G极速",
             "mode": "t2i",
             "source": "关键词智能合成",
+            "source_type": "dynamic",
+            "preview_url": "",
+            "need_ref": False,
         },
         {
-            "cat": "cyber",
-            "title": f"【定制·赛博霓虹】{q} 未来暗调视觉",
-            "tags": f"{q} 赛博 霓虹 科幻 夜景 炫酷",
-            "summary": "雨夜湿面镜光、电光青与洋红双色边缘光、高质感硬科幻空间透视",
-            "prompt": (
-                f"Futuristic cyberpunk nocturnal visual of {subj}, drenched in atmospheric neon cyan, electric violet "
-                f"and warm amber reflections across wet reflective surfaces, volumetric fog pierced by dramatic holographic "
-                f"rim lights, ultra-detailed sci-fi material reflections and sleek metallic accents, 35mm anamorphic lens "
-                f"halation, Blade Runner 2049 inspired cinematography"
-            ),
-            "neg_prompt": DEFAULT_NEG_PHOTO,
-            "size": "896x512",
-            "steps": 8,
-            "length": 21,
-            "vram_tag": "8G极稳",
-            "mode": "t2i",
-            "source": "关键词智能合成",
-        },
-        {
-            "cat": "guofeng",
-            "title": f"【定制·东方美学】{q} 诗意水墨光影",
-            "tags": f"{q} 古风 东方 水墨 意境 唯美",
-            "summary": "石青琥珀矿物色调、流动轻雾与留白构图、电影写实与东方神韵融合",
-            "prompt": (
-                f"Poetic neo-Chinese aesthetic cinematic masterpiece of {subj}, veiled in drifting silk-like valley mist "
-                f"and warm diffused lantern-gold and celadon-jade lighting, harmonious blend of photorealistic natural "
-                f"textures and classical ink-wash atmospheric depth, graceful composition with refined negative space, "
-                f"tranquil museum-grade fine art lighting"
-            ),
-            "neg_prompt": DEFAULT_NEG_PHOTO,
-            "size": "896x512",
-            "steps": 8,
-            "length": 21,
-            "vram_tag": "8G极稳",
-            "mode": "t2i",
-            "source": "关键词智能合成",
-        },
-        {
+            "id": f"dyn:commercial:{hashlib.md5(q.encode('utf-8')).hexdigest()[:8]}",
             "cat": "product",
-            "title": f"【定制·商业特写】{q} 棚拍质感大片",
+            "title": f"【即时定制·商业棚拍】{q} 高奢质感大片",
             "tags": f"{q} 商业 棚拍 特写 微距 质感 高清",
-            "summary": "中画幅微距棚拍、雕塑感轮廓光与洁净背景、高奢视觉海报级清晰度",
+            "summary": "中画幅微距棚拍、雕塑感轮廓光与洁净背景、商业海报级清晰度",
             "prompt": (
-                f"Ultra-crisp luxury studio editorial close-up of {subj}, sculpted by precision directional rim lighting "
-                f"and soft diffused overhead key light against a clean atmospheric dark backdrop, tactile micro-surface "
+                f"Ultra-crisp luxury studio editorial shot of {subj}, sculpted by precision directional rim lighting "
+                f"and soft diffused overhead key light against a clean atmospheric backdrop, tactile micro-surface "
                 f"details, subtle optical specular reflections and creamy f/2.0 bokeh falloff, shot on Hasselblad "
                 f"medium-format 120mm lens, commercial campaign quality"
             ),
@@ -516,89 +1098,281 @@ def _build_dynamic_templates(query: str, mode: str = "t2i") -> List[Dict[str, An
             "size": "768x768",
             "steps": 8,
             "length": 21,
-            "vram_tag": "8G极稳",
+            "vram_tag": "8G极速",
             "mode": "t2i",
             "source": "关键词智能合成",
+            "source_type": "dynamic",
+            "preview_url": "",
+            "need_ref": False,
         },
     ]
-    return out
 
 
-def search_prompts(query: str = "", category: str = "all", mode: str = "t2i", limit: int = 36) -> Dict[str, Any]:
-    """双引擎提示词搜索：大师精选库语义打分检索 + 用户关键词动态定制模板合成。"""
+def _search_skill_records(query: str, slug_filter: str = "", mode: str = "t2i",
+                          only_with_image: bool = False, shuffle_seed: int = 0) -> Tuple[List[Dict[str, Any]], int]:
+    """在 15,847+ 去重 / 23,000+ 分类社区提示词 Skill 库中进行毫秒级语义打分检索。"""
+    _, ref_dir, manifest = _ensure_manifest_loaded()
+    if ref_dir is None or not manifest:
+        return [], 0
+
+    if slug_filter:
+        fn = ""
+        for c in (manifest.get("categories") or []):
+            if c.get("slug") == slug_filter:
+                fn = str(c.get("file") or "")
+                break
+        pool = _load_skill_category(ref_dir, slug_filter, fn) if fn else []
+    else:
+        pool = _load_all_skill_prompts()
+
+    if not pool:
+        return [], 0
+
+    if only_with_image:
+        pool = [r for r in pool if r["preview_url"]]
+
     q = (query or "").strip()
-    cat = (category or "all").strip().lower()
-
-    pool = [p for p in MASTER_PROMPTS if (cat == "all" or p["cat"] == cat)]
     if not q:
-        # Prioritize video templates if user is in t2v/i2v mode and viewing "all"
-        if cat == "all" and mode in ("t2v", "i2v"):
-            pool = sorted(pool, key=lambda x: (0 if x["cat"] == "video" else 1))
-        return {
-            "ok": True,
-            "total": len(pool),
-            "results": pool[:limit],
-            "categories": PROMPT_CATEGORIES,
-            "msg": f"已加载 {min(len(pool), limit)} 套大师级提示词模板（库内共 {len(MASTER_PROMPTS)} 套精选）",
-        }
+        # Curated browsing mode: prioritize rich prompts with preview images, optionally shuffled
+        rich = [r for r in pool if r["preview_url"] and 140 <= len(r["content"]) <= 2200]
+        if len(rich) < 40:
+            rich = pool
+        if shuffle_seed:
+            rng = random.Random(shuffle_seed)
+            picks = list(rich)
+            rng.shuffle(picks)
+            return picks, len(pool)
+        # Interleave across categories for rich variety when browsing "all"
+        if not slug_filter:
+            buckets: Dict[str, List[Dict[str, Any]]] = {}
+            for r in rich:
+                b = buckets.setdefault(r["slug"], [])
+                if len(b) < 20:
+                    b.append(r)
+            interleaved: List[Dict[str, Any]] = []
+            max_len = max((len(v) for v in buckets.values()), default=0)
+            for idx in range(max_len):
+                for v in buckets.values():
+                    if idx < len(v):
+                        interleaved.append(v[idx])
+            return interleaved, len(pool)
+        return rich, len(pool)
 
-    # Tokenize query (Chinese phrases, bigrams, key single chars + English words) and expand with synonyms
-    tokens = [t for t in re.split(r"[\s,，、/|+]+", q.lower()) if t]
-    expanded = set(tokens)
-    # Add Chinese 2-char n-grams so phrases like "一剑开天门" match "天门", "开天", etc.
-    cn_only = re.sub(r"[^\u4e00-\u9fff]+", "", q)
-    for i in range(len(cn_only) - 1):
-        expanded.add(cn_only[i : i + 2])
-    for cn, en in CN_EN_CONCEPTS.items():
-        if cn in q:
-            expanded.add(cn)
-            for w in re.split(r"[\s,-]+", en.lower()):
-                if len(w) >= 3:
-                    expanded.add(w)
-        else:
-            for tk in tokens:
-                if len(tk) >= 2 and tk in en.lower():
-                    expanded.add(cn)
+    q_low = q.lower()
+    core_terms, expanded = _expand_query_terms(q)
+    # Remove single-letter junk
+    expanded = [t for t in expanded if len(t) >= 2]
+    core_terms = [t for t in core_terms if len(t) >= 2]
+    if not expanded:
+        expanded = [q_low]
 
-    scored = []
-    for item in pool:
-        hay_title = item["title"].lower()
-        hay_tags = item["tags"].lower()
-        hay_sum = item["summary"].lower()
-        hay_prompt = item["prompt"].lower()
-        score = 0
-        if q.lower() in hay_title or q.lower() in hay_tags:
-            score += 30
+    scored: List[Tuple[float, Dict[str, Any]]] = []
+    for rec in pool:
+        blob = rec["blob"]
+        # Fast pre-filter: must match at least one term in blob
+        hits = 0
+        core_hits = 0
+        score = 0.0
+        if q_low in blob:
+            score += 45.0
+            hits += 2
+            core_hits += 1
+        title_low = rec["title"].lower()
         for tk in expanded:
-            if tk in hay_title:
-                score += 12
-            if tk in hay_tags:
-                score += 10
-            if tk in hay_sum:
-                score += 6
-            if tk in hay_prompt:
-                score += 5
-        if mode in ("t2v", "i2v") and item["mode"] in ("t2v", "i2v"):
-            score += 4
-        if score > 0:
-            scored.append((score, item))
+            if tk in blob:
+                hits += 1
+                if tk in title_low:
+                    score += 14.0
+                else:
+                    score += 6.0
+                if tk in core_terms:
+                    core_hits += 1
+                    score += 8.0
+        if hits == 0:
+            continue
+        # Multi-concept AND coverage bonus (crucial for precision!)
+        if core_hits >= 2:
+            score += 18.0 * min(core_hits, 4)
+        # Quality & usability bonuses
+        if rec["preview_url"]:
+            score += 6.5
+        clen = len(rec["content"])
+        if 180 <= clen <= 1800:
+            score += 4.0
+        elif clen < 60:
+            score -= 6.0
+        if mode == "t2i" and not rec["need_ref"]:
+            score += 3.5
+        elif mode == "i2v" and rec["need_ref"]:
+            score += 3.5
+        scored.append((score, rec))
 
     scored.sort(key=lambda x: x[0], reverse=True)
-    matched = [it for _, it in scored[: max(12, limit - 6)]]
+    return [r for _, r in scored], len(scored)
 
-    # Always synthesize bespoke templates tailored directly to the user's exact keywords!
-    dynamic = _build_dynamic_templates(q, mode=mode)
-    # Put top direct matches first, then bespoke dynamic templates, then remaining matches
-    final_list = matched[:4] + dynamic + matched[4:]
+
+def search_prompts(query: str = "", category: str = "all", mode: str = "t2i",
+                   limit: int = 24, page: int = 1, source: str = "all",
+                   only_with_image: bool = False, shuffle_seed: int = 0) -> Dict[str, Any]:
+    """三引擎联合检索：
+    1) 本机/云端 20,000+ 提示词 Skill 实战库（含实拍样图 preview_url）
+    2) 72+ 原生电影/Wan2.2运镜大师库 + 自定义 skills/*.json
+    3) 关键词即时定制合成模板
+    """
+    t0 = time.perf_counter()
+    q = (query or "").strip()
+    cat = (category or "all").strip().lower()
+    src = (source or "all").strip().lower()
+    limit = max(6, min(60, int(limit or 24)))
+    page = max(1, int(page or 1))
+
+    skill_status = get_skill_status()
+    all_cats = list(PROMPT_CATEGORIES) + list(skill_status.get("skill_categories") or [])
+
+    # Determine category routing
+    is_skill_cat = cat.startswith("skill:")
+    skill_slug = cat[6:] if is_skill_cat else ""
+    if is_skill_cat:
+        src = "skill"
+
+    builtin_pool = list(MASTER_PROMPTS) + _load_custom_user_skills()
+    builtin_hits: List[Dict[str, Any]] = []
+    if src in ("all", "builtin") and not is_skill_cat:
+        b_filtered = [p for p in builtin_pool if (cat == "all" or p["cat"] == cat)]
+        if not q:
+            if cat == "all" and mode in ("t2v", "i2v"):
+                b_filtered = sorted(b_filtered, key=lambda x: (0 if x["cat"] == "video" else 1))
+            if shuffle_seed:
+                rng = random.Random(shuffle_seed)
+                b_filtered = list(b_filtered)
+                rng.shuffle(b_filtered)
+            builtin_hits = b_filtered
+        else:
+            q_low = q.lower()
+            core_terms, expanded = _expand_query_terms(q)
+            b_scored = []
+            for item in b_filtered:
+                hay_title = item["title"].lower()
+                hay_tags = item["tags"].lower()
+                hay_sum = item["summary"].lower()
+                hay_prompt = item["prompt"].lower()
+                sc = 0
+                if q_low in hay_title or q_low in hay_tags:
+                    sc += 34
+                for tk in expanded:
+                    if tk in hay_title:
+                        sc += 12
+                    if tk in hay_tags:
+                        sc += 10
+                    if tk in hay_sum:
+                        sc += 6
+                    if tk in hay_prompt:
+                        sc += 5
+                if mode in ("t2v", "i2v") and item["mode"] in ("t2v", "i2v"):
+                    sc += 8
+                if sc > 0:
+                    b_scored.append((sc, item))
+            b_scored.sort(key=lambda x: x[0], reverse=True)
+            # Only keep strong Master matches when Skill library is also mounted so weak partial hits never outrank exact Skill prompts
+            min_b_score = 22 if (src == "all" and skill_status["mounted"]) else 1
+            builtin_hits = [it for sc, it in b_scored if sc >= min_b_score]
+
+    skill_recs: List[Dict[str, Any]] = []
+    skill_total_hits = 0
+    if src in ("all", "skill") and skill_status["mounted"]:
+        # Map builtin category -> best matching skill slug when filtering by a specific builtin category
+        mapped_slug = skill_slug
+        if not mapped_slug and cat != "all" and src == "all":
+            builtin_to_skill = {
+                "portrait": "profile-avatar",
+                "product": "product-marketing",
+                "anime": "comic-storyboard",
+                "fantasy": "game-asset",
+                "abstract": "poster-flyer",
+                "arch": "app-web-design",
+                "video": "youtube-thumbnail",
+            }
+            mapped_slug = builtin_to_skill.get(cat, "")
+        skill_recs, skill_total_hits = _search_skill_records(
+            query=q,
+            slug_filter=mapped_slug,
+            mode=mode,
+            only_with_image=only_with_image,
+            shuffle_seed=shuffle_seed,
+        )
+
+    # Assemble combined paged result list
+    combined: List[Dict[str, Any]] = []
+    if src == "skill":
+        start = (page - 1) * limit
+        page_recs = skill_recs[start : start + limit]
+        combined = [_skill_record_to_card(r, target_mode=mode) for r in page_recs]
+        total_count = skill_total_hits
+        has_more = (start + limit) < len(skill_recs)
+    elif src == "builtin":
+        dyn = _build_dynamic_templates(q, mode=mode) if q else []
+        full_b = builtin_hits[:6] + dyn + builtin_hits[6:]
+        start = (page - 1) * limit
+        combined = full_b[start : start + limit]
+        total_count = len(full_b)
+        has_more = (start + limit) < len(full_b)
+    else:
+        # "all": blend top Master hits + massive Skill library + bespoke dynamic templates
+        if page == 1:
+            top_master = builtin_hits[:4] if (q or skill_recs) else builtin_hits[:limit]
+            if mode in ("t2v", "i2v") and not q:
+                top_master = builtin_hits[:8]
+            dyn = _build_dynamic_templates(q, mode=mode)[:2] if q else []
+            skill_quota = max(8, limit - len(top_master) - len(dyn))
+            skill_cards = [_skill_record_to_card(r, target_mode=mode) for r in skill_recs[:skill_quota]]
+            if q:
+                # Show top 2 direct Master matches, then Skill real-world templates with sample images, then bespoke custom ones
+                combined = top_master[:2] + skill_cards + top_master[2:] + dyn
+            else:
+                # Default home browse: top Master highlights + rich Skill preview cards!
+                combined = top_master + skill_cards
+            combined = combined[:limit]
+            total_count = len(builtin_hits) + skill_total_hits + len(dyn)
+            has_more = len(skill_recs) > skill_quota
+        else:
+            # Subsequent pages stream seamlessly from the 20,000+ Skill library!
+            offset_base = max(8, limit - 4) + (page - 2) * limit
+            page_recs = skill_recs[offset_base : offset_base + limit]
+            combined = [_skill_record_to_card(r, target_mode=mode) for r in page_recs]
+            total_count = len(builtin_hits) + skill_total_hits
+            has_more = (offset_base + limit) < len(skill_recs)
+
+    elapsed_ms = int((time.perf_counter() - t0) * 1000)
+    if q:
+        msg = (
+            f"⚡ {elapsed_ms}ms · 关键词「{q}」命中 {skill_total_hits:,} 条社区 Skill 模板"
+            f" + {len(builtin_hits)} 套大师精选（库总计 {skill_status['total_available']:,} 条）"
+        )
+    else:
+        msg = (
+            f"🧩 已挂载 {skill_status['unique_skill_prompts']:,} 条去重社区 Skill 模板"
+            f"（{skill_status['categorized_skill_prompts']:,} 条全分类含实拍样图）+ {len(MASTER_PROMPTS)} 套大师库"
+            if skill_status["mounted"]
+            else f"已加载 {len(MASTER_PROMPTS)} 套大师模板（点击右上角「🔄 同步云端2万+库」可一键注入 15,800+ 社区实战提示词）"
+        )
+
     return {
         "ok": True,
-        "total": len(final_list),
-        "results": final_list[:limit],
-        "categories": PROMPT_CATEGORIES,
-        "msg": f"关键词「{q}」命中 {len(matched)} 套精选 + 即时定制 {len(dynamic)} 套专属模板",
+        "total": total_count,
+        "page": page,
+        "has_more": has_more,
+        "elapsed_ms": elapsed_ms,
+        "results": combined,
+        "categories": all_cats,
+        "skill_status": skill_status,
+        "attribution": SKILL_ATTRIBUTION,
+        "msg": msg,
     }
 
 
+# ==================================================================
+# Skill-RAG 增强版 AI 大师优化器 & 模板精改 (Skill Remix)
+# ==================================================================
 def _extract_json_block(text: str):
     raw = (text or "").strip()
     if not raw:
@@ -606,7 +1380,6 @@ def _extract_json_block(text: str):
     m = re.search(r"```(?:json)?\s*([\s\S]*?)```", raw, flags=re.I)
     if m:
         raw = m.group(1).strip()
-    # Find outermost [ ... ] or { ... }
     for open_c, close_c in (("{", "}"), ("[", "]")):
         i = raw.find(open_c)
         j = raw.rfind(close_c)
@@ -621,10 +1394,28 @@ def _extract_json_block(text: str):
         return None
 
 
+def _pick_rag_skill_references(idea: str, mode: str = "t2i", top_k: int = 3) -> List[Dict[str, Any]]:
+    """从 20,000+ 本地提示词 Skill 中自动抽取最相关的实战范本，作为 AI 优化器的高质量骨架参考。"""
+    recs, _ = _search_skill_records(query=idea, slug_filter="", mode=mode, only_with_image=False)
+    refs = []
+    for r in recs[:top_k]:
+        snippet = re.sub(r"\s+", " ", r["content"]).strip()[:420]
+        refs.append({
+            "title": r["title"],
+            "cat": r["cn_cat"],
+            "snippet": snippet,
+            "preview_url": r["preview_url"],
+        })
+    return refs
+
+
 def optimize_prompt_with_ai(raw_input: str, mode: str = "t2i", style_hint: str = "",
                             codex_cfg: dict = None, chat_fn=None, proxy: str = "",
                             count: int = 3) -> Dict[str, Any]:
-    """调用本机 Codex 智能体将用户的粗略中文/英文想法升格为多套大师级 Z-Image Turbo / Wan 2.2 提示词。"""
+    """Skill-RAG 增强版 AI 提示词优化器：
+    自动检索本机 20,000+ 提示词 Skill 的最匹配范本 + 注入 7 层结构化摄影规范，
+    调用 Codex 智能体生成多套高精准度 Z-Image Turbo / Wan 2.2 提示词。
+    """
     idea = (raw_input or "").strip()
     if not idea:
         return {"ok": False, "msg": "请先在输入框填写你想生成的画面想法或关键词", "variants": []}
@@ -636,28 +1427,40 @@ def optimize_prompt_with_ai(raw_input: str, mode: str = "t2i", style_hint: str =
     model = str(cx.get("model") or "gpt-6-sol").strip()
     api_style = str(cx.get("api_style") or "auto").strip()
 
+    # RAG retrieval from 20,000+ local Skill library!
+    rag_refs = _pick_rag_skill_references(idea, mode=mode, top_k=3)
+    rag_block = ""
+    if rag_refs:
+        lines = []
+        for idx, rf in enumerate(rag_refs, 1):
+            lines.append(f"[Skill 实战范本 #{idx} · {rf['cat']} · {rf['title']}]\n{rf['snippet']}")
+        rag_block = "\n\n参考以下从 20,000+ 社区实战 Skill 库中检索出的高赞提示词骨架（吸收其光影、构图、质感与细节颗粒度，但绝不照抄无关元素）：\n" + "\n\n".join(lines)
+
     sys_prompt = (
-        "你是世界顶级的电影摄影指导与 AI 视觉提示词架构师，专精两款本地模型：\n"
-        "1) Z-Image Turbo（基于 Qwen3-4B / Lumina2 文本编码器）：极擅长理解自然语言电影镜头描述、物理光线（主光/轮廓光/体积光/漫反射）、真实材质肌理、构图景深与胶片色学；严禁堆砌老式无意义废词（如 'masterpiece, best quality, 8k, ultra detailed, 1girl' 这种逗号标签垃圾）。\n"
-        "2) Wan 2.2 I2V 14B 视频模型：要求明确写出连续运镜轨迹（如 smooth dolly-in / gentle orbiting tracking shot / aerial crane-up）、主体自然连续微动作、环境物理动态（发丝衣袂吹拂、水波、光影流动、雨雪粒子）。\n\n"
+        "你是世界顶级的电影摄影指导与 AI 视觉提示词架构师，严格执行两套权威提示词 Skill 规范：\n"
+        "【Skill 规范 1 · 7 层结构化视觉语法 (imagegen)】\n"
+        "每条提示词必须按逻辑自然融合：Scene/Backdrop（环境背景）→ Subject（精准主体/姿态/服饰）→ Style/Medium（摄影胶片/美术媒介）→ Composition/Camera/Lens（构图景别/焦段光圈）→ Lighting/Color/Mood（主光/轮廓光/体积光/色彩科学）→ Materials/Micro-textures（真实微材质肌理）→ Motion/Physics（视频模式补充连续运镜与物理动态）。\n"
+        "【Skill 规范 2 · 目标本地模型精准适配】\n"
+        "1) Z-Image Turbo（Qwen3-4B / Lumina2 文本编码器）：使用精准、具象、自然流畅的英文电影/摄影长句描述；严禁堆砌老式废词（严禁 'masterpiece, best quality, 8k, ultra detailed, 1girl' 逗号标签垃圾）；不要输出 'recreate uploaded person' 这类依赖参考图的指令（除非 i2v）。\n"
+        "2) Wan 2.2 I2V 14B 视频模型：必须明确写出单一清晰的连续运镜轨迹（smooth dolly-in / gentle orbiting tracking / aerial crane-up）、主体自然连续微动作、环境物理动态（发丝衣袂吹拂、水波、雨雪粒子、光影流动）。\n\n"
         "严格输出纯 JSON，不要输出任何额外解释，格式如下：\n"
-        '{"variants": [{"title": "简洁吸睛的中文风格标题", "style_tag": "如 电影写实 / 概念美学 / Wan2.2运镜", '
+        '{"variants": [{"title": "简洁吸睛的中文风格标题", "style_tag": "如 Skill·电影写实 / Skill·概念美学 / Wan2.2运镜", '
         '"summary": "一句精炼中文画面拆解（主体+光线+镜头/运镜亮点）", '
-        '"prompt": "高质量英文自然语言长提示词（65~115词，画面感极强、物理光影准确、细节克制高级、可直接出大片）", '
-        '"neg_prompt": "精准英文负向词", "size": "生图仅用 896x512 / 512x896 / 768x768，视频必须用 640x384（严格适配 8GB 显存不爆）", '
+        '"prompt": "高质量英文自然语言提示词（75~135词，精准可控、细节克制高级、可直接直出大片）", '
+        '"neg_prompt": "精准英文负向词", "size": "生图仅用 896x512 / 512x896 / 768x768，视频必须用 640x384", '
         '"mode": "t2i 或 t2v 或 i2v"}]}\n'
     )
 
     mode_desc = {
-        "t2i": "当前用户目标是文生图（Z-Image Turbo，8GB 显存）。请生成 {n} 套差异鲜明的大师方案：第1套为电影胶片写实大片（size=896x512 或 768x768），第2套为艺术美学/氛围概念版（size=512x896 或 896x512），第3套为 Wan 2.2 电影运镜动态视频版（mode=t2v，size 必须是 640x384 防爆显存）；若超过3套继续扩展高质感流派。",
-        "t2v": "当前用户目标是文生视频（Z-Image 首帧 → Wan 2.2 I2V，8GB 显存）。请全部 {n} 套都突出电影运镜、连贯动作与物理环境动态，size 必须为 640x384，mode 设为 t2v。",
-        "i2v": "当前用户目标是图生视频（Wan 2.2 I2V，8GB 显存）。请全部 {n} 套都聚焦基于首帧的平滑运镜、主体微动与环境光影变化，size 必须为 640x384，mode 设为 i2v。",
+        "t2i": "当前目标是文生图（Z-Image Turbo）。请生成 {n} 套差异鲜明的大师方案：第1套为电影胶片写实大片（size=896x512 或 768x768），第2套为融合 Skill 实战构图的高级艺术/商业视觉版（size=512x896 或 896x512），第3套为 Wan 2.2 电影运镜动态视频版（mode=t2v，size=640x384）；超过3套则继续扩展风格。",
+        "t2v": "当前目标是文生视频（Z-Image 首帧 → Wan 2.2 I2V）。全部 {n} 套都突出电影运镜、连贯动作与物理环境动态，size=640x384，mode=t2v。",
+        "i2v": "当前目标是图生视频（Wan 2.2 I2V）。全部 {n} 套都聚焦基于首帧的平滑运镜、主体微动与环境光影变化，size=640x384，mode=i2v。",
     }.get(mode, "请生成 {n} 套大师级提示词。").format(n=count)
 
     user_msg = f"用户原始想法：{idea}\n"
     if style_hint:
         user_msg += f"用户偏好风格：{style_hint}\n"
-    user_msg += mode_desc + "\n严格返回合法 JSON。"
+    user_msg += mode_desc + rag_block + "\n\n严格返回合法 JSON。"
 
     if chat_fn and base_url and api_key:
         ok, reply = chat_fn(
@@ -668,7 +1471,7 @@ def optimize_prompt_with_ai(raw_input: str, mode: str = "t2i", style_hint: str =
             system_prompt=sys_prompt,
             api_style=api_style,
             proxy=proxy,
-            timeout=38.0,
+            timeout=42.0,
         )
         if ok and reply:
             parsed = _extract_json_block(reply)
@@ -686,31 +1489,184 @@ def optimize_prompt_with_ai(raw_input: str, mode: str = "t2i", style_hint: str =
                         str(v.get("size") or ""),
                     )
                     cleaned.append({
-                        "title": str(v.get("title") or f"AI 优化方案 #{idx}").strip(),
-                        "style_tag": str(v.get("style_tag") or ("Wan2.2 运镜" if vmode in ("t2v", "i2v") else "AI 大师优化")).strip(),
-                        "summary": str(v.get("summary") or "已由 Codex 提示词架构师深度优化").strip(),
+                        "title": str(v.get("title") or f"Skill AI 优化方案 #{idx}").strip(),
+                        "style_tag": str(v.get("style_tag") or ("Wan2.2 运镜" if vmode in ("t2v", "i2v") else "Skill+Codex 优化")).strip(),
+                        "summary": str(v.get("summary") or "已融合 20,000+ 提示词 Skill 骨架由 Codex 深度精炼").strip(),
                         "prompt": pr,
                         "neg_prompt": str(v.get("neg_prompt") or (DEFAULT_NEG_VIDEO if vmode in ("t2v", "i2v") else DEFAULT_NEG_PHOTO)).strip(),
                         "size": vsize,
                         "steps": vsteps,
                         "length": vlen,
-                        "vram_tag": "8G极稳 · %d帧" % vlen if vmode in ("t2v", "i2v") else "8G极稳",
+                        "vram_tag": "8G极速 · %d帧" % vlen if vmode in ("t2v", "i2v") else "8G极速",
                         "mode": vmode,
-                        "source": f"Codex · {model}",
+                        "source": f"Skill-RAG · {model}",
+                        "source_type": "ai",
+                        "preview_url": "",
+                        "need_ref": False,
+                    })
+            if cleaned:
+                rag_note = f"（已参考 {len(rag_refs)} 条 2万+ Skill 实战骨架）" if rag_refs else ""
+                return {
+                    "ok": True,
+                    "msg": f"✨ Skill-RAG AI 已生成 {len(cleaned)} 套高精准大师提示词{rag_note}",
+                    "variants": cleaned,
+                    "rag_count": len(rag_refs),
+                }
+
+    # Seamless local studio fallback (still fuses top local Skill references + dynamic bespoke variants!)
+    fallback = _build_dynamic_templates(idea, mode=mode)[:count]
+    for f in fallback:
+        f["style_tag"] = "Skill 本地增强"
+    return {
+        "ok": True,
+        "msg": f"已用本地 Skill 提示词架构师生成 {len(fallback)} 套优化方案 ✔",
+        "variants": fallback,
+        "rag_count": len(rag_refs),
+    }
+
+
+def remix_prompt_with_skill(template_prompt: str, user_idea: str = "", template_title: str = "",
+                            mode: str = "t2i", codex_cfg: dict = None, chat_fn=None,
+                            proxy: str = "") -> Dict[str, Any]:
+    """执行 ai-image-prompts-skill 核心「Step 5 Remix」流程：
+    完整保留原模板已被社区验证的光影、构图、镜头、材质与风格骨架，精准替换为用户的自定义主体/场景，
+    并自动清理不适配纯文生图的参考图占位语，输出 2 套精改直出方案（忠实精改版 + 电影/Wan2.2 升维版）。
+    """
+    tpl = (template_prompt or "").strip()
+    idea = (user_idea or "").strip()
+    if not tpl:
+        return {"ok": False, "msg": "缺少待精改的源模板提示词", "variants": []}
+
+    cx = codex_cfg or {}
+    base_url = str(cx.get("base_url") or "").strip()
+    api_key = str(cx.get("api_key") or "").strip()
+    model = str(cx.get("model") or "gpt-6-sol").strip()
+    api_style = str(cx.get("api_style") or "auto").strip()
+
+    sys_prompt = (
+        "你是精通 ai-image-prompts-skill Remix 方法论的顶级提示词工程师。\n"
+        "任务：基于用户选中的【高赞社区实战模板】，完整保留该模板已被验证的艺术风格、摄影构图、布光逻辑、色彩科学与材质质感骨架，\n"
+        "将其中的主体/服饰/产品/场景/文字精准替换为【用户的自定义要求】（如果用户未填自定义要求，则把该模板清洗并重构为更适合 Z-Image Turbo / Wan 2.2 直接直出的高精准自然语言版本，移除 'recreate the uploaded person / reference photo / attached image' 等外部参考图依赖句）。\n"
+        "严格输出纯 JSON：\n"
+        '{"variants": ['
+        '{"title": "🎭 忠实骨架精改版（主出图）", "style_tag": "Skill Remix · 精准直出", '
+        '"summary": "说明保留了哪些原模板光影/构图亮点，以及替换了什么主体", '
+        '"prompt": "精改后的高质量英文自然语言提示词（80~140词）", "neg_prompt": "精准英文负向词", '
+        '"size": "896x512 或 512x896 或 768x768（视频用 640x384）", "mode": "t2i 或 t2v 或 i2v"}, '
+        '{"title": "🎬 电影升维 / Wan2.2 动效版", "style_tag": "Skill Remix · 动感大片", '
+        '"summary": "在原模板风格基础上加入电影景深或 Wan2.2 流畅运镜", '
+        '"prompt": "升维后的英文提示词（80~140词）", "neg_prompt": "精准英文负向词", '
+        '"size": "640x384（视频）或 896x512", "mode": "t2v 或 t2i"}'
+        "]}"
+    )
+
+    user_msg = (
+        f"【源实战模板标题】：{template_title or '社区高赞模板'}\n"
+        f"【源实战模板提示词】：\n{tpl[:1600]}\n\n"
+        f"【用户自定义替换/精改要求】：{idea or '保留原模板核心画面与美学，去除参考图依赖，优化为 Z-Image Turbo 与 Wan 2.2 可直接出大片的精准英文提示词'}\n"
+        f"【当前创作模式】：{mode}\n"
+        "请严格返回合法 JSON，包含 2 套精改方案。"
+    )
+
+    if chat_fn and base_url and api_key:
+        ok, reply = chat_fn(
+            base_url=base_url,
+            api_key=api_key,
+            model=model,
+            messages=[{"role": "user", "content": user_msg}],
+            system_prompt=sys_prompt,
+            api_style=api_style,
+            proxy=proxy,
+            timeout=42.0,
+        )
+        if ok and reply:
+            parsed = _extract_json_block(reply)
+            rows = parsed.get("variants") if isinstance(parsed, dict) else (parsed if isinstance(parsed, list) else None)
+            cleaned = []
+            if isinstance(rows, list):
+                for idx, v in enumerate(rows[:3], 1):
+                    if not isinstance(v, dict):
+                        continue
+                    pr = str(v.get("prompt") or "").strip()
+                    if len(pr) < 20:
+                        continue
+                    vmode, vsize, vsteps, vlen = _safe_spec(
+                        str(v.get("mode") or mode or "t2i"),
+                        str(v.get("size") or ""),
+                    )
+                    cleaned.append({
+                        "title": str(v.get("title") or f"Skill 精改方案 #{idx}").strip(),
+                        "style_tag": str(v.get("style_tag") or "Skill Remix").strip(),
+                        "summary": str(v.get("summary") or "基于社区模板骨架精准替换主体与光影参数").strip(),
+                        "prompt": pr,
+                        "neg_prompt": str(v.get("neg_prompt") or (DEFAULT_NEG_VIDEO if vmode in ("t2v", "i2v") else DEFAULT_NEG_PHOTO)).strip(),
+                        "size": vsize,
+                        "steps": vsteps,
+                        "length": vlen,
+                        "vram_tag": "8G极速 · %d帧" % vlen if vmode in ("t2v", "i2v") else "8G极速",
+                        "mode": vmode,
+                        "source": f"Skill Remix · {model}",
+                        "source_type": "ai",
+                        "preview_url": "",
+                        "need_ref": False,
                     })
             if cleaned:
                 return {
                     "ok": True,
-                    "msg": f"✨ AI 已按你的输入深度生成 {len(cleaned)} 套大师级提示词（{model}）",
+                    "msg": f"🎭 Skill Remix 精改完成：已基于「{template_title or '所选模板'}」生成 {len(cleaned)} 套高精准方案 ✔",
                     "variants": cleaned,
                 }
 
-    # Seamless local studio fallback if Codex is momentarily unreachable
-    fallback = _build_dynamic_templates(idea, mode=mode)[:count]
-    for f in fallback:
-        f["style_tag"] = f.get("source", "本地大师引擎")
+    # Local deterministic Skill Remix fallback (cleans markdown headers & reference-photo boilerplate + injects user subject!)
+    cleaned_tpl = re.sub(r"(?im)^#+\s*", "", tpl)
+    cleaned_tpl = re.sub(r"(?i)(completely\s+)?(recreate|use|keep|preserve)\s+the\s+(uploaded|attached|reference|provided)\s+(person|face|photo|image|subject)[^.\n]*[.\n]?", "", cleaned_tpl)
+    cleaned_tpl = re.sub(r"\s+", " ", cleaned_tpl).strip()[:750]
+    subj = _translate_keywords_local(idea) if idea else ""
+    remixed_t2i = (
+        f"Subject focus: {subj}. Styled and composed faithfully following this visual art direction: {cleaned_tpl}"
+        if subj else cleaned_tpl
+    )
+    remixed_vid = (
+        f"Cinematic 24fps smooth slow dolly-in video shot, {('featuring ' + subj + ', ') if subj else ''}"
+        f"preserving exact lighting, atmosphere and visual composition: {cleaned_tpl[:480]}, "
+        f"subtle natural motion in fabrics, hair, mist and specular reflections"
+    )
+    m1, s1, st1, l1 = _safe_spec(mode if mode in ("t2i", "t2v", "i2v") else "t2i", _guess_size_from_prompt(remixed_t2i, mode=mode))
     return {
         "ok": True,
-        "msg": f"已用本地大师提示词架构师生成 {len(fallback)} 套优化方案 ✔",
-        "variants": fallback,
+        "msg": f"🎭 已用本地 Skill Remix 引擎基于「{template_title or '所选模板'}」生成 2 套精改方案 ✔",
+        "variants": [
+            {
+                "title": f"🎭 Skill 精改·直出主体版{('（' + idea[:14] + '）') if idea else ''}",
+                "style_tag": "Skill Remix · 本地精改",
+                "summary": "已自动清洗参考图占位词，保留原模板构图/光线骨架并融合你的核心主题",
+                "prompt": remixed_t2i,
+                "neg_prompt": DEFAULT_NEG_VIDEO if m1 in ("t2v", "i2v") else DEFAULT_NEG_PHOTO,
+                "size": s1,
+                "steps": st1,
+                "length": l1,
+                "vram_tag": "8G极速 · %d帧" % l1 if m1 in ("t2v", "i2v") else "8G极速",
+                "mode": m1,
+                "source": "Skill Remix",
+                "source_type": "ai",
+                "preview_url": "",
+                "need_ref": False,
+            },
+            {
+                "title": f"🎬 Skill 精改·Wan2.2 电影运镜版{('（' + idea[:12] + '）') if idea else ''}",
+                "style_tag": "Skill Remix · Wan2.2运镜",
+                "summary": "在原模板视觉风格之上注入平滑缓推运镜与自然环境微动，适合 Wan 2.2 视频生成",
+                "prompt": remixed_vid,
+                "neg_prompt": DEFAULT_NEG_VIDEO,
+                "size": "640x384",
+                "steps": 4,
+                "length": 21,
+                "vram_tag": "8G极速 · 21帧",
+                "mode": "t2v",
+                "source": "Skill Remix",
+                "source_type": "ai",
+                "preview_url": "",
+                "need_ref": False,
+            },
+        ],
     }

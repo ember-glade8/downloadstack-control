@@ -81,10 +81,11 @@
   - **文生图（T2I）**：对接本地 ComfyUI（如 Z-Image Turbo / SD Checkpoint），结果直接渲染在站内画廊，点击弹出全屏灯箱预览。
   - **一键文生视频（T2V） & 图生视频（I2V）**：支持「提示词 → 自动生成首帧 → Wan 2.2 I2V 出片」单次输入全自动链路，也支持上传本地首帧或将画廊图片一键设为视频首帧。
 - **🔌 接入自己的本地模型**：任何终端用户均可点击画室顶部的「接入自己的本地模型」，填入自己的 **自定义 ComfyUI 地址与 API Workflow JSON**（支持 `{{PROMPT}}` / `{{NEG_PROMPT}}` / `{{IMAGE}}` / `{{SEED}}` 占位符）、**Stable Diffusion WebUI / Forge** 或 **OpenAI Images 兼容接口**，配置安全存于本地 `config.json`。
-- **✨ 专业提示词搜索引擎 & AI 大师优化架构师**（`prompt_engine.py`）：
-  - **13 大分类 54 套大师级模板库**：专为 Lumina2 / Qwen 编码器与 Wan 2.2 调优的自然语言电影提示词（拒绝老式无意义堆砌词）。
-  - **中英语义检索 + 关键词即时合成 6 风格模板**：输入任意中文或英文关键词，毫秒返回精选匹配 + 6 套专属定制风格模板。
-  - **✨ AI 大师一键优化**：调用本机配置的 Codex 智能体，把任意一句口语想法升格为 **3 套差异化大师方案**（电影写实版 / 概念美学版 / Wan2.2 运镜视频版），附中文拆解、精准负向词与最佳画幅，一键填入或立即生成。
+- **✨ Skill 驱动超级提示词引擎（20,000+ 社区实战词库 + 实拍样图 + Skill Remix + Skill-RAG AI 优化）**（`prompt_engine.py`）：
+  - **🧩 自动挂载本机提示词 Skill + 云端 2万+ 词库一键同步**：跨平台自动发现本机已安装的 `ai-image-prompts-skill`（支持 `~/.workbuddy` / `~/.agents` / `~/.claude` / `~/.codex` / `~/.gemini` 及面板缓存目录，覆盖 **15,847+ 去重 / 23,067 条 11 大分类社区实战提示词**），未安装的用户亦可点击面板内 **「🔄 同步2万+库」** 从公开 GitHub 仓库一键拉取，同时支持在 `skills/` 目录放入自定义 `.json` 提示词包扩展。
+  - **🖼️ 实拍样图缩略图 + 站内放大灯箱**：所有社区 Skill 模板通过安全白名单同源代理 `/api/prompt_preview` 实时渲染实拍参考样图，点击即可站内全屏放大看清效果再决定是否使用。
+  - **⚡ 220+ 中英双语语义扩展毫秒检索**：输入中文关键词（如「赛博女孩」「香水广告」「游戏角色」「小红书封面」「漫画分镜」）即可在 <100ms 内精准命中海量英文/中文社区实战提示词，支持来源切换、11 大 Skill 分类筛选、随机换一批与分页加载。
+  - **🎭 Skill Remix 模板精改 & 🧠 Skill-RAG AI 大师优化**：对任意社区高赞模板点击 **「🎭 Skill 精改」**，严格保留原模板已验证的光影/镜头/构图骨架，精准替换为自己的主题并自动清洗参考图依赖；点击 **「✨ AI 大师优化」** 会先从 2万+ Skill 库自动检索高分范本骨架，结合 7 层结构化摄影规范输出 Z-Image Turbo / Wan 2.2 高精准大片提示词。
   - **专业词缀积木栏**：一键追加光影、电影镜头焦段与 Wan 2.2 运镜修饰语。
 
 ### 6. 🎙️ 开源 AI 声音克隆 & 神经配音工坊
@@ -145,7 +146,7 @@ downloadstack-control/
 ├─ panel.py              核心本地服务（HTTP /api/state、/api/action、/api/media、/api/stream_audio、/ariang/、/qbit/ 代理）
 ├─ panel_ui.html         无构建链单文件 Spatial 3D Command OS 前端（含 WebGL GLSL 沉浸舞台）
 ├─ media_studio.py       6 音源搜歌、6 大榜单、LRC 歌词、音频流解析、声音克隆、ComfyUI 与 Codex 客户端
-├─ prompt_engine.py      AI 画室提示词引擎（54+ 大师模板库、中英语义检索、动态合成、Codex 优化架构师）
+├─ prompt_engine.py      Skill 驱动超级提示词引擎（自动挂载 20,000+ 社区 Skill 词库、云端同步、实拍样图、Skill Remix 与 Skill-RAG 优化）
 ├─ magnet_tools.py       5 源并发磁力搜索引擎、磁力 / InfoHash 解析、公共 Tracker 热更新、DHT 诊断与 aria2.conf 无损修复
 ├─ ytdl_gui.py           独立视频下载 GUI 工具
 ├─ setup_wizard.py       图形 / 命令行跨平台引导向导
