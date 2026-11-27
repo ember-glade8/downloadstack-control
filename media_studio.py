@@ -1209,6 +1209,23 @@ def probe_comfyui_server(base_url: str, timeout: float = 1.5) -> dict:
     }
 
 
+def comfyui_free_vram(base_url: str, timeout: float = 6.0) -> tuple:
+    """调用 ComfyUI /free 卸载缓存模型并释放显存（8G 显存跨模型切换防 OOM 关键步骤）。"""
+    url = (base_url or "http://127.0.0.1:8188").strip().rstrip("/")
+    try:
+        r = requests.post(
+            url + "/free",
+            json={"unload_models": True, "free_memory": True},
+            timeout=timeout,
+            proxies={"http": None, "https": None},
+        )
+        if r.status_code == 200:
+            return True, "已通知 ComfyUI 卸载缓存模型并释放显存 ✔"
+        return False, "释放显存返回 HTTP %s" % r.status_code
+    except Exception as ex:
+        return False, "释放显存失败：%s" % ex
+
+
 def build_zimage_t2i_workflow(prompt: str, neg_prompt: str = "", width: int = 1024, height: int = 576,
                               steps: int = 8, seed: int = -1, cfg: float = 1.0,
                               filename_prefix: str = "DS_ZImg") -> dict:

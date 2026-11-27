@@ -1421,13 +1421,14 @@
             </div>
 
             <div class="fld">
-              <label>画质 / 格式预设</label>
+              <label>画质 / 格式预设（下载完成后自动 ffprobe 实测真实分辨率）</label>
               <div class="pill-row" id="yt-q-pills">
-                <span class="chip active-amber" data-yq="best" onclick="pickYtQ('best')">💎 最高画质 (4K/HDR)</span>
-                <span class="chip" data-yq="1080p" onclick="pickYtQ('1080p')">📺 1080P 高清</span>
-                <span class="chip" data-yq="720p" onclick="pickYtQ('720p')">📱 720P 流畅</span>
-                <span class="chip" data-yq="mp3" onclick="pickYtQ('mp3')">🎵 仅提取 MP3</span>
+                <span class="chip active-amber" data-yq="best" onclick="pickYtQ('best')">💎 源站最高 (优先真4K/HDR)</span>
+                <span class="chip" data-yq="1080" onclick="pickYtQ('1080')">📺 1080P 高清</span>
+                <span class="chip" data-yq="720" onclick="pickYtQ('720')">📱 720P 流畅</span>
+                <span class="chip" data-yq="audio" onclick="pickYtQ('audio')">🎵 仅提取 MP3</span>
               </div>
+              <div class="c-dim" style="font-size:10.5px;margin-top:2px;">提示：只有源视频本身提供 4K 才能下到真 4K；B站 1080P+/4K 需在下方选 Firefox 或导入 cookies.txt 登录态。</div>
             </div>
 
             <div class="grid-2">
@@ -1718,6 +1719,7 @@
             <div class="mini-stat-v c-mint" id="ai-mdl-st">探测中…</div>
           </div>
           <button class="btn btn-sm btn-violet" onclick="act('aigc_start_comfy')">▶ 启动 ComfyUI</button>
+          <button class="btn btn-sm btn-mint" onclick="act('aigc_free_vram')" title="立即卸载 ComfyUI 缓存模型，防止 8G 显存爆掉">🧹 释放显存</button>
           <button class="btn btn-sm btn-rose" onclick="act('aigc_stop_comfy')">■ 停止</button>
           <button class="btn btn-sm btn-cyan" onclick="openCustomModelModal()">🔌 接入自己的本地模型</button>
         </div>
@@ -1792,25 +1794,32 @@
 
             <div class="grid-3">
               <div class="fld">
-                <label>画幅尺寸</label>
-                <select id="ai-size" class="sel">
-                  <option value="768x768">768×768 (1:1 极速)</option>
-                  <option value="1024x576" selected>1024×576 (16:9 宽屏)</option>
-                  <option value="576x1024">576×1024 (9:16 竖屏)</option>
-                  <option value="832x480">832×480 (Wan2.2 视频推荐)</option>
+                <label>画幅尺寸（已适配 8G 显存）</label>
+                <select id="ai-size" class="sel" onchange="updateAigcVramGuard()">
+                  <option value="896x512" selected>896×512 (16:9 · 8G生图极稳)</option>
+                  <option value="768x768">768×768 (1:1 · 8G实测极稳)</option>
+                  <option value="512x896">512×896 (9:16 · 8G竖屏极稳)</option>
+                  <option value="1024x576">1024×576 (16:9 · 仅生图)</option>
+                  <option value="640x384">640×384 (16:9 · 8G视频防爆)</option>
+                  <option value="768x432">768×432 (16:9 · 8G视频平衡)</option>
                 </select>
               </div>
               <div class="fld">
                 <label>采样步数</label>
-                <input id="ai-steps" class="inp mono" type="number" min="1" max="50" value="8" />
+                <input id="ai-steps" class="inp mono" type="number" min="1" max="20" value="8" onchange="updateAigcVramGuard()" />
               </div>
               <div class="fld">
-                <label>视频帧数 / 种子</label>
+                <label>视频帧数(≤25) / 种子</label>
                 <div style="display:flex;gap:4px;">
-                  <input id="ai-length" class="inp mono" type="number" min="9" max="81" step="4" value="33" title="视频帧数(仅视频模式)" />
+                  <input id="ai-length" class="inp mono" type="number" min="9" max="33" step="4" value="21" title="8G显存视频推荐 17~25 帧防爆" onchange="updateAigcVramGuard()" />
                   <input id="ai-seed" class="inp mono" type="number" value="-1" title="-1 为随机种子" />
                 </div>
               </div>
+            </div>
+
+            <div class="row-item" style="justify-content:space-between;background:rgba(0,245,184,0.06);border-color:rgba(0,245,184,0.24);padding:6px 10px;">
+              <span class="mono" style="font-size:10.5px;" id="ai-vram-guard-lbl">🛡️ 8G 显存防爆护栏已开启 · 当前参数安全</span>
+              <button class="btn btn-xs" onclick="act('aigc_free_vram')">🧹 清显存</button>
             </div>
 
             <div class="fld">
@@ -3426,17 +3435,41 @@
   }
   window.pickAigcEng = pickAigcEng;
 
+  function updateAigcVramGuard() {
+    const lbl = $('ai-vram-guard-lbl');
+    if (!lbl) return;
+    const [w, h] = ($('ai-size').value || '896x512').split('x').map(Number);
+    const px = (w || 768) * (h || 768);
+    const len = Number($('ai-length').value || 21);
+    const isVid = S.aigcMode === 't2v' || S.aigcMode === 'i2v';
+    if (isVid && (px > 335000 || len > 25)) {
+      lbl.textContent = `⚠️ ${w}×${h}·${len}帧超出8G安全线，提交时后端会自动降载至 640×384·21帧防爆`;
+      lbl.className = 'mono c-amber';
+    } else if (!isVid && px > 600000) {
+      lbl.textContent = `⚠️ ${w}×${h}超出8G生图安全线，提交时后端会自动收紧防爆`;
+      lbl.className = 'mono c-amber';
+    } else {
+      lbl.textContent = isVid
+        ? `🛡️ 8G 显存安全 · Wan2.2 (${w}×${h} · ${len}帧 · 自动先卸生图模型)`
+        : `🛡️ 8G 显存安全 · Z-Image Turbo (${w}×${h} · ${$('ai-steps').value}步)`;
+      lbl.className = 'mono c-mint';
+    }
+  }
+  window.updateAigcVramGuard = updateAigcVramGuard;
+
   function pickAigcMode(mode) {
     S.aigcMode = mode;
     document.querySelectorAll('#ai-mode-pills .chip').forEach(c => c.classList.toggle('active-violet', c.dataset.amode === mode));
     $('ai-ff-box').classList.toggle('hidden', mode === 't2i');
     if (mode === 'i2v' || mode === 't2v') {
-      $('ai-size').value = '832x480';
+      $('ai-size').value = '640x384';
       $('ai-steps').value = '4';
+      $('ai-length').value = '21';
     } else {
-      $('ai-size').value = '768x768';
+      $('ai-size').value = '896x512';
       $('ai-steps').value = '8';
     }
+    updateAigcVramGuard();
   }
   window.pickAigcMode = pickAigcMode;
 
@@ -3493,7 +3526,8 @@
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0;">
             <span style="font-size:13px;font-weight:800;color:#fff;">${esc(it.title || '提示词模板')}</span>
             <span class="tag-pill mono" style="${srcCol};">${esc(it.style_tag || it.source || '精选')}</span>
-            <span class="tag-pill mono" style="background:rgba(255,255,255,0.08);color:#cbd5e1;">${mLbl} · ${esc(it.size || '1024x576')}</span>
+            <span class="tag-pill mono" style="background:rgba(0,245,184,0.16);color:#6ee7b7;">🛡️ ${esc(it.vram_tag || '8G极稳')}</span>
+            <span class="tag-pill mono" style="background:rgba(255,255,255,0.08);color:#cbd5e1;">${mLbl} · ${esc(it.size || '896x512')}</span>
           </div>
           <div style="display:flex;gap:6px;flex-shrink:0;">
             <button class="btn btn-xs btn-cyan" onclick="applyPromptCard(${i}, false)">📥 填入使用</button>
@@ -3538,7 +3572,10 @@
     if (it.size && Array.from($('ai-size').options).some(o => o.value === it.size)) {
       $('ai-size').value = it.size;
     }
-    toast(`已填入「${it.title}」并匹配最佳画幅与负向词 ✔`, 'mint');
+    if (it.steps) $('ai-steps').value = it.steps;
+    if (it.length) $('ai-length').value = Math.min(25, Number(it.length));
+    updateAigcVramGuard();
+    toast(`已填入「${it.title}」（已锁定 8G 安全参数）✔`, 'mint');
     if (runNow) {
       setAigcRightTab('gallery');
       startAigcGenerate();

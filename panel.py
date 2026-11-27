@@ -1195,14 +1195,20 @@ class ControlBackend:
         ff_dir = self._find_ffmpeg()
         if ff_dir:
             cmd += ["--ffmpeg-location", ff_dir]
-        if quality == "1080":
-            cmd += ["-f", "bv*[height<=1080]+ba/b[height<=1080]/best", "--merge-output-format", "mp4"]
-        elif quality == "720":
-            cmd += ["-f", "bv*[height<=720]+ba/b[height<=720]/best", "--merge-output-format", "mp4"]
-        elif quality == "audio":
+        q_norm = str(quality or "best").strip().lower()
+        if q_norm in ("1080", "1080p"):
+            cmd += ["-f", "bv*[height<=1080]+ba/b[height<=1080]/best", "-S", "res:1080,fps,vbr", "--merge-output-format", "mp4"]
+        elif q_norm in ("720", "720p"):
+            cmd += ["-f", "bv*[height<=720]+ba/b[height<=720]/best", "-S", "res:720,fps,vbr", "--merge-output-format", "mp4"]
+        elif q_norm in ("audio", "mp3"):
             cmd += ["-x", "--audio-format", "mp3", "--audio-quality", "0"]
         else:
-            cmd += ["-f", "bv*+ba/best", "--merge-output-format", "mp4"]
+            # 优先拉取源站真实最高分辨率（2160p/4K AV1/VP9/HEVC），避免因强限 H.264 悄悄降级到 1080p
+            cmd += [
+                "-f", "bv*+ba/best",
+                "-S", "res:2160,hdr:12,fps,vbr,abr",
+                "--merge-output-format", "mp4",
+            ]
         if "bilibili.com" in url.lower() or "b23.tv" in url.lower():
             cmd += ["--add-header", "Referer:https://www.bilibili.com/"]
         cmd += cookie_args + extra_args + [url]
@@ -1341,12 +1347,35 @@ class ControlBackend:
                     rc, last_file = 0, xhs_file
 
             if rc == 0:
+                res_note = ""
+                if last_file and Path(last_file).is_file() and quality not in ("audio", "mp3"):
+                    try:
+                        ff_dir = self._find_ffmpeg()
+                        ffprobe = str(Path(ff_dir) / ("ffprobe.exe" if IS_WIN else "ffprobe")) if ff_dir else (shutil.which("ffprobe") or "")
+                        if ffprobe and Path(ffprobe).is_file():
+                            pr = subprocess.run(
+                                [ffprobe, "-v", "error", "-select_streams", "v:0",
+                                 "-show_entries", "stream=width,height,codec_name",
+                                 "-of", "csv=p=0", last_file],
+                                capture_output=True, text=True, timeout=6, **_popen_kwargs()
+                            )
+                            parts = [x.strip() for x in (pr.stdout or "").strip().split(",") if x.strip()]
+                            if len(parts) >= 2:
+                                vw, vh = int(parts[0]), int(parts[1])
+                                vc = parts[2] if len(parts) >= 3 else ""
+                                tag = "真4K" if max(vw, vh) >= 3600 else ("2K" if max(vw, vh) >= 2400 else ("1080P" if max(vw, vh) >= 1800 else f"{vh}P"))
+                                res_note = "（实测 %dx%d %s · %s）" % (vw, vh, vc, tag)
+                                self._yt_append_log("[OK] 实测成品画质：%dx%d (%s) → %s" % (vw, vh, vc, tag))
+                                if max(vw, vh) < 1800 and ("bilibili.com" in url.lower() or "youtube.com" in url.lower()):
+                                    self._yt_append_log("[WARN] 当前实测低于 1080P：可能是源视频本身最高如此，或 B站/YouTube 需要选择浏览器 Cookies 登录态才能解锁 1080P+/真4K")
+                    except Exception:
+                        pass
                 with self.lock:
                     self.yt_job["pct"] = 100.0
-                    self.yt_job["status"] = "下载完成 ✔"
+                    self.yt_job["status"] = "下载完成 ✔" + res_note
                 self._recent_ts = 0.0
                 self._yt_append_log("[OK] 下载完成 → %s" % (last_file or out_dir))
-                self.log("YT 工坊下载完成 → %s" % (last_file or out_dir), "OK")
+                self.log("YT 工坊下载完成%s → %s" % (res_note, last_file or out_dir), "OK")
                 if upscale and quality != "audio":
                     v2x = self._find_video2x()
                     if v2x and last_file and Path(last_file).is_file():
@@ -1891,6 +1920,37 @@ class ControlBackend:
                         raise RuntimeError("等待 ComfyUI 启动超时，请查看 ComfyUI 窗口或稍后重试")
 
                 models = MS.detect_comfyui_models(str(cc.get("root") or ""), str(cc.get("start_bat") or ""))
+                vram_tot = float(srv.get("vram_total_gb") or 8.0)
+                vram_free = float(srv.get("vram_free_gb") or 0.0)
+                is_low_vram = (vram_tot <= 9.5)
+
+                # 8G 显存自动防爆护栏：绝不允许模板或误填参数导致 CUDA OOM
+                if is_low_vram:
+                    if mode == "t2i":
+                        if width * height > 600000:
+                            old_wh = (width, height)
+                            if width > height:
+                                width, height = 896, 512
+                            elif height > width:
+                                width, height = 512, 896
+                            else:
+                                width, height = 768, 768
+                            self._aigc_append_log("[WARN] 8G显存护栏：生图画幅 %dx%d → %dx%d 防爆显存" % (old_wh[0], old_wh[1], width, height))
+                        if steps > 12:
+                            steps = 8
+                    else:
+                        if width * height > 335000:
+                            old_wh = (width, height)
+                            width, height = (640, 384) if width >= height else (384, 640)
+                            self._aigc_append_log("[WARN] 8G显存护栏：视频画幅 %dx%d → %dx%d 防爆显存" % (old_wh[0], old_wh[1], width, height))
+                        if length > 25:
+                            self._aigc_append_log("[WARN] 8G显存护栏：视频帧数 %d → 21 帧防爆显存" % length)
+                            length = 21
+                        if vram_free > 0 and vram_free < 2.5:
+                            self._aigc_append_log("[INFO] 当前剩余显存 %.2fG 偏低，先释放 ComfyUI 缓存…" % vram_free)
+                            MS.comfyui_free_vram(url)
+                            time.sleep(1.0)
+
                 if mode == "t2i":
                     if models.get("z_image_ready"):
                         self._aigc_append_log("[INFO] 使用本地 Z-Image Turbo 文生图 (%dx%d, %d 步)" % (width, height, steps))
@@ -1909,14 +1969,18 @@ class ControlBackend:
                     if mode == "t2v" or frame_path is None:
                         if not models.get("z_image_ready"):
                             raise RuntimeError("图生视频请先上传或从画廊选择首帧图片")
-                        self._aigc_append_log("[INFO] 文生视频第 1 步：用 Z-Image Turbo 自动生成首帧 (832x480)…")
+                        self._aigc_append_log("[INFO] 文生视频第 1 步：用 Z-Image Turbo 自动生成首帧 (%dx%d)…" % (width, height))
                         _prog(10.0, "第 1/2 步：Z-Image Turbo 生成首帧…")
-                        wf1 = MS.build_zimage_t2i_workflow(prompt, neg_prompt, width or 832, height or 480, 8, seed, filename_prefix="DS_KeyFrame")
+                        wf1 = MS.build_zimage_t2i_workflow(prompt, neg_prompt, width or 640, height or 384, 8, seed, filename_prefix="DS_KeyFrame")
                         ok1, msg1, saved1 = MS.comfyui_queue_and_wait(url, wf1, out_dir, lambda p, s: _prog(p * 0.42, "首帧生成：" + s), _canceled)
                         if not ok1 or not saved1:
                             raise RuntimeError("首帧生成失败：" + msg1)
                         frame_path = Path(saved1[0]["path"])
                         self._aigc_append_log("[OK] 首帧已生成 → %s" % frame_path.name)
+                        # 关键防爆步骤：在加载 Wan2.2 14B 前彻底卸载 Z-Image 模型释放 8G 显存！
+                        self._aigc_append_log("[INFO] 卸载 Z-Image 释放显存，为 Wan 2.2 14B 腾出空间…")
+                        MS.comfyui_free_vram(url)
+                        time.sleep(1.5)
 
                     _prog(45.0, "第 2/2 步：上传首帧至 Wan 2.2 I2V…")
                     uok, ures = MS.comfyui_upload_image(url, frame_path)
@@ -2815,6 +2879,16 @@ class ControlBackend:
                 self._aigc_append_log("[WARN] 已关闭本地 ComfyUI PID=%s" % pid)
                 return True, "已安全关闭本地 ComfyUI", {}
             return False, "未找到本面板记录的 ComfyUI 进程", {}
+
+        if act == "aigc_free_vram":
+            if MS is None:
+                return False, "media_studio 模块不可用", {}
+            cc = self.cfg.get("comfyui") or {}
+            url = str(cc.get("url") or cc.get("base_url") or "http://127.0.0.1:8188")
+            ok, msg = MS.comfyui_free_vram(url)
+            self._aigc_env_ts = 0.0
+            self._aigc_append_log(("[OK] " if ok else "[WARN] ") + msg)
+            return ok, msg, {}
 
         if act == "aigc_generate":
             import threading

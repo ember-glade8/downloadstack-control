@@ -90,16 +90,45 @@ CN_EN_CONCEPTS = {
     "月": "luminous glowing moon", "星": "glittering starry cosmos", "城": "towering atmospheric city",
 }
 
-def _tpl(cid, title, tags, summary, prompt, neg=None, size="1024x576", mode="t2i"):
+# 8G 显存安全画幅标准（Z-Image Turbo <= 589,824px；Wan2.2 14B <= 331,776px 且 <= 25帧）
+SAFE_T2I_SIZES = ("768x768", "896x512", "512x896", "1024x576")
+SAFE_VID_SIZES = ("640x384", "768x432")
+
+
+def _safe_spec(mode: str, size: str) -> tuple:
+    """强制把任何模板或 AI 返回的分辨率/步数/帧数收敛到 8G 显存防爆区间。"""
+    m = (mode or "t2i").strip().lower()
+    if m not in ("t2i", "t2v", "i2v"):
+        m = "t2i"
+    s = (size or "").strip()
+    if m in ("t2v", "i2v"):
+        if s not in SAFE_VID_SIZES:
+            s = "640x384"
+        return m, s, 4, 21
+    # T2I: map legacy tall 576x1024 -> 512x896 (saves ~22% VRAM!) and 1024x576 -> 896x512 for fast safe headroom
+    if s == "576x1024":
+        s = "512x896"
+    elif s == "1024x576":
+        s = "896x512"
+    elif s not in SAFE_T2I_SIZES:
+        s = "768x768"
+    return "t2i", s, 8, 21
+
+
+def _tpl(cid, title, tags, summary, prompt, neg=None, size="896x512", mode="t2i"):
+    m, safe_s, safe_steps, safe_len = _safe_spec(mode, size)
     return {
         "cat": cid,
         "title": title,
         "tags": tags,
         "summary": summary,
         "prompt": prompt,
-        "neg_prompt": neg or (DEFAULT_NEG_VIDEO if mode in ("t2v", "i2v") else (DEFAULT_NEG_ANIME if cid == "anime" else DEFAULT_NEG_PHOTO)),
-        "size": size,
-        "mode": mode,
+        "neg_prompt": neg or (DEFAULT_NEG_VIDEO if m in ("t2v", "i2v") else (DEFAULT_NEG_ANIME if cid == "anime" else DEFAULT_NEG_PHOTO)),
+        "size": safe_s,
+        "steps": safe_steps,
+        "length": safe_len,
+        "vram_tag": "8G极稳 · %d帧" % safe_len if m in ("t2v", "i2v") else "8G极稳",
+        "mode": m,
         "source": "大师精选库",
     }
 
@@ -176,7 +205,7 @@ MASTER_PROMPTS: List[Dict[str, Any]] = [
          size="832x480", mode="t2v"),
 
     # ---------- 3. 赛博与科幻 (cyber) ----------
-    _tpl("cyber", "赛博朋克暴雨立体巨城全景", "赛博 科幻 城市 霓虹 雨夜 未来 8K",
+    _tpl("cyber", "赛博朋克暴雨立体巨城全景", "赛博 科幻 城市 霓虹 雨夜 未来 电影",
          "银翼杀手 2049 级史诗纵深、悬浮飞车流、巨型全息投影与雾雨",
          "Colossal Blade Runner 2049 inspired cyberpunk megacity at midnight in pouring rain, towering brutalist megastructures wrapped in towering translucent holographic Japanese and Chinese neon billboards, streams of flying spinner vehicles weaving through misty volumetric searchlight beams between skyscraper canyons, glistening rain-slicked skybridges far below, shot on 24mm anamorphic IMAX cinema lens, deep teal and neon magenta atmosphere",
          size="1024x576", mode="t2i"),
@@ -389,7 +418,10 @@ def _build_dynamic_templates(query: str, mode: str = "t2i") -> List[Dict[str, An
                 f"anamorphic lens, Kodak Vision3 color science, subtle organic film grain"
             ),
             "neg_prompt": DEFAULT_NEG_PHOTO,
-            "size": "1024x576",
+            "size": "896x512",
+            "steps": 8,
+            "length": 21,
+            "vram_tag": "8G极稳",
             "mode": "t2i",
             "source": "关键词智能合成",
         },
@@ -397,7 +429,7 @@ def _build_dynamic_templates(query: str, mode: str = "t2i") -> List[Dict[str, An
             "cat": "video",
             "title": f"【定制·Wan2.2运镜】{q} 动态电影镜头",
             "tags": f"{q} 视频 运镜 Wan2.2 动态 慢动作",
-            "summary": "专为 Wan 2.2 调优：平稳推镜/微环绕 + 真实物理微动 + 电影连续帧稳定性",
+            "summary": "专为 8G 显存 Wan 2.2 调优（640×384 · 21帧 · 4步防爆）：平稳推镜 + 连续物理微动",
             "prompt": (
                 f"Cinematic 24fps film video shot of {subj}, smooth slow dolly-in camera movement with gentle parallax, "
                 f"natural continuous micro-motions in lighting, drifting atmospheric mist, wind-swept fabrics and subtle "
@@ -405,7 +437,10 @@ def _build_dynamic_templates(query: str, mode: str = "t2i") -> List[Dict[str, An
                 f"crisp subject consistency, silky motion physics, IMAX film look"
             ),
             "neg_prompt": DEFAULT_NEG_VIDEO,
-            "size": "832x480",
+            "size": "640x384",
+            "steps": 4,
+            "length": 21,
+            "vram_tag": "8G极稳 · 21帧",
             "mode": "t2v" if mode != "i2v" else "i2v",
             "source": "关键词智能合成",
         },
@@ -421,7 +456,10 @@ def _build_dynamic_templates(query: str, mode: str = "t2i") -> List[Dict[str, An
                 f"inspired cinematic lighting and emotional atmosphere"
             ),
             "neg_prompt": DEFAULT_NEG_ANIME,
-            "size": "1024x576",
+            "size": "896x512",
+            "steps": 8,
+            "length": 21,
+            "vram_tag": "8G极稳",
             "mode": "t2i",
             "source": "关键词智能合成",
         },
@@ -437,7 +475,10 @@ def _build_dynamic_templates(query: str, mode: str = "t2i") -> List[Dict[str, An
                 f"halation, Blade Runner 2049 inspired cinematography"
             ),
             "neg_prompt": DEFAULT_NEG_PHOTO,
-            "size": "1024x576",
+            "size": "896x512",
+            "steps": 8,
+            "length": 21,
+            "vram_tag": "8G极稳",
             "mode": "t2i",
             "source": "关键词智能合成",
         },
@@ -453,14 +494,17 @@ def _build_dynamic_templates(query: str, mode: str = "t2i") -> List[Dict[str, An
                 f"tranquil museum-grade fine art lighting"
             ),
             "neg_prompt": DEFAULT_NEG_PHOTO,
-            "size": "1024x576",
+            "size": "896x512",
+            "steps": 8,
+            "length": 21,
+            "vram_tag": "8G极稳",
             "mode": "t2i",
             "source": "关键词智能合成",
         },
         {
             "cat": "product",
-            "title": f"【定制·商业特写】{q} 棚拍 8K 质感大片",
-            "tags": f"{q} 商业 棚拍 特写 微距 质感 8K",
+            "title": f"【定制·商业特写】{q} 棚拍质感大片",
+            "tags": f"{q} 商业 棚拍 特写 微距 质感 高清",
             "summary": "中画幅微距棚拍、雕塑感轮廓光与洁净背景、高奢视觉海报级清晰度",
             "prompt": (
                 f"Ultra-crisp luxury studio editorial close-up of {subj}, sculpted by precision directional rim lighting "
@@ -470,6 +514,9 @@ def _build_dynamic_templates(query: str, mode: str = "t2i") -> List[Dict[str, An
             ),
             "neg_prompt": DEFAULT_NEG_PHOTO,
             "size": "768x768",
+            "steps": 8,
+            "length": 21,
+            "vram_tag": "8G极稳",
             "mode": "t2i",
             "source": "关键词智能合成",
         },
@@ -597,14 +644,14 @@ def optimize_prompt_with_ai(raw_input: str, mode: str = "t2i", style_hint: str =
         '{"variants": [{"title": "简洁吸睛的中文风格标题", "style_tag": "如 电影写实 / 概念美学 / Wan2.2运镜", '
         '"summary": "一句精炼中文画面拆解（主体+光线+镜头/运镜亮点）", '
         '"prompt": "高质量英文自然语言长提示词（65~115词，画面感极强、物理光影准确、细节克制高级、可直接出大片）", '
-        '"neg_prompt": "精准英文负向词", "size": "1024x576 或 576x1024 或 768x768 或 832x480", '
+        '"neg_prompt": "精准英文负向词", "size": "生图仅用 896x512 / 512x896 / 768x768，视频必须用 640x384（严格适配 8GB 显存不爆）", '
         '"mode": "t2i 或 t2v 或 i2v"}]}\n'
     )
 
     mode_desc = {
-        "t2i": "当前用户目标是文生图（Z-Image Turbo）。请生成 {n} 套差异鲜明的大师方案：第1套为电影胶片写实大片，第2套为艺术美学/氛围概念版，第3套为 Wan 2.2 电影运镜动态视频版（方便一键生视频）；若要求超过3套，继续扩展不同高质感流派（如东方意境、暗调棚拍、超广角史诗）。",
-        "t2v": "当前用户目标是文生视频（Z-Image 首帧 → Wan 2.2 I2V）。请全部 {n} 套都突出电影运镜、连贯动作与物理环境动态，推荐画幅 832x480，mode 设为 t2v。",
-        "i2v": "当前用户目标是图生视频（Wan 2.2 I2V）。请全部 {n} 套都聚焦基于首帧的平滑运镜、主体呼吸/眼神/衣袂微动与环境光影变化，推荐画幅 832x480，mode 设为 i2v。",
+        "t2i": "当前用户目标是文生图（Z-Image Turbo，8GB 显存）。请生成 {n} 套差异鲜明的大师方案：第1套为电影胶片写实大片（size=896x512 或 768x768），第2套为艺术美学/氛围概念版（size=512x896 或 896x512），第3套为 Wan 2.2 电影运镜动态视频版（mode=t2v，size 必须是 640x384 防爆显存）；若超过3套继续扩展高质感流派。",
+        "t2v": "当前用户目标是文生视频（Z-Image 首帧 → Wan 2.2 I2V，8GB 显存）。请全部 {n} 套都突出电影运镜、连贯动作与物理环境动态，size 必须为 640x384，mode 设为 t2v。",
+        "i2v": "当前用户目标是图生视频（Wan 2.2 I2V，8GB 显存）。请全部 {n} 套都聚焦基于首帧的平滑运镜、主体微动与环境光影变化，size 必须为 640x384，mode 设为 i2v。",
     }.get(mode, "请生成 {n} 套大师级提示词。").format(n=count)
 
     user_msg = f"用户原始想法：{idea}\n"
@@ -634,12 +681,10 @@ def optimize_prompt_with_ai(raw_input: str, mode: str = "t2i", style_hint: str =
                     pr = str(v.get("prompt") or "").strip()
                     if len(pr) < 20:
                         continue
-                    vmode = str(v.get("mode") or mode or "t2i").strip().lower()
-                    if vmode not in ("t2i", "t2v", "i2v"):
-                        vmode = mode if mode in ("t2i", "t2v", "i2v") else "t2i"
-                    vsize = str(v.get("size") or ("832x480" if vmode in ("t2v", "i2v") else "1024x576")).strip()
-                    if vsize not in ("768x768", "1024x576", "576x1024", "832x480"):
-                        vsize = "832x480" if vmode in ("t2v", "i2v") else "1024x576"
+                    vmode, vsize, vsteps, vlen = _safe_spec(
+                        str(v.get("mode") or mode or "t2i"),
+                        str(v.get("size") or ""),
+                    )
                     cleaned.append({
                         "title": str(v.get("title") or f"AI 优化方案 #{idx}").strip(),
                         "style_tag": str(v.get("style_tag") or ("Wan2.2 运镜" if vmode in ("t2v", "i2v") else "AI 大师优化")).strip(),
@@ -647,6 +692,9 @@ def optimize_prompt_with_ai(raw_input: str, mode: str = "t2i", style_hint: str =
                         "prompt": pr,
                         "neg_prompt": str(v.get("neg_prompt") or (DEFAULT_NEG_VIDEO if vmode in ("t2v", "i2v") else DEFAULT_NEG_PHOTO)).strip(),
                         "size": vsize,
+                        "steps": vsteps,
+                        "length": vlen,
+                        "vram_tag": "8G极稳 · %d帧" % vlen if vmode in ("t2v", "i2v") else "8G极稳",
                         "mode": vmode,
                         "source": f"Codex · {model}",
                     })
