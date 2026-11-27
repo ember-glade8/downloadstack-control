@@ -842,6 +842,48 @@
     white-space: normal; word-break: break-word;
   }
 
+  /* Magnet Search Result Cards (NEVER shrink or clip!) */
+  .mag-card {
+    flex-shrink: 0;
+    padding: 10px 12px; border-radius: 12px;
+    background: linear-gradient(150deg, rgba(13, 25, 56, 0.90), rgba(6, 12, 28, 0.95));
+    border: 1px solid rgba(129, 140, 248, 0.28);
+    display: flex; flex-direction: column; gap: 7px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.34);
+    transition: border-color 0.2s, box-shadow 0.2s, transform 0.18s;
+  }
+  .mag-card:hover {
+    border-color: rgba(0, 229, 255, 0.56);
+    box-shadow: 0 8px 24px rgba(0, 229, 255, 0.14);
+  }
+  .mag-title {
+    font-size: 12.5px; font-weight: 700; color: var(--text-0);
+    line-height: 1.45; word-break: break-word;
+  }
+  .mag-meta {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    font-size: 10.5px; color: var(--text-2);
+  }
+  .mag-badge {
+    padding: 2px 7px; border-radius: 999px;
+    background: rgba(129, 140, 248, 0.16);
+    border: 1px solid rgba(129, 140, 248, 0.34);
+    color: #c7d2fe; font-weight: 700;
+  }
+  .mag-badge.seed {
+    background: rgba(0, 245, 184, 0.14);
+    border-color: rgba(0, 245, 184, 0.38);
+    color: var(--mint);
+  }
+  .mag-badge.mikan {
+    background: rgba(255, 179, 71, 0.15);
+    border-color: rgba(255, 179, 71, 0.42);
+    color: var(--amber);
+  }
+  .mag-actions {
+    display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  }
+
   /* AIGC Gallery */
   .gallery-grid {
     display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
@@ -1226,7 +1268,7 @@
                 <span class="chip" data-omni="yt" onclick="setOmniMode('yt')">🎬 YT/B站视频</span>
                 <span class="chip" data-omni="music" onclick="setOmniMode('music')">🎵 6源搜歌</span>
                 <span class="chip" data-omni="aigc" onclick="setOmniMode('aigc')">🎨 AI生图</span>
-                <span class="chip" data-omni="magnet" onclick="setOmniMode('magnet')">🧲 磁力</span>
+                <span class="chip" data-omni="magnet" onclick="setOmniMode('magnet')">🧲 磁力 / 搜磁力</span>
                 <span class="chip" data-omni="aria2" onclick="setOmniMode('aria2')">🌐 直链</span>
                 <span class="chip" data-omni="codex" onclick="setOmniMode('codex')">👾 问小怪兽</span>
               </div>
@@ -1281,9 +1323,9 @@
               <div class="portal-sub" id="p-qb-sub">同源代理 · BT直管</div>
             </button>
             <button class="portal-card tilt-3d" style="--p-col:#818cf8;--p-glow:rgba(129,140,248,0.38);" onclick="switchView('downloads'); setDlTab('magnet')">
-              <div class="portal-head"><span class="portal-ico">🧲</span><span class="portal-go">修复</span></div>
-              <div class="portal-name">磁力 / DHT 舱</div>
-              <div class="portal-sub" id="p-mag-sub">Tracker 热注入</div>
+              <div class="portal-head"><span class="portal-ico">🧲</span><span class="portal-go">5源搜磁力</span></div>
+              <div class="portal-name">磁力搜索 / DHT</div>
+              <div class="portal-sub" id="p-mag-sub">站内搜磁 · Tracker注入</div>
             </button>
             <button class="portal-card tilt-3d" style="--p-col:#38bdf8;--p-glow:rgba(56,189,248,0.42);" onclick="toggleMonsterChat(true)">
               <div class="portal-head"><span class="portal-ico">👾</span><span class="portal-go">问答</span></div>
@@ -2030,7 +2072,7 @@
           <div class="portal-ico" style="width:42px;height:42px;font-size:22px;border-color:rgba(0,245,184,0.5);">⚡</div>
           <div>
             <div class="sub-hero-h c-mint">下载体系核心 · 站内全嵌入式管理舱</div>
-            <div class="sub-hero-p">实时任务队列 · 站内同源 AriaNg · 站内同源 qBittorrent · 磁力解析与 DHT 修复（全程零外跳）</div>
+            <div class="sub-hero-p">实时任务队列 · 站内同源 AriaNg · 站内同源 qBittorrent · 5源磁力搜索与 DHT 修复（全程零外跳）</div>
           </div>
         </div>
         <div class="sub-hero-right">
@@ -2038,7 +2080,7 @@
             <span class="chip active" data-dltab="queue" onclick="setDlTab('queue')">⚡ 实时队列</span>
             <span class="chip" data-dltab="ariang" onclick="setDlTab('ariang')">🌐 内置 AriaNg</span>
             <span class="chip" data-dltab="qbit" onclick="setDlTab('qbit')">🌀 内置 qBittorrent</span>
-            <span class="chip" data-dltab="magnet" onclick="setDlTab('magnet')">🧲 磁力 / DHT 修复</span>
+            <span class="chip" data-dltab="magnet" onclick="setDlTab('magnet')">🧲 磁力搜索 / DHT</span>
           </div>
         </div>
       </div>
@@ -2047,10 +2089,11 @@
       <div id="dl-pane-queue" class="col-stack" style="flex:1;">
         <div class="holo-card" style="padding:10px 12px;flex-shrink:0;">
           <div style="display:flex;gap:8px;align-items:center;">
-            <input id="dl-quick-url" class="inp" placeholder="粘贴 HTTP/HTTPS 直链、磁力链接 (magnet:?) 或种子链接，立即投递…" onkeydown="if(event.key==='Enter')submitDlQuick('auto')" />
+            <input id="dl-quick-url" class="inp" placeholder="粘贴 HTTP/HTTPS 直链、磁力链接 (magnet:?) 或输入关键词搜磁力…" onkeydown="if(event.key==='Enter')submitDlQuick('auto')" />
             <button class="btn btn-mint" onclick="submitDlQuick('aria2')">🌐 投递 Aria2</button>
             <button class="btn btn-cyan" onclick="submitDlQuick('qbit')">🌀 投递 qB</button>
             <button class="btn btn-violet" onclick="submitDlQuick('auto')">⚡ 自动分流</button>
+            <button class="btn btn-amber" onclick="quickSearchMagnetFromQueue()">🔍 搜磁力</button>
           </div>
         </div>
         <div class="split-2-eq">
@@ -2121,47 +2164,98 @@
         </div>
       </div>
 
-      <!-- SUB-TAB 4: MAGNET & DHT LAB -->
-      <div id="dl-pane-magnet" class="split-2 hidden" style="flex:1;">
-        <div class="holo-card" style="display:flex;flex-direction:column;">
+      <!-- SUB-TAB 4: MAGNET SEARCH ENGINE & DHT LAB -->
+      <div id="dl-pane-magnet" class="split-2-wide hidden" style="flex:1;">
+        <!-- LEFT: 5-SOURCE IN-APP MAGNET SEARCH ENGINE -->
+        <div class="holo-card" style="display:flex;flex-direction:column;min-height:0;">
           <div class="card-hd">
-            <div class="card-title c-violet">🧲 磁力链接 / InfoHash 智能解析与投递</div>
+            <div class="card-title c-cyan">🔍 站内全网磁力搜索引擎 <span class="nav-badge mono" id="mag-res-cnt">0</span></div>
+            <span class="mono c-dim" style="font-size:10.5px;">5源并发 · 去重排序 · 一键直投 qB / Aria2</span>
           </div>
-          <div class="card-body col-scroll">
-            <div class="fld">
-              <label>粘贴磁力链接或 40 位 InfoHash</label>
-              <textarea id="mag-input" class="txt mono" rows="4" placeholder="magnet:?xt=urn:btih:... 或直接粘贴 40 位哈希值"></textarea>
+          <div class="card-body" style="gap:8px;min-height:0;">
+            <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
+              <input id="mag-search-q" class="inp" placeholder="输入影视/动漫/软件/游戏/剧集关键词（支持中英文，如 鬼灭之刃、Ubuntu、4K Remux）…" onkeydown="if(event.key==='Enter')searchMagnetsUI()" />
+              <button id="btn-mag-search" class="btn btn-cyan" onclick="searchMagnetsUI()">🔍 搜索磁力</button>
             </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <button class="btn btn-violet" onclick="parseMagnetUI()">🔍 智能解析</button>
-              <button class="btn btn-cyan" onclick="submitMagnet('qbit')">🌀 增强投递 qB</button>
-              <button class="btn btn-mint" onclick="submitMagnet('aria2')">🌐 增强投递 Aria2</button>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;flex-shrink:0;">
+              <div class="pill-row" id="mag-src-pills">
+                <span class="chip active" data-magsrc="all" onclick="setMagSrc('all')">🌐 全网5源</span>
+                <span class="chip" data-magsrc="knaben" onclick="setMagSrc('knaben')">⚡ Knaben聚合</span>
+                <span class="chip" data-magsrc="apibay" onclick="setMagSrc('apibay')">🏴 APIBay</span>
+                <span class="chip" data-magsrc="solid" onclick="setMagSrc('solid')">💎 Solid</span>
+                <span class="chip" data-magsrc="mikan" onclick="setMagSrc('mikan')">🍊 蜜柑中文动漫</span>
+                <span class="chip" data-magsrc="nyaa" onclick="setMagSrc('nyaa')">🎌 Nyaa</span>
+              </div>
+              <div class="pill-row" id="mag-sort-pills">
+                <span class="chip active" data-magsort="seeders" onclick="setMagSort('seeders')">🔥 做种最多</span>
+                <span class="chip" data-magsort="size" onclick="setMagSort('size')">📦 体积最大</span>
+                <span class="chip" data-magsort="latest" onclick="setMagSort('latest')">🕒 最新</span>
+              </div>
             </div>
-            <div id="mag-parse-result" class="eng-tile" style="margin-top:4px;">
-              <div class="c-dim" style="font-size:11.5px;">解析后会展示 InfoHash、资源名、内置 Tracker 数与秒级预取支持状态。</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;flex-shrink:0;">
+              <div class="pill-row">
+                <span class="c-dim" style="font-size:10.5px;">热搜直达：</span>
+                <span class="chip" onclick="quickMagSearch('Ubuntu 24.04')">Ubuntu 24.04</span>
+                <span class="chip" onclick="quickMagSearch('Blender')">Blender</span>
+                <span class="chip" onclick="quickMagSearch('鬼灭之刃')">鬼灭之刃</span>
+                <span class="chip" onclick="quickMagSearch('进击的巨人')">进击的巨人</span>
+                <span class="chip" onclick="quickMagSearch('Interstellar 2160p')">4K电影</span>
+              </div>
+              <span id="mag-search-meta" class="mono c-dim" style="font-size:10.5px;">输入关键词即刻检索全网公开磁力源</span>
+            </div>
+            <div id="mag-search-list" class="list-scroll">
+              <div class="eng-tile" style="font-size:12px;color:var(--text-2);line-height:1.75;">
+                <div class="c-cyan" style="font-weight:800;margin-bottom:4px;">🧲 站内 5 源磁力聚合引擎已就绪</div>
+                <div>• <b>中文番剧 / 字幕组影视</b>：自动并发查询 <b>蜜柑计划 (Mikan)</b> 与 <b>Nyaa</b>，直接提取标准磁力链接。</div>
+                <div>• <b>国际影视 / 软件 / 镜像 / 游戏</b>：并发查询 <b>Knaben 聚合</b>、<b>APIBay</b>、<b>SolidTorrents</b>，按实时做种数排序并自动按 InfoHash 去重。</div>
+                <div>• 搜到后点击 <b>🌀 投递 qB</b> 或 <b>🌐 投递 Aria2</b>，后端将自动注入高速公共 Tracker 并尝试秒级预取 `.torrent` 元数据。</div>
+              </div>
             </div>
           </div>
         </div>
 
-        <div class="holo-card" style="display:flex;flex-direction:column;">
-          <div class="card-hd">
-            <div class="card-title c-mint">🛰️ Tracker 集群与 DHT 引导诊断</div>
+        <!-- RIGHT: MAGNET PARSER + TRACKER/DHT LAB -->
+        <div class="col-stack" style="min-height:0;overflow-y:auto;">
+          <div class="holo-card" style="display:flex;flex-direction:column;flex-shrink:0;">
+            <div class="card-hd">
+              <div class="card-title c-violet">🧲 磁力链接 / InfoHash 智能解析与投递</div>
+            </div>
+            <div class="card-body" style="gap:8px;">
+              <div class="fld">
+                <label>粘贴磁力链接或 40 位 InfoHash</label>
+                <textarea id="mag-input" class="txt mono" rows="3" placeholder="magnet:?xt=urn:btih:... 或直接粘贴 40 位哈希值"></textarea>
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button class="btn btn-sm btn-violet" onclick="parseMagnetUI()">🔍 智能解析</button>
+                <button class="btn btn-sm btn-cyan" onclick="submitMagnet('qbit')">🌀 增强投递 qB</button>
+                <button class="btn btn-sm btn-mint" onclick="submitMagnet('aria2')">🌐 增强投递 Aria2</button>
+              </div>
+              <div id="mag-parse-result" class="eng-tile">
+                <div class="c-dim" style="font-size:11.5px;">解析后会展示 InfoHash、资源名、内置 Tracker 数与秒级预取支持状态。</div>
+              </div>
+            </div>
           </div>
-          <div class="card-body col-scroll">
-            <div class="grid-2">
-              <div class="mini-stat"><div class="mini-stat-k">Aria2 配置健康度</div><div class="mini-stat-v mono c-mint" id="m-conf-ok">-</div></div>
-              <div class="mini-stat"><div class="mini-stat-k">配置 Tracker 数</div><div class="mini-stat-v mono c-cyan" id="m-tr-cnt">0</div></div>
-              <div class="mini-stat"><div class="mini-stat-k">本地缓存 Tracker</div><div class="mini-stat-v mono c-violet" id="m-cache-cnt">0</div></div>
-              <div class="mini-stat"><div class="mini-stat-k">DHT 状态 / 节点</div><div class="mini-stat-v mono c-amber" id="m-dht-sz">-</div></div>
+
+          <div class="holo-card" style="display:flex;flex-direction:column;flex:1;min-height:220px;">
+            <div class="card-hd">
+              <div class="card-title c-mint">🛰️ Tracker 集群与 DHT 引导诊断</div>
             </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
-              <button class="btn btn-mint" onclick="act('magnet_update_trackers')">⚡ 热更新公共 Tracker</button>
-              <button class="btn btn-violet" onclick="act('magnet_repair')">🔧 一键修复磁力/DHT</button>
-              <button class="btn btn-cyan" onclick="act('magnet_probe_dht')">📡 探测 DHT 节点</button>
-            </div>
-            <div class="eng-tile" style="font-size:11.5px;color:var(--text-2);line-height:1.7;">
-              <div>• 点击「热更新公共 Tracker」会自动拉取最新 Tracker 并热注入运行中的 Aria2 与 qBittorrent。</div>
-              <div>• 投递磁力时后端会自动秒级尝试预取 `.torrent` 元数据并补全公共 Tracker，解决死链 0 速度问题。</div>
+            <div class="card-body col-scroll" style="gap:8px;">
+              <div class="grid-2">
+                <div class="mini-stat"><div class="mini-stat-k">Aria2 配置健康度</div><div class="mini-stat-v mono c-mint" id="m-conf-ok">-</div></div>
+                <div class="mini-stat"><div class="mini-stat-k">配置 Tracker 数</div><div class="mini-stat-v mono c-cyan" id="m-tr-cnt">0</div></div>
+                <div class="mini-stat"><div class="mini-stat-k">本地缓存 Tracker</div><div class="mini-stat-v mono c-violet" id="m-cache-cnt">0</div></div>
+                <div class="mini-stat"><div class="mini-stat-k">DHT 状态 / 节点</div><div class="mini-stat-v mono c-amber" id="m-dht-sz">-</div></div>
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button class="btn btn-sm btn-mint" onclick="act('magnet_update_trackers')">⚡ 热更新公共 Tracker</button>
+                <button class="btn btn-sm btn-violet" onclick="act('magnet_repair')">🔧 一键修复磁力/DHT</button>
+                <button class="btn btn-sm btn-cyan" onclick="act('magnet_probe_dht')">📡 探测 DHT 节点</button>
+              </div>
+              <div class="eng-tile" style="font-size:11.5px;color:var(--text-2);line-height:1.65;">
+                <div>• 点击「热更新公共 Tracker」会自动拉取最新 Tracker 并热注入运行中的 Aria2 与 qBittorrent。</div>
+                <div>• 投递磁力时后端会自动秒级尝试预取 `.torrent` 元数据并补全公共 Tracker，解决死链 0 速度问题。</div>
+              </div>
             </div>
           </div>
         </div>
@@ -2517,6 +2611,10 @@
     muSrc: 'all',
     muFmt: 'mp3',
     muChart: 'hot',
+    magSrc: 'all',
+    magSort: 'seeders',
+    magResults: [],
+    magSearching: false,
     aigcEng: 'owner_comfy',
     aigcMode: 't2i',
     vcEng: 'edge',
@@ -2739,7 +2837,7 @@
       yt: '直接推送至 YT 视频工坊下载',
       music: '跳转到音乐中心并立即检索该歌曲',
       aigc: '跳转到 ComfyUI 画室并立即按提示词文生图',
-      magnet: '跳转到磁力舱解析或增强投递',
+      magnet: '粘贴磁力/Hash 直接投递，或输入关键词立即全网 5 源搜磁力',
       aria2: '直接推送至 Aria2 高速多线程下载',
       codex: '直接唤起赛博小怪兽回答你的问题',
     };
@@ -2788,8 +2886,17 @@
       return;
     }
     if (mode === 'magnet') {
-      const res = await act('add_download', { url: val, engine: 'magnet' });
-      if (res.ok) { inp.value = ''; switchView('downloads'); setDlTab('queue'); }
+      const isDirectMag = low.startsWith('magnet:') || /^[a-f0-9]{40}$/i.test(val) || /^[a-z2-7]{32}$/i.test(val);
+      if (isDirectMag) {
+        const res = await act('add_download', { url: val, engine: 'magnet' });
+        if (res.ok) { inp.value = ''; switchView('downloads'); setDlTab('queue'); }
+      } else {
+        inp.value = '';
+        switchView('downloads');
+        setDlTab('magnet');
+        if ($('mag-search-q')) $('mag-search-q').value = val;
+        searchMagnetsUI();
+      }
       return;
     }
     const res = await act('add_download', { url: val, engine: mode });
@@ -3844,6 +3951,153 @@
     await act('add_download', { url: raw, engine });
   }
   window.submitMagnet = submitMagnet;
+
+  /* ===================== 5-SOURCE IN-APP MAGNET SEARCH ENGINE ===================== */
+  function setMagSrc(src) {
+    S.magSrc = src || 'all';
+    document.querySelectorAll('#mag-src-pills .chip').forEach(c => c.classList.toggle('active', c.dataset.magsrc === S.magSrc));
+    if (($('mag-search-q')?.value || '').trim()) searchMagnetsUI();
+  }
+  window.setMagSrc = setMagSrc;
+
+  function setMagSort(sort) {
+    S.magSort = sort || 'seeders';
+    document.querySelectorAll('#mag-sort-pills .chip').forEach(c => c.classList.toggle('active', c.dataset.magsort === S.magSort));
+    if (S.magResults && S.magResults.length) {
+      const arr = [...S.magResults];
+      if (S.magSort === 'size') arr.sort((a, b) => (b.size_bytes || 0) - (a.size_bytes || 0));
+      else if (S.magSort === 'latest') arr.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+      else arr.sort((a, b) => ((b.seeders >= 0 ? b.seeders : 5) - (a.seeders >= 0 ? a.seeders : 5)) || ((b.size_bytes || 0) - (a.size_bytes || 0)));
+      S.magResults = arr;
+      renderMagnetResults();
+    }
+  }
+  window.setMagSort = setMagSort;
+
+  function quickMagSearch(kw) {
+    if ($('mag-search-q')) $('mag-search-q').value = kw;
+    searchMagnetsUI();
+  }
+  window.quickMagSearch = quickMagSearch;
+
+  function quickSearchMagnetFromQueue() {
+    const kw = ($('dl-quick-url')?.value || '').trim();
+    setDlTab('magnet');
+    if (kw && !kw.toLowerCase().startsWith('magnet:') && !/^https?:\/\//i.test(kw)) {
+      if ($('mag-search-q')) $('mag-search-q').value = kw;
+      searchMagnetsUI();
+    } else {
+      setTimeout(() => $('mag-search-q')?.focus(), 60);
+    }
+  }
+  window.quickSearchMagnetFromQueue = quickSearchMagnetFromQueue;
+
+  async function searchMagnetsUI() {
+    const q = ($('mag-search-q')?.value || '').trim();
+    if (!q) { toast('请输入磁力搜索关键词', 'amber'); $('mag-search-q')?.focus(); return; }
+    if (S.magSearching) return;
+    S.magSearching = true;
+    const btn = $('btn-mag-search');
+    const meta = $('mag-search-meta');
+    const box = $('mag-search-list');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ 5源检索中…'; }
+    if (meta) meta.textContent = `正在并发检索「${q}」…`;
+    if (box) box.innerHTML = `<div class="eng-tile c-cyan mono" style="font-size:12px;">🛰️ 正在并发扫描 Knaben / APIBay / Solid / 蜜柑计划 / Nyaa 公开磁力源…</div>`;
+    try {
+      const res = await act('magnet_search', { query: q, source: S.magSrc, sort: S.magSort, limit: 25 }, true);
+      const list = (res && res.results) || [];
+      const srcs = (res && res.sources) || [];
+      S.magResults = list;
+      if ($('mag-res-cnt')) $('mag-res-cnt').textContent = String(list.length);
+      const srcStr = srcs.map(s => `${s.name}:${s.ok ? s.count : '×'}`).join(' · ');
+      if (meta) meta.textContent = srcStr || (res && res.msg) || '搜索完成';
+      renderMagnetResults();
+      if (!list.length) toast((res && res.msg) || '未搜到相关磁力，可换个英文名或短词试试', 'amber');
+    } finally {
+      S.magSearching = false;
+      if (btn) { btn.disabled = false; btn.textContent = '🔍 搜索磁力'; }
+    }
+  }
+  window.searchMagnetsUI = searchMagnetsUI;
+
+  function renderMagnetResults() {
+    const box = $('mag-search-list');
+    if (!box) return;
+    const list = S.magResults || [];
+    if (!list.length) {
+      box.innerHTML = `<div class="eng-tile c-dim" style="font-size:12px;">暂未找到匹配磁力。提示：欧美影视/软件推荐用英文原名（如 <code>Interstellar 2160p</code>、<code>Ubuntu</code>），中文动漫可直接搜中文名（蜜柑计划源）。</div>`;
+      return;
+    }
+    box.innerHTML = list.map((it, i) => {
+      const isMikan = it.source_id === 'mikan';
+      const seedBadge = isMikan
+        ? `<span class="mag-badge mikan">🍊 蜜柑热源</span>`
+        : `<span class="mag-badge seed mono">🌱 ${Number(it.seeders || 0)} 做种</span>`;
+      const peerBadge = (!isMikan && Number(it.leechers || 0) > 0)
+        ? `<span class="mono c-dim">↓ ${Number(it.leechers)} 下载</span>` : '';
+      const catBadge = it.category ? `<span class="c-dim">${esc(it.category)}</span>` : '';
+      const dateBadge = it.date ? `<span class="mono c-dim">🕒 ${esc(it.date)}</span>` : '';
+      return `<div class="mag-card">
+        <div class="mag-title selectable">${esc(it.title || it.infohash)}</div>
+        <div class="mag-meta">
+          <span class="mag-badge">${esc(it.source || '磁力源')}</span>
+          <span class="mono c-cyan" style="font-weight:700;">📦 ${esc(it.size_str || '-')}</span>
+          ${seedBadge}
+          ${peerBadge}
+          ${catBadge}
+          ${dateBadge}
+        </div>
+        <div class="mag-actions">
+          <button class="btn btn-xs btn-cyan" onclick="submitMagnetResult(${i}, 'qbit')">🌀 投递 qB</button>
+          <button class="btn btn-xs btn-mint" onclick="submitMagnetResult(${i}, 'aria2')">🌐 投递 Aria2</button>
+          <button class="btn btn-xs btn-violet" onclick="copyMagnetResult(${i})">📋 复制磁力</button>
+          <button class="btn btn-xs" onclick="loadMagnetResult(${i})">🔍 填入解析</button>
+          <span class="mono c-dim" style="font-size:10px;margin-left:auto;">${esc((it.infohash || '').slice(0, 12))}…</span>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  async function submitMagnetResult(idx, engine) {
+    const it = (S.magResults || [])[idx];
+    if (!it || !it.magnet) { toast('磁力链接无效', 'rose'); return; }
+    const res = await act('add_download', { url: it.magnet, engine });
+    if (res && res.ok) {
+      toast(`已投递至 ${engine === 'qbit' ? 'qBittorrent' : 'Aria2'}：${(it.title || '').slice(0, 36)}`, 'mint');
+    }
+  }
+  window.submitMagnetResult = submitMagnetResult;
+
+  async function copyMagnetResult(idx) {
+    const it = (S.magResults || [])[idx];
+    if (!it || !it.magnet) return;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(it.magnet);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = it.magnet;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      toast('已复制磁力链接到剪贴板', 'mint');
+    } catch {
+      if ($('mag-input')) $('mag-input').value = it.magnet;
+      toast('已自动填入右侧解析框，可手动复制', 'amber');
+    }
+  }
+  window.copyMagnetResult = copyMagnetResult;
+
+  function loadMagnetResult(idx) {
+    const it = (S.magResults || [])[idx];
+    if (!it || !it.magnet) return;
+    if ($('mag-input')) $('mag-input').value = it.magnet;
+    parseMagnetUI();
+    toast('已填入解析器并自动解析 InfoHash', 'cyan');
+  }
+  window.loadMagnetResult = loadMagnetResult;
 
   /* ===================== CYBER MONSTER & CODEX AGENT ===================== */
   function toggleMonsterChat(force) {

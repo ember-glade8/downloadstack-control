@@ -2477,6 +2477,26 @@ class ControlBackend:
             info = MT.parse_magnet(str(body.get("raw") or ""))
             return bool(info.get("valid")), info.get("error") or "磁力解析成功", {"info": info}
 
+        if act == "magnet_search":
+            if MT is None:
+                return False, "magnet_tools 模块不可用", {}
+            q = str(body.get("query") or "").strip()
+            if not q:
+                return False, "请输入搜索关键词（影视 / 动漫 / 软件 / 游戏等）", {"results": [], "sources": []}
+            src = str(body.get("source") or "all").strip().lower()
+            sort_by = str(body.get("sort") or "seeders").strip().lower()
+            try:
+                lim = max(10, min(50, int(body.get("limit") or 25)))
+            except Exception:
+                lim = 25
+            res = MT.search_magnets(q, source=src, sort=sort_by, proxy=self._sys_proxy(), limit=lim)
+            if res.get("ok") and res.get("results"):
+                self.log("磁力搜索「%s」命中 %d 条（%s）" % (q, len(res.get("results") or []), res.get("msg", "")), "OK")
+            return bool(res.get("ok")), str(res.get("msg") or ""), {
+                "results": res.get("results") or [],
+                "sources": res.get("sources") or [],
+            }
+
         if act == "magnet_update_trackers":
             if MT is None:
                 return False, "magnet_tools 模块不可用", {}

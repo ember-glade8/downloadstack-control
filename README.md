@@ -91,7 +91,9 @@
 - **实时任务队列**：统一管理 Aria2 与 qBittorrent 活跃任务（暂停 / 继续 / 移除 / 自动分流投递）。
 - **内置同源 AriaNg**：`/ariang/` 同源直嵌，自动注入 RPC 密钥。
 - **内置同源 qBittorrent**：`/qbit/` 后端反向代理重写 `<base>` 路径，直接在软件窗口内操作完整 WebUI。
-- **磁力 / DHT 修复实验室**：支持 `magnet:?` 与 40 位 InfoHash 解析、秒级预取 `.torrent` 元数据、一键热更新公共 Tracker 至运行中的 Aria2 / qBittorrent、无损修复 `aria2.conf` BT/DHT 参数与 DHT 引导探测。
+- **5 源并发站内磁力搜索引擎 + DHT 修复实验室**：
+  - 全程站内并发检索 **Knaben 聚合 / APIBay / SolidTorrents / 蜜柑计划 (Mikan) / Nyaa** 五大公开源（自动去重、按做种数/体积/时间排序、中文查询自动过滤无关英文热榜脏数据），支持从顶部全能输入栏、队列栏或磁力舱直接输关键词搜磁力，并一键 **投递 qBittorrent / 投递 Aria2 / 复制磁力 / 填入解析器**。
+  - 支持 `magnet:?` 与 40 位 InfoHash 解析、秒级预取 `.torrent` 元数据、一键热更新公共 Tracker 至运行中的 Aria2 / qBittorrent、无损修复 `aria2.conf` BT/DHT 参数与 DHT 引导探测。
 
 ### 8. 👾 赛博小怪兽 · Codex 内置智能体
 - 全站右下角常驻悬浮 **赛博小怪兽**（SVG 霓虹精灵 + 实时跟随鼠标转动的电子眼），在任意页面点击即弹出站内多轮问答框，自动感知当前页面与本机引擎状态（严格脱敏）。
@@ -130,7 +132,7 @@ downloadstack-control/
 ├─ panel_ui.html         无构建链单文件 Spatial 3D Command OS 前端（含 WebGL GLSL 沉浸舞台）
 ├─ media_studio.py       6 音源搜歌、6 大榜单、LRC 歌词、音频流解析、声音克隆、ComfyUI 与 Codex 客户端
 ├─ prompt_engine.py      AI 画室提示词引擎（54+ 大师模板库、中英语义检索、动态合成、Codex 优化架构师）
-├─ magnet_tools.py       磁力 / InfoHash 解析、公共 Tracker 热更新、DHT 诊断与 aria2.conf 无损修复
+├─ magnet_tools.py       5 源并发磁力搜索引擎、磁力 / InfoHash 解析、公共 Tracker 热更新、DHT 诊断与 aria2.conf 无损修复
 ├─ ytdl_gui.py           独立视频下载 GUI 工具
 ├─ setup_wizard.py       图形 / 命令行跨平台引导向导
 ├─ install.bat / .sh     一键环境与组件安装器（盘符自选、端口避让、SHA256 校验）
