@@ -118,33 +118,65 @@
 
   /* Navigation Rail */
   .nav-rail {
-    position: relative; display: flex; align-items: center; gap: 4px;
+    position: relative; display: flex; align-items: center; gap: 3px;
     padding: 4px; border-radius: 13px;
     background: rgba(5, 11, 26, 0.78);
     border: 1px solid rgba(120, 190, 255, 0.16);
     box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.5);
-    overflow-x: auto; max-width: calc(100vw - 490px);
+    overflow-x: auto; max-width: calc(100vw - 470px);
     scrollbar-width: none;
   }
   .nav-rail::-webkit-scrollbar { display: none; }
+  .nav-sep {
+    width: 1px; height: 16px; flex-shrink: 0; margin: 0 3px;
+    background: linear-gradient(180deg, transparent, rgba(120, 190, 255, 0.34), transparent);
+  }
   .nav-pill {
     position: absolute; top: 4px; bottom: 4px; left: 4px; width: 0;
     border-radius: 9px;
     background: linear-gradient(135deg, rgba(0, 229, 255, 0.24), rgba(167, 139, 250, 0.22));
     border: 1px solid rgba(0, 229, 255, 0.55);
     box-shadow: 0 0 18px rgba(0, 229, 255, 0.28), inset 0 1px 0 rgba(255,255,255,0.2);
-    transition: transform 0.32s cubic-bezier(.22,1,.36,1), width 0.32s cubic-bezier(.22,1,.36,1);
+    transition: transform 0.32s cubic-bezier(.22,1,.36,1), width 0.32s cubic-bezier(.22,1,.36,1), opacity 0.2s ease;
     pointer-events: none; z-index: 0;
   }
   .nav-btn {
     position: relative; z-index: 1;
     border: none; background: transparent; color: var(--text-2);
-    font-size: 12px; font-weight: 700; padding: 7px 11px; border-radius: 9px;
-    cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11.8px; font-weight: 700; padding: 7px 9.5px; border-radius: 9px;
+    cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
     white-space: nowrap; transition: color 0.2s ease, transform 0.15s ease;
   }
   .nav-btn:hover { color: #ffffff; }
   .nav-btn.active { color: #ffffff; text-shadow: 0 0 12px rgba(0, 229, 255, 0.85); }
+  .top-util {
+    display: flex; align-items: center; gap: 3px;
+    padding: 3px; border-radius: 10px;
+    background: rgba(7, 15, 34, 0.85);
+    border: 1px solid rgba(120, 190, 255, 0.18);
+  }
+  .util-btn {
+    border: 1px solid transparent; background: transparent; color: var(--text-2);
+    font-size: 11.5px; font-weight: 700; padding: 4px 8px; border-radius: 7px;
+    cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
+    transition: all 0.18s ease;
+  }
+  .util-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
+  .util-btn.active {
+    color: #fff; background: rgba(0, 229, 255, 0.2);
+    border-color: rgba(0, 229, 255, 0.5);
+    box-shadow: 0 0 12px rgba(0, 229, 255, 0.25);
+  }
+  .cmd-item {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 9px 12px; border-radius: 10px; cursor: pointer;
+    border: 1px solid rgba(120, 190, 255, 0.14); background: rgba(9, 18, 40, 0.72);
+    transition: all 0.14s ease;
+  }
+  .cmd-item:hover, .cmd-item.sel {
+    border-color: rgba(0, 229, 255, 0.65); background: rgba(0, 229, 255, 0.14);
+    transform: translateX(2px);
+  }
   .nav-badge {
     font-size: 10px; padding: 1px 6px; border-radius: 99px;
     background: rgba(0, 229, 255, 0.18); color: var(--cyan);
@@ -1393,17 +1425,22 @@
 
     <nav class="nav-rail" id="nav-rail">
       <div class="nav-pill" id="nav-pill"></div>
+      <!-- 总览 -->
       <button class="nav-btn active" data-view="cockpit" onclick="switchView('cockpit', this)">✦ 控制台</button>
-      <button class="nav-btn" data-view="yt" onclick="switchView('yt', this)">🎬 YT视频</button>
-      <button class="nav-btn" data-view="music" onclick="switchView('music', this)">🎵 音乐榜单</button>
+      <span class="nav-sep"></span>
+      <!-- 下载与影音 -->
+      <button class="nav-btn" data-view="downloads" onclick="switchView('downloads', this)">⚡ 下载 <span class="nav-badge mono" id="nav-task-cnt">0</span></button>
+      <button class="nav-btn" data-view="cinema" onclick="switchView('cinema', this)">🎞️ 影院 <span class="nav-badge mono hidden" id="nav-cine-cnt"></span></button>
+      <button class="nav-btn" data-view="yt" onclick="switchView('yt', this)">🎬 视频</button>
+      <span class="nav-sep"></span>
+      <!-- 音乐与舞台 -->
+      <button class="nav-btn" data-view="music" onclick="switchView('music', this)">🎵 音乐</button>
       <button class="nav-btn" data-view="lyrics3d" onclick="switchView('lyrics3d', this)">🌌 3D歌词</button>
+      <span class="nav-sep"></span>
+      <!-- AI 创作 -->
       <button class="nav-btn" data-view="aigc" onclick="switchView('aigc', this)">🎨 AI画室</button>
-      <button class="nav-btn" data-view="voice" onclick="switchView('voice', this)">🎙️ 声音克隆</button>
-      <button class="nav-btn" data-view="downloads" onclick="switchView('downloads', this)">⚡ 下载核心 <span class="nav-badge mono" id="nav-task-cnt">0</span></button>
-        <button class="nav-btn" data-view="cinema" onclick="switchView('cinema', this)">🎞️ 影院 <span class="nav-badge mono hidden" id="nav-cine-cnt"></span></button>
+      <button class="nav-btn" data-view="voice" onclick="switchView('voice', this)">🎙️ 声音</button>
       <button class="nav-btn" data-view="codex" onclick="switchView('codex', this)">👾 智能体</button>
-      <button class="nav-btn" data-view="system" onclick="switchView('system', this)">🛠️ 系统</button>
-      <button class="nav-btn" data-view="tutorial" onclick="switchView('tutorial', this)">📖 教程</button>
     </nav>
 
     <div class="top-right">
@@ -1415,14 +1452,19 @@
       <div class="telemetry-pill mono" id="top-disk-pill" onclick="switchView('cinema')" title="下载磁盘剩余空间（点击进影院管理/删片释放空间）" style="cursor:pointer;">
         <span>💿 <b id="top-disk-txt">-- GB</b></span>
       </div>
-      <div class="telemetry-pill led-group">
+      <div class="telemetry-pill led-group" title="点击引擎指示灯一键直达对应工坊">
         <span class="led-chip" onclick="switchView('downloads'); setDlTab('ariang')" title="Aria2 引擎"><i class="led" id="led-top-a"></i>A2</span>
         <span class="led-chip" onclick="switchView('downloads'); setDlTab('qbit')" title="qBittorrent 引擎"><i class="led" id="led-top-q"></i>qB</span>
         <span class="led-chip" onclick="switchView('yt')" title="YT 视频下载"><i class="led" id="led-top-y"></i>YT</span>
         <span class="led-chip" onclick="switchView('aigc')" title="本地 ComfyUI"><i class="led" id="led-top-c"></i>AI</span>
         <span class="led-chip" onclick="toggleMonsterChat(true)" title="赛博小怪兽 Codex"><i class="led" id="led-top-x"></i>CX</span>
       </div>
-      <span class="mono c-dim" style="font-size:10.5px;" id="uptime">00:00:00</span>
+      <div class="top-util">
+        <button class="util-btn mono" onclick="openCmdPalette()" title="全站快速跳转与命令面板 (Ctrl+K)">⌘K</button>
+        <button class="util-btn nav-btn" data-view="tutorial" onclick="switchView('tutorial', this)" title="全功能交互教程（11章）">📖</button>
+        <button class="util-btn nav-btn" data-view="system" onclick="switchView('system', this)" title="系统配置、端口与日志">🛠️</button>
+      </div>
+      <span class="mono c-dim hidden" id="uptime">00:00:00</span>
     </div>
   </header>
 
@@ -1457,7 +1499,7 @@
                 <div class="eng-acts">
                   <button class="btn btn-xs btn-mint" style="flex:1;" id="btn-a" onclick="toggleEngine('a')">▶ 启动</button>
                   <button class="btn btn-xs" onclick="act('restart_a')">重启</button>
-                  <button class="btn btn-xs btn-cyan" onclick="openInAppAriaNg()">站内AriaNg</button>
+                  <button class="btn btn-xs btn-cyan" onclick="openInAppAriaNg()">AriaNg →</button>
                 </div>
               </div>
 
@@ -1474,8 +1516,7 @@
                 <div class="eng-meta mono"><span id="desc-q">0 种子 · 0 做种</span></div>
                 <div class="eng-acts">
                   <button class="btn btn-xs btn-mint" style="flex:1;" id="btn-q" onclick="toggleEngine('q')">▶ 启动</button>
-                  <button class="btn btn-xs" onclick="act('test_q')">测试</button>
-                  <button class="btn btn-xs btn-cyan" onclick="openInAppQbit()">站内qB</button>
+                  <button class="btn btn-xs btn-cyan" onclick="openInAppQbit()">站内 qB →</button>
                 </div>
               </div>
 
@@ -1491,10 +1532,9 @@
                 </div>
                 <div class="prog-track" style="height:5px;"><div class="prog-fill" id="vram-bar-c" style="width:14%;background:linear-gradient(90deg,#a78bfa,#00e5ff);"></div></div>
                 <div class="eng-acts">
-                  <button class="btn btn-xs btn-violet" style="flex:1;" onclick="act('aigc_start_comfy')">▶ 启动AI</button>
+                  <button class="btn btn-xs btn-violet" style="flex:1;" onclick="act('aigc_start_comfy')">▶ 启动</button>
                   <button class="btn btn-xs btn-rose" onclick="act('aigc_stop_comfy')">停止</button>
-                  <button class="btn btn-xs btn-cyan" onclick="switchView('aigc')">画室</button>
-                  <button class="btn btn-xs" onclick="openCustomModelModal()" title="接入你自己的本地模型">🔌接入</button>
+                  <button class="btn btn-xs btn-cyan" onclick="switchView('aigc')">AI画室 →</button>
                 </div>
               </div>
 
@@ -1509,9 +1549,9 @@
                   <div id="sw-up" class="sw" onclick="act('toggle_upscale')"><i></i></div>
                 </div>
                 <div class="eng-acts">
-                  <button class="btn btn-xs btn-amber" style="flex:1;" onclick="switchView('yt')">🎬 YT面板</button>
-                  <button class="btn btn-xs btn-violet" onclick="act('magnet_repair')">修复DHT</button>
-                  <button class="btn btn-xs" onclick="switchView('downloads'); setDlTab('magnet')">磁力舱</button>
+                  <button class="btn btn-xs btn-amber" style="flex:1;" onclick="switchView('yt')">🎬 视频</button>
+                  <button class="btn btn-xs btn-cyan" style="flex:1;" onclick="switchView('downloads'); setDlTab('magnet')">🧲 搜磁力</button>
+                  <button class="btn btn-xs btn-violet" onclick="act('magnet_repair')">修DHT</button>
                 </div>
               </div>
 
@@ -1526,18 +1566,16 @@
                   <span class="c-mint">在线就绪</span>
                 </div>
                 <div class="eng-acts">
-                  <button class="btn btn-xs btn-magenta" style="flex:1;" onclick="switchView('voice')">🎙️ 克隆</button>
-                  <button class="btn btn-xs btn-cyan" style="flex:1;" onclick="toggleMonsterChat(true)">👾 问答</button>
-                  <button class="btn btn-xs" onclick="switchView('codex')">配置</button>
+                  <button class="btn btn-xs btn-magenta" style="flex:1;" onclick="switchView('voice')">🎙️ 声音克隆</button>
+                  <button class="btn btn-xs btn-cyan" style="flex:1;" onclick="toggleMonsterChat(true)">👾 问小怪兽</button>
                 </div>
               </div>
 
               <!-- System Ops Bar -->
               <div class="eng-acts" style="margin-top:auto;">
-                <button class="btn btn-xs" style="flex:1;" onclick="act('backup')">💾 备份</button>
                 <button class="btn btn-xs" style="flex:1;" onclick="act('open_path',{key:'downloads'})">📂 目录</button>
-                <button class="btn btn-xs btn-cyan" onclick="switchView('system')">🛠️ 设置</button>
-                <button class="btn btn-xs btn-rose" onclick="act('stop_all')">■ 全停</button>
+                <button class="btn btn-xs" style="flex:1;" onclick="act('backup')">💾 备份</button>
+                <button class="btn btn-xs btn-rose" style="flex:1;" onclick="act('stop_all')">■ 停全服</button>
               </div>
             </div>
           </div>
@@ -1559,13 +1597,10 @@
                   </div>
                   <div class="reactor-kpi-big mono" id="hero-dn">0 B/s</div>
                 </div>
-                <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;max-width:440px;">
+                <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">
                   <button class="btn btn-xs btn-mint" onclick="startAllCoreEngines()">⚡ 一键全启</button>
-                  <button class="btn btn-xs btn-amber" onclick="switchView('yt')">🎬 YT直下</button>
-                  <button class="btn btn-xs btn-rose" onclick="switchView('lyrics3d')">🌌 3D歌词</button>
-                  <button class="btn btn-xs btn-violet" onclick="switchView('aigc')">🎨 AI直出</button>
-                  <button class="btn btn-xs btn-magenta" onclick="switchView('voice')">🎙️ 声音克隆</button>
-                  <button class="btn btn-xs btn-cyan" onclick="toggleMonsterChat(true)">👾 问小怪兽</button>
+                  <button class="btn btn-xs btn-violet" onclick="switchView('cinema')">🎞️ 原画影院</button>
+                  <button class="btn btn-xs btn-cyan" onclick="switchView('aigc')">🎨 AI 创作</button>
                 </div>
               </div>
               <div class="reactor-stats">
@@ -1613,32 +1648,13 @@
             </div>
           </div>
 
-          <!-- 10-PORTAL FULL-FEATURE 3D NEON MATRIX (ALL 10 CORE CAPABILITIES VISIBLE & CLICKABLE!) -->
+          <!-- 12-PORTAL ORGANIZED 2×6 MATRIX (ROW 1: 下载与影音 | ROW 2: AI 创作与助手) -->
           <div class="portal-grid">
-            <button class="portal-card tilt-3d" style="--p-col:#ffb347;--p-glow:rgba(255,179,71,0.38);" onclick="switchView('yt')">
-              <div class="portal-head"><span class="portal-ico">🎬</span><span class="portal-go">YT面板</span></div>
-              <div class="portal-name">YT 全平台视频</div>
-              <div class="portal-sub" id="p-yt-sub">4K/HDR · 2x超分</div>
-            </button>
-            <button class="portal-card tilt-3d" style="--p-col:#ff3d71;--p-glow:rgba(255,61,113,0.38);" onclick="switchView('music')">
-              <div class="portal-head"><span class="portal-ico">🎵</span><span class="portal-go">6源秒播</span></div>
-              <div class="portal-name">音乐 6 大榜单</div>
-              <div class="portal-sub" id="p-mu-sub">QQ/酷狗/网易/B站</div>
-            </button>
-            <button class="portal-card tilt-3d" style="--p-col:#f472b6;--p-glow:rgba(244,114,182,0.38);" onclick="switchView('lyrics3d')">
-              <div class="portal-head"><span class="portal-ico">🌌</span><span class="portal-go">全屏3D</span></div>
-              <div class="portal-name">3D 歌词舞台</div>
-              <div class="portal-sub" id="p-l3d-sub">LRC同步 · 声波粒子</div>
-            </button>
-            <button class="portal-card tilt-3d" style="--p-col:#a78bfa;--p-glow:rgba(167,139,250,0.42);" onclick="switchView('aigc')">
-              <div class="portal-head"><span class="portal-ico">🎨</span><span class="portal-go">直出</span></div>
-              <div class="portal-name">ComfyUI 画室</div>
-              <div class="portal-sub" id="p-ai-sub">Z-Image · Wan2.2</div>
-            </button>
-            <button class="portal-card tilt-3d" style="--p-col:#e879f9;--p-glow:rgba(232,121,249,0.38);" onclick="switchView('voice')">
-              <div class="portal-head"><span class="portal-ico">🎙️</span><span class="portal-go">GPU</span></div>
-              <div class="portal-name">AI 声音克隆</div>
-              <div class="portal-sub" id="p-vc-sub">F5-TTS · 神经配音</div>
+            <!-- Row 1: Download & Media Cinema -->
+            <button class="portal-card tilt-3d" style="--p-col:#818cf8;--p-glow:rgba(129,140,248,0.38);" onclick="switchView('downloads'); setDlTab('magnet')">
+              <div class="portal-head"><span class="portal-ico">🧲</span><span class="portal-go">5源搜磁</span></div>
+              <div class="portal-name">磁力搜索 / DHT</div>
+              <div class="portal-sub" id="p-mag-sub">站内搜磁 · Tracker注入</div>
             </button>
             <button class="portal-card tilt-3d" style="--p-col:#00f5b8;--p-glow:rgba(0,245,184,0.38);" onclick="switchView('downloads'); setDlTab('queue')">
               <div class="portal-head"><span class="portal-ico">⚡</span><span class="portal-go">队列</span></div>
@@ -1655,20 +1671,41 @@
               <div class="portal-name">内置 qB WebUI</div>
               <div class="portal-sub" id="p-qb-sub">同源代理 · BT直管</div>
             </button>
-            <button class="portal-card tilt-3d" style="--p-col:#818cf8;--p-glow:rgba(129,140,248,0.38);" onclick="switchView('downloads'); setDlTab('magnet')">
-              <div class="portal-head"><span class="portal-ico">🧲</span><span class="portal-go">5源搜磁力</span></div>
-              <div class="portal-name">磁力搜索 / DHT</div>
-              <div class="portal-sub" id="p-mag-sub">站内搜磁 · Tracker注入</div>
-            </button>
             <button class="portal-card tilt-3d" style="--p-col:#c4b5fd;--p-glow:rgba(196,181,253,0.44);" onclick="switchView('cinema')">
               <div class="portal-head"><span class="portal-ico">🎞️</span><span class="portal-go">原画4K</span></div>
               <div class="portal-name">站内原画影院</div>
               <div class="portal-sub">4K修复 · 看完即删</div>
             </button>
+            <button class="portal-card tilt-3d" style="--p-col:#ffb347;--p-glow:rgba(255,179,71,0.38);" onclick="switchView('yt')">
+              <div class="portal-head"><span class="portal-ico">🎬</span><span class="portal-go">YT面板</span></div>
+              <div class="portal-name">YT 全平台视频</div>
+              <div class="portal-sub" id="p-yt-sub">4K/HDR · 2x超分</div>
+            </button>
+            <!-- Row 2: AI Creation, Music & Assistant -->
+            <button class="portal-card tilt-3d" style="--p-col:#a78bfa;--p-glow:rgba(167,139,250,0.42);" onclick="switchView('aigc')">
+              <div class="portal-head"><span class="portal-ico">🎨</span><span class="portal-go">2万+Skill</span></div>
+              <div class="portal-name">ComfyUI 画室</div>
+              <div class="portal-sub" id="p-ai-sub">Z-Image · Wan2.2</div>
+            </button>
+            <button class="portal-card tilt-3d" style="--p-col:#e879f9;--p-glow:rgba(232,121,249,0.38);" onclick="switchView('voice')">
+              <div class="portal-head"><span class="portal-ico">🎙️</span><span class="portal-go">GPU</span></div>
+              <div class="portal-name">AI 声音克隆</div>
+              <div class="portal-sub" id="p-vc-sub">F5-TTS · 神经配音</div>
+            </button>
+            <button class="portal-card tilt-3d" style="--p-col:#ff3d71;--p-glow:rgba(255,61,113,0.38);" onclick="switchView('music')">
+              <div class="portal-head"><span class="portal-ico">🎵</span><span class="portal-go">6源秒播</span></div>
+              <div class="portal-name">音乐 6 大榜单</div>
+              <div class="portal-sub" id="p-mu-sub">QQ/酷狗/网易/B站</div>
+            </button>
+            <button class="portal-card tilt-3d" style="--p-col:#f472b6;--p-glow:rgba(244,114,182,0.38);" onclick="switchView('lyrics3d')">
+              <div class="portal-head"><span class="portal-ico">🌌</span><span class="portal-go">全屏3D</span></div>
+              <div class="portal-name">3D 歌词舞台</div>
+              <div class="portal-sub" id="p-l3d-sub">LRC同步 · 声波粒子</div>
+            </button>
             <button class="portal-card tilt-3d" style="--p-col:#38bdf8;--p-glow:rgba(56,189,248,0.42);" onclick="toggleMonsterChat(true)">
               <div class="portal-head"><span class="portal-ico">👾</span><span class="portal-go">问答</span></div>
               <div class="portal-name">赛博小怪兽</div>
-              <div class="portal-sub" id="p-cx-sub">Codex 智能体</div>
+              <div class="portal-sub" id="p-cx-sub">Codex · 内置Skill</div>
             </button>
             <button class="portal-card tilt-3d" style="--p-col:#fbbf24;--p-glow:rgba(251,191,36,0.38);" onclick="switchView('tutorial')">
               <div class="portal-head"><span class="portal-ico">📖</span><span class="portal-go">速通</span></div>
@@ -1757,7 +1794,6 @@
               <div style="display:flex;gap:4px;">
                 <button class="btn btn-xs" onclick="act('ports')">端口</button>
                 <button class="btn btn-xs" onclick="act('clear_log')">清空</button>
-                <button class="btn btn-xs btn-cyan" onclick="switchView('system')">系统</button>
               </div>
             </div>
             <div class="card-body" style="padding:8px;">
@@ -2134,8 +2170,8 @@
               <label>
                 <span>正向提示词 (Prompt · 支持中文粗略想法，点右侧 AI 优化直接出电影级大片词)</span>
                 <div style="display:flex;gap:5px;">
-                  <button id="ai-opt-btn" class="btn btn-xs btn-cyan" onclick="optimizeAigcPrompt()" title="调用 Codex 提示词架构师，按你的输入生成 3 套电影/概念/运镜大师级优化提示词">✨ AI 大师优化</button>
-                  <button class="btn btn-xs btn-violet" onclick="setAigcRightTab('prompts')" title="打开海量提示词搜索引擎与模板库">🔍 搜模板库</button>
+                  <button id="ai-opt-btn" class="btn btn-xs btn-cyan" onclick="optimizeAigcPrompt()" title="融合 2万+ Skill 骨架 + Codex，生成 3 套高精准大师方案">✨ AI 大师优化</button>
+                  <button class="btn btn-xs" onclick="$('ai-prompt').value='';$('ai-prompt').focus();" title="清空当前提示词输入框">🧹 清空</button>
                 </div>
               </label>
               <textarea id="ai-prompt" class="txt" rows="4" placeholder="输入中文想法即可（如：雨夜穿汉服撑伞的女孩站在霓虹街头），再点「✨ AI 大师优化」或从右侧模板库一键填入…"></textarea>
@@ -2204,7 +2240,7 @@
 
             <div class="row-item" style="justify-content:space-between;background:rgba(0,245,184,0.06);border-color:rgba(0,245,184,0.24);padding:6px 10px;">
               <span class="mono" style="font-size:10.5px;" id="ai-vram-guard-lbl">⚡ 8G 显存深度适配已就绪 · 生图/生视频 1 分钟内流畅直出</span>
-              <button class="btn btn-xs" onclick="act('aigc_free_vram')">🧹 清显存</button>
+              <button class="btn btn-xs btn-violet" onclick="switchView('cinema')" title="前往 4K 影院截取电影帧送入此处做图生视频">🎞️ 影院取帧</button>
             </div>
 
             <div class="fld">
@@ -2286,11 +2322,8 @@
 
           <div class="holo-card" style="height:168px;flex-shrink:0;display:flex;flex-direction:column;">
             <div class="card-hd">
-              <div class="card-title">📟 ComfyUI 推理日志</div>
-              <div style="display:flex;gap:6px;">
-                <button class="btn btn-xs" onclick="act('aigc_clear_log')">清空</button>
-                <button class="btn btn-xs btn-cyan" onclick="openCustomModelModal()">🔌 自定义模型状态：<span id="ai-custom-badge">未配置</span></button>
-              </div>
+              <div class="card-title">📟 ComfyUI 推理日志 <span class="tag-pill mono" style="margin-left:6px;background:rgba(0,229,255,0.12);color:#67e8f9;">自定义模型：<span id="ai-custom-badge">未配置</span></span></div>
+              <button class="btn btn-xs" onclick="act('aigc_clear_log')">清空</button>
             </div>
             <div class="card-body" style="padding:8px;">
               <div class="log-box" id="ai-log-box"></div>
@@ -2593,9 +2626,7 @@
             <div class="card-hd">
               <div class="card-title c-cyan">📡 实时下载进度监视器 <span class="nav-badge mono" id="mag-live-cnt">0</span></div>
               <div style="display:flex;gap:5px;">
-                <button class="btn btn-xs btn-mint" onclick="setDlTab('queue')">⚡ 完整队列</button>
-                <button class="btn btn-xs btn-cyan" onclick="openInAppQbit()">🌀 内置 qB</button>
-                <button class="btn btn-xs" onclick="openInAppAriaNg()">🌐 AriaNg</button>
+                <button class="btn btn-xs btn-violet" onclick="switchView('cinema')" title="下完直接进站内 4K 影院原画观看">🎞️ 去影院看片</button>
                 <button class="btn btn-xs btn-rose" onclick="purgeAll()" title="一键清空全部下载任务与缓存">🗑 一键清空</button>
               </div>
             </div>
@@ -2860,7 +2891,8 @@
             <div class="mini-stat-k">中转凭据</div>
             <div class="mini-stat-v c-cyan" id="cx-hero-key">检测中…</div>
           </div>
-          <button class="btn btn-sm btn-cyan" onclick="testCodexCfg()">🔎 测试连通 &amp; 拉取模型</button>
+          <button class="btn btn-sm btn-violet" onclick="switchView('aigc')">🎨 去 AI 画室</button>
+          <button class="btn btn-sm btn-cyan" onclick="toggleMonsterChat(true)">💬 切右下浮窗</button>
         </div>
       </div>
 
@@ -3205,6 +3237,20 @@
         <button class="btn" onclick="closeCustomModelModal()">取消</button>
         <button class="btn btn-cyan" onclick="saveCustomModelCfg()">💾 保存并切换使用我的模型</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= MODAL: CTRL+K QUICK COMMAND PALETTE ================= -->
+<div id="modal-cmd-palette" class="modal-mask hidden" onclick="if(event.target===this)closeCmdPalette()">
+  <div class="modal-box" style="width:540px;max-width:92vw;">
+    <div class="card-hd">
+      <div class="card-title c-cyan">⌘K 全站快速跳转与命令面板</div>
+      <button class="btn btn-xs btn-rose" onclick="closeCmdPalette()">✕</button>
+    </div>
+    <div style="padding:12px;display:flex;flex-direction:column;gap:9px;">
+      <input id="cmd-pal-inp" class="inp" placeholder="输入关键词快速跳转（如：影院 / 磁力 / AI画室 / 声音 / 音乐 / 显存 / 教程 / 启动动画）…" oninput="renderCmdPalette()" onkeydown="handleCmdPaletteKey(event)" />
+      <div id="cmd-pal-list" class="list-scroll" style="max-height:360px;gap:6px;"></div>
     </div>
   </div>
 </div>
@@ -4539,10 +4585,95 @@
   function moveNavPill(btn) {
     const pill = $('nav-pill');
     const rail = $('nav-rail');
-    if (!pill || !rail || !btn) return;
+    if (!pill || !rail) return;
+    if (!btn || !rail.contains(btn)) {
+      pill.style.opacity = '0';
+      return;
+    }
+    pill.style.opacity = '1';
     pill.style.width = btn.offsetWidth + 'px';
     pill.style.transform = `translateX(${btn.offsetLeft - 4}px)`;
   }
+
+  /* ===================== CTRL+K QUICK COMMAND PALETTE ===================== */
+  const CMD_ITEMS = [
+    { icon: '✦', title: '控制台总览', sub: '3D 指挥中枢 · 引擎监控 · 全能投递舱', kw: 'cockpit home 首页 控制台 总览', run: () => switchView('cockpit') },
+    { icon: '🧲', title: '5 源站内搜磁力 & DHT', sub: 'Knaben / APIBay / SolidTorrents / 蜜柑 / Nyaa', kw: 'magnet bt 磁力 搜索 种子 dht', run: () => { switchView('downloads'); setDlTab('magnet'); } },
+    { icon: '🎞️', title: '站内原画 4K 影院', sub: '零压缩播放 · WebGL2 4K画质修复 · 看完即删', kw: 'cinema 4k 影院 电影 看片 修复 删片', run: () => switchView('cinema') },
+    { icon: '🎨', title: 'AI 创作画室 & 2万+ 提示词 Skill', sub: 'Z-Image 文生图 · Wan2.2 生视频 · Skill 精改', kw: 'aigc ai comfyui 画室 生图 生视频 提示词 skill', run: () => switchView('aigc') },
+    { icon: '⚡', title: '实时下载任务队列', sub: 'Aria2 + qBittorrent 队列与挂机动作', kw: 'downloads queue 下载 队列 任务', run: () => { switchView('downloads'); setDlTab('queue'); } },
+    { icon: '🌐', title: '内置 AriaNg', sub: '同源直嵌 Aria2 Web 控制台', kw: 'ariang aria2 直链', run: () => openInAppAriaNg() },
+    { icon: '🌀', title: '内置 qBittorrent WebUI', sub: '同源反代 BT/PT 种子管理', kw: 'qbit qbittorrent bt pt 种子', run: () => openInAppQbit() },
+    { icon: '🎬', title: 'YT 全平台 4K 视频工坊', sub: 'YouTube / B站 / 抖音 4K 下载与超分', kw: 'yt youtube bilibili 视频 下载', run: () => switchView('yt') },
+    { icon: '🎵', title: '音乐 6 大榜单 & 全网搜歌', sub: 'QQ / 酷狗 / 网易云 / 酷我 / B站 / YT', kw: 'music song 音乐 榜单 搜歌', run: () => switchView('music') },
+    { icon: '🌌', title: '3D 同步歌词全屏舞台', sub: 'WebGL GLSL 实景着色器沉浸播放', kw: 'lyrics 3d 歌词 舞台 全屏', run: () => switchView('lyrics3d') },
+    { icon: '🎙️', title: 'AI 声音克隆 & 神经配音', sub: 'F5-TTS CUDA 克隆 · Edge-TTS 配音', kw: 'voice tts 声音 克隆 配音', run: () => switchView('voice') },
+    { icon: '👾', title: '赛博小怪兽智能体', sub: '内置 2万+ 提示词 Skill 自动调用', kw: 'codex ai 怪兽 聊天 问答 智能体', run: () => switchView('codex') },
+    { icon: '📖', title: '全功能交互式教程', sub: '11 章分步引导与常见避坑', kw: 'tutorial help 教程 帮助 说明', run: () => switchView('tutorial') },
+    { icon: '🛠️', title: '系统配置与日志诊断', sub: '下载目录 · 端口 · 备份与清理', kw: 'system settings 系统 设置 端口 日志', run: () => switchView('system') },
+    { icon: '⚡', title: '一键启动全部核心引擎', sub: '同步唤醒 Aria2 + qBittorrent', kw: 'start all 一键全启 启动', run: () => startAllCoreEngines() },
+    { icon: '🧹', title: '立即释放 GPU 显存缓存', sub: '卸载 ComfyUI 驻留模型', kw: 'vram free 显存 清理 释放', run: () => act('aigc_free_vram') },
+    { icon: '✨', title: '重播 Spatial 3D 启动动画', sub: '体验全新 3D 图标与星际跃迁过场', kw: 'boot splash 启动 动画 图标', run: () => runBootSplash(true) },
+  ];
+  let _cmdFiltered = CMD_ITEMS;
+  let _cmdIdx = 0;
+
+  function openCmdPalette() {
+    $('modal-cmd-palette').classList.remove('hidden');
+    const inp = $('cmd-pal-inp');
+    inp.value = '';
+    _cmdIdx = 0;
+    renderCmdPalette();
+    setTimeout(() => inp.focus(), 40);
+  }
+  function closeCmdPalette() { $('modal-cmd-palette').classList.add('hidden'); }
+  function renderCmdPalette() {
+    const q = ($('cmd-pal-inp').value || '').trim().toLowerCase();
+    _cmdFiltered = q ? CMD_ITEMS.filter(it => (it.title + ' ' + it.sub + ' ' + it.kw).toLowerCase().includes(q)) : CMD_ITEMS;
+    if (_cmdIdx >= _cmdFiltered.length) _cmdIdx = 0;
+    const box = $('cmd-pal-list');
+    if (!_cmdFiltered.length) {
+      box.innerHTML = '<div class="c-dim mono" style="padding:14px;text-align:center;font-size:12px;">没有匹配的工坊或命令</div>';
+      return;
+    }
+    box.innerHTML = _cmdFiltered.map((it, i) => `
+      <div class="cmd-item ${i === _cmdIdx ? 'sel' : ''}" onclick="execCmdPalette(${i})">
+        <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+          <span style="font-size:17px;">${it.icon}</span>
+          <div style="min-width:0;">
+            <div style="font-size:12.5px;font-weight:800;color:#fff;">${esc(it.title)}</div>
+            <div style="font-size:10.5px;color:#94a9c9;">${esc(it.sub)}</div>
+          </div>
+        </div>
+        <span class="mono c-cyan" style="font-size:10px;flex-shrink:0;">回车直达 →</span>
+      </div>
+    `).join('');
+  }
+  function execCmdPalette(idx) {
+    const it = _cmdFiltered[idx];
+    closeCmdPalette();
+    if (it && it.run) it.run();
+  }
+  function handleCmdPaletteKey(e) {
+    if (e.key === 'Escape') { closeCmdPalette(); return; }
+    if (e.key === 'ArrowDown') { e.preventDefault(); _cmdIdx = (_cmdIdx + 1) % Math.max(1, _cmdFiltered.length); renderCmdPalette(); return; }
+    if (e.key === 'ArrowUp') { e.preventDefault(); _cmdIdx = (_cmdIdx - 1 + Math.max(1, _cmdFiltered.length)) % Math.max(1, _cmdFiltered.length); renderCmdPalette(); return; }
+    if (e.key === 'Enter' && _cmdFiltered.length) { e.preventDefault(); execCmdPalette(_cmdIdx); }
+  }
+  document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      if ($('modal-cmd-palette').classList.contains('hidden')) openCmdPalette();
+      else closeCmdPalette();
+    } else if (e.key === 'Escape' && !$('modal-cmd-palette').classList.contains('hidden')) {
+      closeCmdPalette();
+    }
+  });
+  window.openCmdPalette = openCmdPalette;
+  window.closeCmdPalette = closeCmdPalette;
+  window.renderCmdPalette = renderCmdPalette;
+  window.execCmdPalette = execCmdPalette;
+  window.handleCmdPaletteKey = handleCmdPaletteKey;
 
   function switchView(v, btn) {
     const target = $('view-' + v);
