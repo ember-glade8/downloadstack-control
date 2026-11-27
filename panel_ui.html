@@ -4520,6 +4520,7 @@
     v.addEventListener('waiting', () => $('cine-spin').classList.remove('hidden'));
     v.addEventListener('playing', () => {
       $('cine-spin').classList.add('hidden');
+      if ($('cine-err')) $('cine-err').classList.add('hidden');
       clearTimeout(CINE.audioTimer);
       CINE.audioTimer = setTimeout(() => {
         if (!v.paused && !v.muted && v.currentTime > 2 && v.webkitAudioDecodedByteCount === 0 && CINE.mode === 'direct' && !CINE.autoTriedRemux) {
@@ -4544,6 +4545,7 @@
       if (!CINE.cur || !v.getAttribute('src')) return;
       if (CINE.mode === 'direct' && !CINE.autoTriedRemux) {
         CINE.autoTriedRemux = true;
+        if ($('cine-err')) $('cine-err').classList.add('hidden');
         startCineStream('remux', getCineCurTime());
         toast('原生封装不兼容，已自动切换「原画无损直封 (-c:v copy)」站内播放', 'cyan');
         return;
