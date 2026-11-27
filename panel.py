@@ -392,12 +392,13 @@ class Probe:
         body = {"jsonrpc": "2.0", "id": "panel", "method": method,
                 "params": (["token:" + sec] if sec else []) + (params or [])}
         url = "http://%s:%d/jsonrpc" % (c["host"], int(c["port"]))
-        r = requests.post(url, json=body, timeout=timeout,
-                          proxies={"http": None, "https": None})
+        s = requests.Session()
+        s.trust_env = False
+        r = s.post(url, json=body, timeout=timeout)
         r.raise_for_status()
         j = r.json()
         if "error" in j:
-            raise RuntimeError(str(j["error"])[:100])
+            raise RuntimeError(str(j["error"])[:120])
         return j.get("result")
 
     @staticmethod
@@ -444,15 +445,20 @@ class Probe:
                     tot = int(t.get("totalLength", 0) or 0)
                     done = int(t.get("completedLength", 0) or 0)
                     pct = round((done / tot) * 100, 1) if tot > 0 else 0.0
+                    tname = self._a_task_name(t)
+                    stt = str(t.get("status", ""))
                     tasks.append({
                         "gid": str(t.get("gid", "")),
-                        "name": self._a_task_name(t),
-                        "status": str(t.get("status", "")),
+                        "name": tname,
+                        "status": stt,
                         "total": tot,
                         "done": done,
                         "pct": pct,
                         "speed": int(t.get("downloadSpeed", 0) or 0),
                         "conn": int(t.get("connections", 0) or 0),
+                        "seeders": int(t.get("numSeeders", 0) or 0),
+                        "err": str(t.get("errorMessage") or ""),
+                        "is_meta": ("[METADATA]" in tname or (tot == 0 and stt in ("active", "waiting"))),
                     })
             except Exception:
                 pass
@@ -470,7 +476,8 @@ class Probe:
     def q_login(self, timeout=2.0):
         c = self.cfg["qbit"]
         s = requests.Session()
-        s.proxies = {"http": None, "https": None}
+        s.trust_env = False
+        s.proxies = {}
         base = "http://%s:%d" % (c["host"], int(c["port"]))
         hdr = {"Referer": base + "/", "Origin": base}
         # 优先兼容 LocalHostAuth=false / 本机白名单免密访问
@@ -519,13 +526,22 @@ class Probe:
                     "hash": str(h),
                     "name": str(x.get("name", h[:10])),
                     "state": stt,
-                    "size": int(x.get("size", 0) or 0),
+                    "size": int(x.get("size", 0) or x.get("total_size", 0) or 0),
+                    "done": int(x.get("completed", 0) or x.get("downloaded", 0) or 0),
                     "pct": round(float(x.get("progress", 0) or 0) * 100, 1),
                     "speed": int(x.get("dlspeed", 0) or 0),
                     "up": int(x.get("upspeed", 0) or 0),
+                    "seeds": int(x.get("num_seeds", 0) or 0),
+                    "peers": int(x.get("num_leechs", 0) or 0),
+                    "eta": int(x.get("eta", 0) or 0),
+                    "added_on": int(x.get("added_on", 0) or 0),
                     "ratio": round(float(x.get("ratio", 0) or 0), 2),
                 })
-            q_tasks.sort(key=lambda it: (it["speed"], it["up"], it["pct"]), reverse=True)
+            dl_states = {"downloading", "forcedDL", "metaDL", "stalledDL", "checkingDL", "allocating", "queuedDL"}
+            q_tasks.sort(
+                key=lambda it: (1 if it["state"] in dl_states else 0, it["speed"], it["added_on"], it["pct"]),
+                reverse=True,
+            )
             self.q = {"on": True,
                       "dn": int(st.get("dl_info_speed", 0) or 0),
                       "up": int(st.get("up_info_speed", 0) or 0),
@@ -2235,6 +2251,7 @@ class ControlBackend:
 
         if act == "start_q":
             if port_open(self.cfg["qbit"]["host"], self.cfg["qbit"]["port"]):
+                self.pr._q_hold_until = 0
                 self.log("qBittorrent 已在线", "OK")
                 return True, "qBittorrent 已在线", {"embedded_view": "qbit"}
             script = str((self.cfg.get("scripts") or {}).get("qbit") or "")
@@ -2244,12 +2261,18 @@ class ControlBackend:
                 exe_dir = Path(str((self.cfg.get("qbit") or {}).get("exe_dir") or ""))
                 hit = next((exe_dir / n for n in ("qbittorrent.exe", "qBittorrent.exe") if (exe_dir / n).is_file()), None)
                 if hit:
-                    ok, msg = self.run_cmd([str(hit)], "启动 qBittorrent", "qbit", cwd=str(exe_dir))
+                    cmd = [str(hit)]
+                    prof = str((self.cfg.get("qbit") or {}).get("profile") or "").strip()
+                    if prof:
+                        cmd.append("--profile=%s" % prof)
+                    cmd.append("--no-splash")
+                    ok, msg = self.run_cmd(cmd, "启动 qBittorrent", "qbit", cwd=str(exe_dir))
                 else:
                     return False, "未找到 qBittorrent 程序或脚本", {}
-            for _ in range(10):
-                time.sleep(0.3)
+            for _ in range(24):
+                time.sleep(0.35)
                 if port_open(self.cfg["qbit"]["host"], self.cfg["qbit"]["port"]):
+                    self.pr._q_hold_until = 0
                     break
             self.poll_once()
             return ok, msg, {}
@@ -2388,26 +2411,46 @@ class ControlBackend:
 
                 if target_eng == "qbit":
                     try:
-                        s, base = self.pr.q_login()
+                        q_host = self.cfg["qbit"]["host"]
+                        q_port = self.cfg["qbit"]["port"]
+                        if not port_open(q_host, q_port):
+                            self.log("qBittorrent 离线，正在自动拉起并等待 WebUI 就绪…", "INFO")
+                            self.handle_action({"action": "start_q"})
+                        if not port_open(q_host, q_port):
+                            raise RuntimeError("qBittorrent 启动超时，端口 %s 未就绪" % q_port)
+                        self.pr._q_hold_until = 0
+                        s, base = self.pr.q_login(timeout=3.5)
                         hdr = {"Referer": base + "/", "Origin": base}
                         extra_data = {"savepath": save_dir} if save_dir else {}
+                        added_ok = False
+                        used_tor = False
                         if tor_bytes:
-                            r = s.post(base + "/api/v2/torrents/add", timeout=5.0, headers=hdr,
+                            r = s.post(base + "/api/v2/torrents/add", timeout=6.0, headers=hdr,
                                        data=extra_data,
                                        files={"torrents": (ih + ".torrent", tor_bytes, "application/x-bittorrent")})
-                        else:
-                            extra_data["urls"] = enhanced
-                            r = s.post(base + "/api/v2/torrents/add", timeout=4.0, headers=hdr,
-                                       data=extra_data)
-                        if r.status_code == 200:
-                            note = "（已秒级预取种子 %s）" % tor_src if tor_bytes else "（已自动补全公共 Tracker）"
+                            if r.status_code == 200 and "fails" not in (r.text or "").lower():
+                                added_ok = True
+                                used_tor = True
+                        if not added_ok:
+                            extra_data2 = dict(extra_data)
+                            extra_data2["urls"] = enhanced
+                            r = s.post(base + "/api/v2/torrents/add", timeout=5.0, headers=hdr,
+                                       data=extra_data2)
+                            if r.status_code == 200 and "fails" not in (r.text or "").lower():
+                                added_ok = True
+                        if added_ok:
+                            note = "（已秒级预取种子 %s）" % tor_src if used_tor else "（已自动补全公共 Tracker）"
                             self.log("qBittorrent 磁力投递成功 %s" % note, "OK")
+                            time.sleep(0.25)
                             self.poll_once()
-                            return True, "磁力已投递至 qBittorrent" + note, {"engine": "qbit"}
-                        raise RuntimeError("http_%s" % r.status_code)
+                            return True, "磁力已投递至 qBittorrent" + note, {"engine": "qbit", "infohash": ih}
+                        raise RuntimeError("http_%s_%s" % (r.status_code, (r.text or "")[:40]))
                     except Exception as ex:
                         self.log("qB 磁力投递失败，尝试回退 Aria2：%s" % ex, "WARN")
                         target_eng = "aria2"
+                        qbit_fallback_reason = str(ex)[:80]
+                else:
+                    qbit_fallback_reason = ""
 
                 if target_eng == "aria2":
                     try:
@@ -2422,10 +2465,16 @@ class ControlBackend:
                         else:
                             gid = self.pr.a_call("aria2.addUri", [[enhanced], opts])
                             note = "（已自动补全公共 Tracker）"
+                        fb = "（qB 未就绪已改由 Aria2 接管）" if qbit_fallback_reason else ""
                         self.log("Aria2 磁力投递成功 GID=%s %s" % (gid, note), "OK")
+                        time.sleep(0.2)
                         self.poll_once()
-                        return True, "磁力已投递至 Aria2" + note, {"engine": "aria2", "gid": gid}
+                        return True, "磁力已投递至 Aria2" + fb + note, {"engine": "aria2", "gid": gid, "fallback": bool(qbit_fallback_reason)}
                     except Exception as ex:
+                        ex_s = str(ex)
+                        if "already registered" in ex_s.lower():
+                            self.poll_once()
+                            return True, "该磁力任务已在 Aria2 队列中，无需重复投递", {"engine": "aria2", "duplicate": True}
                         self.log("Aria2 磁力投递失败 %s" % ex, "ERROR")
                         return False, "磁力投递失败，请先启动 Aria2 或 qBittorrent", {}
 
@@ -2444,18 +2493,22 @@ class ControlBackend:
 
             if engine == "qbit":
                 try:
-                    s, base = self.pr.q_login()
+                    if not port_open(self.cfg["qbit"]["host"], self.cfg["qbit"]["port"]):
+                        self.handle_action({"action": "start_q"})
+                    self.pr._q_hold_until = 0
+                    s, base = self.pr.q_login(timeout=3.5)
                     data = {"urls": raw_url}
                     if save_dir:
                         data["savepath"] = save_dir
-                    r = s.post(base + "/api/v2/torrents/add", timeout=4.0,
+                    r = s.post(base + "/api/v2/torrents/add", timeout=5.0,
                                headers={"Referer": base + "/", "Origin": base},
                                data=data)
-                    if r.status_code == 200:
+                    if r.status_code == 200 and "fails" not in (r.text or "").lower():
                         self.log("qBittorrent 已添加种子任务", "OK")
+                        time.sleep(0.25)
                         self.poll_once()
                         return True, "已投递至 qBittorrent 下载", {"engine": "qbit"}
-                    raise RuntimeError("http_%s" % r.status_code)
+                    raise RuntimeError("http_%s_%s" % (r.status_code, (r.text or "")[:40]))
                 except Exception as ex:
                     self.log("qBittorrent 投递失败 %s" % ex, "ERROR")
                     return False, "qBittorrent 投递失败，请确认 qB 已启动", {}
@@ -2550,6 +2603,15 @@ class ControlBackend:
             msg = "DHT 探测：%s%s" % (detail, (" · 可用节点 " + ep) if ep else "")
             self.log(msg, "OK" if ok else "WARN")
             return ok, msg, {"detail": detail, "dht_entry": ep}
+
+        if act == "aria2_purge":
+            try:
+                self.pr.a_call("aria2.purgeDownloadResult")
+                self.poll_once()
+                return True, "已清空 Aria2 已完成/异常历史记录", {}
+            except Exception as ex:
+                self.log("清空 Aria2 记录失败 %s" % ex, "WARN")
+                return False, "Aria2 未在线或清理失败", {}
 
         if act in ("aria2_pause", "aria2_resume", "aria2_remove"):
             gid = str(body.get("gid") or "").strip()

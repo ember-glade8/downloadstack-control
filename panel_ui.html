@@ -936,6 +936,17 @@
     font-size: 11.5px; color: #fde68a; line-height: 1.65;
   }
 
+  /* Animated indeterminate bar for magnet metadata fetching */
+  @keyframes progIndet {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(300%); }
+  }
+  .prog-fill.indet {
+    width: 38% !important;
+    background: linear-gradient(90deg, transparent, #ffb347, #00e5ff, transparent) !important;
+    animation: progIndet 1.35s ease-in-out infinite;
+  }
+
   /* AIGC Gallery */
   .gallery-grid {
     display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
@@ -2155,6 +2166,7 @@
               <div class="card-title c-mint">🌐 Aria2 任务列表 <span class="nav-badge mono" id="cnt-a-tasks">0</span></div>
               <div style="display:flex;gap:5px;">
                 <button class="btn btn-xs btn-mint" onclick="act('start_a')">▶ 启动</button>
+                <button class="btn btn-xs btn-amber" onclick="act('aria2_purge')">🧹 清理已停</button>
                 <button class="btn btn-xs" onclick="setDlTab('ariang')">完整 AriaNg →</button>
               </div>
             </div>
@@ -2267,8 +2279,24 @@
           </div>
         </div>
 
-        <!-- RIGHT: MAGNET PARSER + TRACKER/DHT LAB -->
+        <!-- RIGHT: LIVE DOWNLOAD PROGRESS + MAGNET PARSER + TRACKER/DHT LAB -->
         <div class="col-stack" style="min-height:0;overflow-y:auto;">
+          <div class="holo-card" style="display:flex;flex-direction:column;flex-shrink:0;border-color:rgba(0,229,255,0.36);">
+            <div class="card-hd">
+              <div class="card-title c-cyan">📡 实时下载进度监视器 <span class="nav-badge mono" id="mag-live-cnt">0</span></div>
+              <div style="display:flex;gap:5px;">
+                <button class="btn btn-xs btn-mint" onclick="setDlTab('queue')">⚡ 完整队列</button>
+                <button class="btn btn-xs btn-cyan" onclick="openInAppQbit()">🌀 内置 qB</button>
+                <button class="btn btn-xs" onclick="openInAppAriaNg()">🌐 AriaNg</button>
+              </div>
+            </div>
+            <div class="card-body" style="max-height:240px;min-height:84px;">
+              <div id="mag-live-progress" class="list-scroll">
+                <div class="c-dim" style="font-size:11.5px;padding:6px;">投递磁力后，qBittorrent / Aria2 实时下载进度、速度、做种数会立即显示在这里。</div>
+              </div>
+            </div>
+          </div>
+
           <div class="holo-card" style="display:flex;flex-direction:column;flex-shrink:0;">
             <div class="card-hd">
               <div class="card-title c-violet">🧲 磁力链接 / InfoHash 智能解析与投递</div>
@@ -2276,12 +2304,12 @@
             <div class="card-body" style="gap:8px;">
               <div class="fld">
                 <label>粘贴磁力链接或 40 位 InfoHash</label>
-                <textarea id="mag-input" class="txt mono" rows="3" placeholder="magnet:?xt=urn:btih:... 或直接粘贴 40 位哈希值"></textarea>
+                <textarea id="mag-input" class="txt mono" rows="2" placeholder="magnet:?xt=urn:btih:... 或直接粘贴 40 位哈希值"></textarea>
               </div>
               <div style="display:flex;gap:8px;flex-wrap:wrap;">
                 <button class="btn btn-sm btn-violet" onclick="parseMagnetUI()">🔍 智能解析</button>
-                <button class="btn btn-sm btn-cyan" onclick="submitMagnet('qbit')">🌀 增强投递 qB</button>
-                <button class="btn btn-sm btn-mint" onclick="submitMagnet('aria2')">🌐 增强投递 Aria2</button>
+                <button class="btn btn-sm btn-cyan" onclick="submitMagnet('qbit', this)">🌀 增强投递 qB</button>
+                <button class="btn btn-sm btn-mint" onclick="submitMagnet('aria2', this)">🌐 增强投递 Aria2</button>
               </div>
               <div id="mag-parse-result" class="eng-tile">
                 <div class="c-dim" style="font-size:11.5px;">解析后会展示 InfoHash、资源名、内置 Tracker 数与秒级预取支持状态。</div>
@@ -2289,11 +2317,11 @@
             </div>
           </div>
 
-          <div class="holo-card" style="display:flex;flex-direction:column;flex:1;min-height:220px;">
+          <div class="holo-card" style="display:flex;flex-direction:column;flex-shrink:0;">
             <div class="card-hd">
               <div class="card-title c-mint">🛰️ Tracker 集群与 DHT 引导诊断</div>
             </div>
-            <div class="card-body col-scroll" style="gap:8px;">
+            <div class="card-body" style="gap:8px;">
               <div class="grid-2">
                 <div class="mini-stat"><div class="mini-stat-k">Aria2 配置健康度</div><div class="mini-stat-v mono c-mint" id="m-conf-ok">-</div></div>
                 <div class="mini-stat"><div class="mini-stat-k">配置 Tracker 数</div><div class="mini-stat-v mono c-cyan" id="m-tr-cnt">0</div></div>
@@ -2307,7 +2335,7 @@
               </div>
               <div class="eng-tile" style="font-size:11.5px;color:var(--text-2);line-height:1.65;">
                 <div>• 点击「热更新公共 Tracker」会自动拉取最新 Tracker 并热注入运行中的 Aria2 与 qBittorrent。</div>
-                <div>• 投递磁力时后端会自动秒级尝试预取 `.torrent` 元数据并补全公共 Tracker，解决死链 0 速度问题。</div>
+                <div>• 投递磁力时后端会自动拉起未运行的 qB / Aria2，并秒级尝试预取 `.torrent` 元数据与补全公共 Tracker。</div>
               </div>
             </div>
           </div>
@@ -4041,10 +4069,23 @@
   }
   window.parseMagnetUI = parseMagnetUI;
 
-  async function submitMagnet(engine) {
+  async function submitMagnet(engine, btnEl) {
     const raw = ($('mag-input').value || '').trim();
     if (!raw) { toast('请先输入磁力链接', 'amber'); return; }
-    await act('add_download', { url: raw, engine });
+    if (S.magDispatching) { toast('正在投递上一条磁力，请稍候 1~2 秒…', 'amber'); return; }
+    S.magDispatching = true;
+    const oldTxt = btnEl ? btnEl.textContent : '';
+    if (btnEl) { btnEl.disabled = true; btnEl.textContent = '⏳ 引擎拉起并投递中…'; }
+    try {
+      const res = await act('add_download', { url: raw, engine });
+      if (res && res.ok) {
+        await poll();
+        if ($('mag-live-progress')) $('mag-live-progress').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    } finally {
+      S.magDispatching = false;
+      if (btnEl) { btnEl.disabled = false; btnEl.textContent = oldTxt; }
+    }
   }
   window.submitMagnet = submitMagnet;
 
@@ -4144,8 +4185,8 @@
           ${dateBadge}
         </div>
         <div class="mag-actions">
-          <button class="btn btn-xs btn-cyan" onclick="submitMagnetResult(${i}, 'qbit')">🌀 投递 qB</button>
-          <button class="btn btn-xs btn-mint" onclick="submitMagnetResult(${i}, 'aria2')">🌐 投递 Aria2</button>
+          <button class="btn btn-xs btn-cyan" onclick="submitMagnetResult(${i}, 'qbit', this)">🌀 投递 qB</button>
+          <button class="btn btn-xs btn-mint" onclick="submitMagnetResult(${i}, 'aria2', this)">🌐 投递 Aria2</button>
           <button class="btn btn-xs btn-violet" onclick="copyMagnetResult(${i})">📋 复制磁力</button>
           <button class="btn btn-xs" onclick="loadMagnetResult(${i})">🔍 填入解析</button>
           <span class="mono c-dim" style="font-size:10px;margin-left:auto;">${esc((it.infohash || '').slice(0, 12))}…</span>
@@ -4154,12 +4195,28 @@
     }).join('');
   }
 
-  async function submitMagnetResult(idx, engine) {
+  async function submitMagnetResult(idx, engine, btnEl) {
     const it = (S.magResults || [])[idx];
     if (!it || !it.magnet) { toast('磁力链接无效', 'rose'); return; }
-    const res = await act('add_download', { url: it.magnet, engine });
-    if (res && res.ok) {
-      toast(`已投递至 ${engine === 'qbit' ? 'qBittorrent' : 'Aria2'}：${(it.title || '').slice(0, 36)}`, 'mint');
+    if (S.magDispatching) { toast('正在启动引擎并投递上一条磁力，请稍候…', 'amber'); return; }
+    S.magDispatching = true;
+    const oldTxt = btnEl ? btnEl.textContent : '';
+    if (btnEl) { btnEl.disabled = true; btnEl.textContent = '⏳ 投递中…'; }
+    try {
+      const res = await act('add_download', { url: it.magnet, engine }, true);
+      if (res && res.ok) {
+        const landed = res.engine === 'qbit' ? 'qBittorrent' : 'Aria2';
+        toast(`${res.msg || ('已投递至 ' + landed)} · 右上角可实时看进度`, res.fallback ? 'amber' : 'mint');
+        if (btnEl) btnEl.textContent = `✔ 已投 ${res.engine === 'qbit' ? 'qB' : 'Aria2'}`;
+        await poll();
+        setTimeout(() => { if (btnEl) btnEl.textContent = oldTxt; }, 2200);
+      } else {
+        toast((res && res.msg) || '磁力投递失败，请先启动 qBittorrent 或 Aria2', 'rose');
+        if (btnEl) btnEl.textContent = oldTxt;
+      }
+    } finally {
+      S.magDispatching = false;
+      if (btnEl) btnEl.disabled = false;
     }
   }
   window.submitMagnetResult = submitMagnetResult;
@@ -4900,18 +4957,69 @@
 
     // Tasks
     const aT = S.tasks.aria2 || [], qT = S.tasks.qbit || [];
+    const fmtSt = (st, isMeta) => {
+      if (isMeta || st === 'metaDL' || st === 'forcedMetaDL') return '🛰️ 获取元数据中…';
+      const map = {
+        downloading: '⬇ 下载中', forcedDL: '⬇ 强制下载', stalledDL: '⏳ 等待做种节点',
+        queuedDL: '🕒 队列等待', checkingDL: '🔎 校验中', allocating: '💾 分配空间',
+        uploading: '⬆ 做种中', stalledUP: '✔ 已完成/做种', forcedUP: '⬆ 强制做种',
+        pausedDL: '⏸ 已暂停', stoppedDL: '⏸ 已停止', pausedUP: '✔ 已完成', stoppedUP: '✔ 已完成',
+        active: '⬇ 下载中', waiting: '🕒 等待中', paused: '⏸ 已暂停', complete: '✔ 已完成',
+        error: '✘ 异常', removed: '已移除'
+      };
+      return map[st] || st || '-';
+    };
+    const fmtEta = (sec) => {
+      const s = Number(sec || 0);
+      if (s <= 0 || s >= 8640000) return '';
+      if (s < 60) return ` · 剩余 ${s}s`;
+      if (s < 3600) return ` · 剩余 ${Math.floor(s / 60)}m${s % 60}s`;
+      return ` · 剩余 ${Math.floor(s / 3600)}h${Math.floor((s % 3600) / 60)}m`;
+    };
     $('nav-task-cnt').textContent = aT.length + qT.length;
     $('p-dl-sub').textContent = (aT.length + qT.length) ? `${aT.length + qT.length} 任务 · ${fmt(totDn)}` : '0 任务 · 待命';
     $('cnt-a-tasks').textContent = aT.length;
     $('cnt-q-tasks').textContent = qT.length;
     const allT = [
-      ...aT.map(t => ({ src: 'A2', id: t.gid, name: t.name, pct: t.pct, speed: t.speed, st: t.status, col: '#00f5b8' })),
-      ...qT.map(t => ({ src: 'qB', id: t.hash, name: t.name, pct: t.pct, speed: t.speed, st: t.state, col: '#00e5ff' })),
+      ...qT.map(t => ({
+        src: 'qB', id: t.hash, name: t.name, pct: t.pct, speed: t.speed,
+        st: fmtSt(t.state, t.state === 'metaDL' || t.state === 'forcedMetaDL'),
+        isMeta: t.state === 'metaDL' || t.state === 'forcedMetaDL' || (t.state === 'stalledDL' && !t.size),
+        meta: `${fmtBytes(t.done || 0)} / ${fmtBytes(t.size || 0)} · 🌱${t.seeds || 0}/${t.peers || 0}${fmtEta(t.eta)}`,
+        err: '', col: '#00e5ff'
+      })),
+      ...aT.map(t => ({
+        src: 'A2', id: t.gid, name: t.name, pct: t.pct, speed: t.speed,
+        st: fmtSt(t.status, t.is_meta),
+        isMeta: !!t.is_meta,
+        meta: `${fmtBytes(t.done || 0)} / ${fmtBytes(t.total || 0)} · ${t.conn || 0} 连接${t.seeders ? ' · 🌱' + t.seeders : ''}`,
+        err: t.err || '', col: '#00f5b8'
+      })),
     ];
+    if ($('mag-live-cnt')) $('mag-live-cnt').textContent = String(allT.length);
+    if ($('mag-live-progress')) {
+      $('mag-live-progress').innerHTML = allT.length ? allT.slice(0, 12).map(t => `
+        <div class="eng-tile" style="padding:7px 9px;gap:4px;">
+          <div class="eng-top">
+            <span class="row-name"><b class="mono" style="color:${t.col};margin-right:4px;">[${t.src}]</b>${esc(t.name)}</span>
+            <span class="mono" style="font-size:10.5px;color:${t.isMeta ? '#ffb347' : t.col};">${t.isMeta ? '解析中' : (t.pct + '%')} · ${fmt(t.speed)}</span>
+          </div>
+          <div class="prog-track"><div class="prog-fill ${t.isMeta ? 'indet' : ''}" style="width:${Math.min(100, t.pct)}%;background:${t.col};"></div></div>
+          <div class="eng-meta mono">
+            <span>${esc(t.st)} · ${t.meta}</span>
+            <span style="display:flex;gap:4px;">
+              <button class="btn btn-xs" onclick="act('${t.src === 'A2' ? 'aria2_pause' : 'qbit_pause'}',{${t.src === 'A2' ? 'gid' : 'hash'}:'${escJs(t.id)}'})">⏸</button>
+              <button class="btn btn-xs btn-mint" onclick="act('${t.src === 'A2' ? 'aria2_resume' : 'qbit_resume'}',{${t.src === 'A2' ? 'gid' : 'hash'}:'${escJs(t.id)}'})">▶</button>
+              <button class="btn btn-xs btn-rose" onclick="act('${t.src === 'A2' ? 'aria2_remove' : 'qbit_delete'}',{${t.src === 'A2' ? 'gid' : 'hash'}:'${escJs(t.id)}'})">✕</button>
+            </span>
+          </div>
+          ${t.err ? `<div class="c-rose mono" style="font-size:10px;word-break:break-word;">⚠ ${esc(t.err)}</div>` : ''}
+        </div>`).join('') : '<div class="c-dim" style="font-size:11.5px;padding:8px;">暂无活跃下载任务。点击左侧任意搜索结果的「🌀 投递 qB」或「🌐 投递 Aria2」，进度将实时显示在这里。</div>';
+    }
     $('radar-list').innerHTML = allT.length ? allT.slice(0, 8).map(t => `
       <div class="eng-tile" style="padding:7px 9px;gap:4px;">
-        <div class="eng-top"><span class="row-name"><b class="mono" style="color:${t.col};margin-right:4px;">[${t.src}]</b>${esc(t.name)}</span><span class="mono" style="font-size:10.5px;color:${t.col};">${t.pct}%</span></div>
-        <div class="prog-track"><div class="prog-fill" style="width:${Math.min(100, t.pct)}%;background:${t.col};"></div></div>
+        <div class="eng-top"><span class="row-name"><b class="mono" style="color:${t.col};margin-right:4px;">[${t.src}]</b>${esc(t.name)}</span><span class="mono" style="font-size:10.5px;color:${t.isMeta ? '#ffb347' : t.col};">${t.isMeta ? '解析中' : (t.pct + '%')}</span></div>
+        <div class="prog-track"><div class="prog-fill ${t.isMeta ? 'indet' : ''}" style="width:${Math.min(100, t.pct)}%;background:${t.col};"></div></div>
         <div class="eng-meta mono">
           <span>${fmt(t.speed)} · ${esc(t.st)}</span>
           <span style="display:flex;gap:4px;">
@@ -4923,31 +5031,35 @@
 
     $('full-a-tasks').innerHTML = aT.length ? aT.map(t => `
       <div class="eng-tile" style="padding:8px 10px;">
-        <div class="eng-top"><span class="row-name">${esc(t.name)}</span><span class="mono c-mint" style="font-size:11px;">${t.pct}% · ${fmt(t.speed)}</span></div>
-        <div class="prog-track"><div class="prog-fill" style="width:${Math.min(100, t.pct)}%;background:#00f5b8;"></div></div>
+        <div class="eng-top"><span class="row-name">${esc(t.name)}</span><span class="mono ${t.is_meta ? 'c-amber' : 'c-mint'}" style="font-size:11px;">${t.is_meta ? '获取元数据中' : (t.pct + '%')} · ${fmt(t.speed)}</span></div>
+        <div class="prog-track"><div class="prog-fill ${t.is_meta ? 'indet' : ''}" style="width:${Math.min(100, t.pct)}%;background:#00f5b8;"></div></div>
         <div class="eng-meta mono">
-          <span>${fmtBytes(t.done)} / ${fmtBytes(t.total)} · ${t.conn} 连接 · ${esc(t.status)}</span>
+          <span>${fmtBytes(t.done)} / ${fmtBytes(t.total)} · ${t.conn} 连接${t.seeders ? ' · 🌱' + t.seeders : ''} · ${esc(fmtSt(t.status, t.is_meta))}</span>
           <span style="display:flex;gap:4px;">
             <button class="btn btn-xs" onclick="act('aria2_pause',{gid:'${escJs(t.gid)}'})">暂停</button>
             <button class="btn btn-xs btn-mint" onclick="act('aria2_resume',{gid:'${escJs(t.gid)}'})">继续</button>
             <button class="btn btn-xs btn-rose" onclick="act('aria2_remove',{gid:'${escJs(t.gid)}'})">移除</button>
           </span>
         </div>
+        ${t.err ? `<div class="c-rose mono" style="font-size:10.5px;word-break:break-word;">⚠ ${esc(t.err)}</div>` : ''}
       </div>`).join('') : '<div class="c-dim" style="padding:14px;font-size:12px;">暂无 Aria2 任务</div>';
 
-    $('full-q-tasks').innerHTML = qT.length ? qT.map(t => `
+    $('full-q-tasks').innerHTML = qT.length ? qT.map(t => {
+      const isMeta = t.state === 'metaDL' || t.state === 'forcedMetaDL' || (t.state === 'stalledDL' && !t.size);
+      return `
       <div class="eng-tile" style="padding:8px 10px;">
-        <div class="eng-top"><span class="row-name">${esc(t.name)}</span><span class="mono c-cyan" style="font-size:11px;">${t.pct}% · ↓${fmt(t.speed)}</span></div>
-        <div class="prog-track"><div class="prog-fill" style="width:${Math.min(100, t.pct)}%;background:#00e5ff;"></div></div>
+        <div class="eng-top"><span class="row-name">${esc(t.name)}</span><span class="mono ${isMeta ? 'c-amber' : 'c-cyan'}" style="font-size:11px;">${isMeta ? '获取元数据中' : (t.pct + '%')} · ↓${fmt(t.speed)}</span></div>
+        <div class="prog-track"><div class="prog-fill ${isMeta ? 'indet' : ''}" style="width:${Math.min(100, t.pct)}%;background:#00e5ff;"></div></div>
         <div class="eng-meta mono">
-          <span>${fmtBytes(t.size)} · 分享率 ${t.ratio} · ${esc(t.state)}</span>
+          <span>${fmtBytes(t.done || 0)} / ${fmtBytes(t.size)} · 🌱${t.seeds || 0}/${t.peers || 0} · 分享率 ${t.ratio}${fmtEta(t.eta)} · ${esc(fmtSt(t.state, isMeta))}</span>
           <span style="display:flex;gap:4px;">
             <button class="btn btn-xs" onclick="act('qbit_pause',{hash:'${escJs(t.hash)}'})">暂停</button>
             <button class="btn btn-xs btn-cyan" onclick="act('qbit_resume',{hash:'${escJs(t.hash)}'})">继续</button>
             <button class="btn btn-xs btn-rose" onclick="act('qbit_delete',{hash:'${escJs(t.hash)}'})">删除</button>
           </span>
         </div>
-      </div>`).join('') : '<div class="c-dim" style="padding:14px;font-size:12px;">暂无 qBittorrent 种子任务</div>';
+      </div>`;
+    }).join('') : '<div class="c-dim" style="padding:14px;font-size:12px;">暂无 qBittorrent 种子任务</div>';
 
     // System Config Form
     const cfg = d.cfg;
