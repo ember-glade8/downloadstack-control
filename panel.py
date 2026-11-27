@@ -3270,6 +3270,58 @@ class ControlBackend:
             self.log("清理缓存 %d 个" % n, "OK")
             return True, "已清理 %d 个缓存文件" % n, {}
 
+        if act == "purge_all":
+            rm_files = bool(body.get("remove_files"))
+            cleared = {"aria2": 0, "qbit": 0, "cache": 0}
+            errs = []
+            try:
+                tasks = (self.pr.a_call("aria2.tellActive") or [])
+                try:
+                    tasks += (self.pr.a_call("aria2.tellWaiting", [0, 1000]) or [])
+                except Exception:
+                    pass
+                for t in tasks:
+                    gid = (t or {}).get("gid")
+                    if not gid:
+                        continue
+                    try:
+                        self.pr.a_call("aria2.forceRemove", [gid])
+                        cleared["aria2"] += 1
+                    except Exception:
+                        pass
+                try:
+                    self.pr.a_call("aria2.purgeDownloadResult")
+                except Exception:
+                    pass
+            except Exception as ex:
+                errs.append("Aria2: %s" % str(ex)[:60])
+            try:
+                if port_open(self.cfg["qbit"]["host"], self.cfg["qbit"]["port"]):
+                    s, base = self.pr.q_login()
+                    hdr = {"Referer": base + "/", "Origin": base}
+                    r = s.post(base + "/api/v2/torrents/delete", timeout=8.0, headers=hdr,
+                               data={"hashes": "all", "deleteFiles": "true" if rm_files else "false"})
+                    if r.status_code == 200:
+                        cleared["qbit"] = 1
+                    else:
+                        errs.append("qB: HTTP %d" % r.status_code)
+            except Exception as ex:
+                errs.append("qB: %s" % str(ex)[:60])
+            try:
+                for f in CACHE.rglob("*"):
+                    if f.is_file():
+                        f.unlink()
+                        cleared["cache"] += 1
+            except Exception:
+                pass
+            self.poll_once()
+            msg = "已清空 Aria2 %d 个任务、qB 全部任务（%s）、缓存 %d 个文件" % (
+                cleared["aria2"], "含文件" if rm_files else "保留文件", cleared["cache"])
+            if errs:
+                msg += "；" + "；".join(errs)
+            self.log(msg, "WARN" if errs else "OK")
+            return True, msg, {"cleared": cleared}
+
         if act == "stop_all":
             self.log("一键全部停止：Aria2 → qBittorrent → YT 壳", "WARN")
             self.handle_action({"action": "stop_a"})

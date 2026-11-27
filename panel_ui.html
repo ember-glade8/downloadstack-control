@@ -2288,6 +2288,7 @@
                 <button class="btn btn-xs btn-mint" onclick="setDlTab('queue')">⚡ 完整队列</button>
                 <button class="btn btn-xs btn-cyan" onclick="openInAppQbit()">🌀 内置 qB</button>
                 <button class="btn btn-xs" onclick="openInAppAriaNg()">🌐 AriaNg</button>
+                <button class="btn btn-xs btn-rose" onclick="purgeAll()" title="一键清空全部下载任务与缓存">🗑 一键清空</button>
               </div>
             </div>
             <div class="card-body" style="max-height:240px;min-height:84px;">
@@ -5963,6 +5964,17 @@ function togglePw(id, btn) {
   el.type = showing ? 'text' : 'password';
   if (btn) btn.textContent = showing ? '🙈' : '👁';
   try { el.focus(); } catch (e) {}
+}
+
+// 一键清空：Aria2 活动任务 + qB 全部种子 + 面板缓存
+function purgeAll() {
+  if (!confirm('确定清空全部下载任务？（Aria2 + qBittorrent）')) return;
+  const rm = confirm(
+    '要连磁盘上的已下载文件一起删掉吗？\n\n' +
+    '点【确定】= 连文件一起删（不可恢复）\n' +
+    '点【取消】= 只清任务，文件保留'
+  );
+  window.act('purge_all', { remove_files: !!rm });
 }
 </script>
 </body>
