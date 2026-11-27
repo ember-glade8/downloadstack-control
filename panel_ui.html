@@ -2033,7 +2033,7 @@
                   <option value="768x768">768×768 (1:1 · 8G实测极稳)</option>
                   <option value="512x896">512×896 (9:16 · 8G竖屏极稳)</option>
                   <option value="1024x576">1024×576 (16:9 · 仅生图)</option>
-                  <option value="640x384">640×384 (16:9 · 8G视频防爆)</option>
+                  <option value="640x384">640×384 (16:9 · 8G极速视频)</option>
                   <option value="768x432">768×432 (16:9 · 8G视频平衡)</option>
                 </select>
               </div>
@@ -2044,14 +2044,14 @@
               <div class="fld">
                 <label>视频帧数(≤25) / 种子</label>
                 <div style="display:flex;gap:4px;">
-                  <input id="ai-length" class="inp mono" type="number" min="9" max="33" step="4" value="21" title="8G显存视频推荐 17~25 帧防爆" onchange="updateAigcVramGuard()" />
+                  <input id="ai-length" class="inp mono" type="number" min="9" max="33" step="4" value="21" title="8G显存视频推荐 17~25 帧（1分钟内流畅直出）" onchange="updateAigcVramGuard()" />
                   <input id="ai-seed" class="inp mono" type="number" value="-1" title="-1 为随机种子" />
                 </div>
               </div>
             </div>
 
             <div class="row-item" style="justify-content:space-between;background:rgba(0,245,184,0.06);border-color:rgba(0,245,184,0.24);padding:6px 10px;">
-              <span class="mono" style="font-size:10.5px;" id="ai-vram-guard-lbl">🛡️ 8G 显存防爆护栏已开启 · 当前参数安全</span>
+              <span class="mono" style="font-size:10.5px;" id="ai-vram-guard-lbl">⚡ 8G 显存深度适配已就绪 · 生图/生视频 1 分钟内流畅直出</span>
               <button class="btn btn-xs" onclick="act('aigc_free_vram')">🧹 清显存</button>
             </div>
 
@@ -2204,6 +2204,7 @@
                 <label>参考音频对应的原文（F5-TTS 建议填写，可显著提升相似度）</label>
                 <input id="vc-ref-text" class="inp" placeholder="输入参考音频里说的话（留空则自动识别）…" />
               </div>
+              <div style="font-size:10.5px;color:#fde68a;line-height:1.5;opacity:0.9;">⚖️ 合规提醒：仅限使用<b>本人声音</b>或<b>已获明确授权的声音样本</b>，严禁用于冒充他人或任何侵权/违法用途。</div>
             </div>
 
             <!-- External API Panel -->
@@ -2376,7 +2377,7 @@
           </div>
           <div class="card-body" style="gap:8px;min-height:0;">
             <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
-              <input id="mag-search-q" class="inp" placeholder="输入影视/动漫/软件/游戏/剧集关键词（支持中英文，如 鬼灭之刃、Ubuntu、4K Remux）…" onkeydown="if(event.key==='Enter')searchMagnetsUI()" />
+              <input id="mag-search-q" class="inp" placeholder="输入开源镜像 / CC 公共素材 / 合法授权资源关键词（如 Ubuntu 24.04、Blender、Debian）…" onkeydown="if(event.key==='Enter')searchMagnetsUI()" />
               <button id="btn-mag-search" class="btn btn-cyan" onclick="searchMagnetsUI()">🔍 搜索磁力</button>
             </div>
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;flex-shrink:0;">
@@ -2396,21 +2397,21 @@
             </div>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;flex-shrink:0;">
               <div class="pill-row">
-                <span class="c-dim" style="font-size:10.5px;">热搜直达：</span>
+                <span class="c-dim" style="font-size:10.5px;">开源示例：</span>
                 <span class="chip" onclick="quickMagSearch('Ubuntu 24.04')">Ubuntu 24.04</span>
-                <span class="chip" onclick="quickMagSearch('Blender')">Blender</span>
-                <span class="chip" onclick="quickMagSearch('鬼灭之刃')">鬼灭之刃</span>
-                <span class="chip" onclick="quickMagSearch('进击的巨人')">进击的巨人</span>
-                <span class="chip" onclick="quickMagSearch('Interstellar 2160p')">4K电影</span>
+                <span class="chip" onclick="quickMagSearch('Debian')">Debian ISO</span>
+                <span class="chip" onclick="quickMagSearch('Blender')">Blender 开源</span>
+                <span class="chip" onclick="quickMagSearch('Big Buck Bunny')">CC 4K 样片</span>
+                <span class="chip" onclick="quickMagSearch('Arch Linux')">Arch Linux</span>
               </div>
               <span id="mag-search-meta" class="mono c-dim" style="font-size:10.5px;">输入关键词即刻检索全网公开磁力源</span>
             </div>
             <div id="mag-search-list" class="list-scroll">
               <div class="eng-tile" style="font-size:12px;color:var(--text-2);line-height:1.75;">
-                <div class="c-cyan" style="font-weight:800;margin-bottom:4px;">🧲 站内 5 源磁力聚合引擎已就绪</div>
-                <div>• <b>中文番剧 / 字幕组影视</b>：自动并发查询 <b>蜜柑计划 (Mikan)</b> 与 <b>Nyaa</b>，直接提取标准磁力链接。</div>
-                <div>• <b>国际影视 / 软件 / 镜像 / 游戏</b>：并发查询 <b>Knaben 聚合</b>、<b>APIBay</b>、<b>SolidTorrents</b>，按实时做种数排序并自动按 InfoHash 去重。</div>
-                <div>• 搜到后点击 <b>🌀 投递 qB</b> 或 <b>🌐 投递 Aria2</b>，后端将自动注入高速公共 Tracker 并尝试秒级预取 `.torrent` 元数据。</div>
+                <div class="c-cyan" style="font-weight:800;margin-bottom:4px;">🧲 站内 5 源磁力协议聚合检索引擎已就绪</div>
+                <div>• 并发查询 5 大公开 BitTorrent / RSS 索引接口，自动按 InfoHash 去重、按实时做种数/体积/时间排序。</div>
+                <div>• 投递至 <b>🌀 qBittorrent</b> 或 <b>🌐 Aria2</b> 时，后端自动补全高速公共 Tracker 并尝试秒级预取 `.torrent` 元数据。</div>
+                <div class="c-amber" style="font-size:11px;">⚖️ 合法合规提示：本工具仅提供中立协议检索，不托管任何资源，请仅下载开源镜像、CC 公共素材或您拥有合法授权的内容。</div>
               </div>
             </div>
           </div>
@@ -2877,7 +2878,7 @@
           <div class="portal-ico" style="width:42px;height:42px;font-size:22px;border-color:rgba(255,179,71,0.55);">📖</div>
           <div>
             <div class="sub-hero-h c-amber">全功能使用教程模板 · 10 大站内工坊速通手册</div>
-            <div class="sub-hero-p">覆盖全能调度 / 4K视频 / 6源音乐 / 全屏3D歌词 / AI画室防爆显存 / 声音克隆 / 5源搜磁力 / 内嵌下载 / 赛博小怪兽 / FAQ</div>
+            <div class="sub-hero-p">覆盖全能调度 / 4K视频 / 6源音乐 / 全屏3D歌词 / 8G极速AI画室 / 声音克隆 / 5源搜磁力 / 4K原画影院 / 赛博小怪兽 / FAQ</div>
           </div>
         </div>
         <div class="sub-hero-right" style="gap:8px;">
@@ -5640,7 +5641,7 @@
     if (!box) return;
     const list = S.magResults || [];
     if (!list.length) {
-      box.innerHTML = `<div class="eng-tile c-dim" style="font-size:12px;">暂未找到匹配磁力。提示：欧美影视/软件推荐用英文原名（如 <code>Interstellar 2160p</code>、<code>Ubuntu</code>），中文动漫可直接搜中文名（蜜柑计划源）。</div>`;
+      box.innerHTML = `<div class="eng-tile c-dim" style="font-size:12px;">暂未找到匹配磁力。提示：国际开源镜像或 CC 素材推荐用英文关键词（如 <code>Ubuntu 24.04</code>、<code>Big Buck Bunny</code>），中文关键词支持多源并发检索。</div>`;
       return;
     }
     box.innerHTML = list.map((it, i) => {
@@ -5814,11 +5815,11 @@
       id: 'aigc',
       ico: '🎨',
       tag: '第 5 章 · AI 画室',
-      title: '本地 ComfyUI 画室、提示词引擎 & 8G 显存护航',
+      title: '本地 ComfyUI 画室、提示词引擎 & 8G 显存极速适配',
       color: '#a78bfa',
       target: { view: 'aigc' },
       btnLabel: '前往 AI 创作画室',
-      summary: '直连本机 ComfyUI 实现 Z-Image Turbo 极速文生图、Wan 2.2 一键文生视频/图生视频，内置 54 套大师模板库 + AI 提示词优化器 + 4 层 8G 显存防爆保护。',
+      summary: '直连本机 ComfyUI 实现 Z-Image Turbo 极速文生图、Wan 2.2 一键文生视频/图生视频，已针对 8GB 显存深度适配（生图与生视频均可 1 分钟内流畅直出），内置 54 套大师模板库与 AI 提示词优化器。',
       steps: [
         '先看顶部状态栏：如果 ComfyUI 显示离线，点击「▶ 启动 ComfyUI」等待上线（显示「在线 ✔」及 Z-Image / Wan2.2 就绪标志）。',
         '【找提示词】：右侧「✨ 提示词引擎 & 模板库」输入任意中文想法（如「雨夜赛博少女」「一剑开天门」），点「🔍 搜索模板」即出精选大师库 + 6 套定制风格模板；每张卡片可直接点「📥 填入」或「⚡ 立即生成」。',
@@ -5827,8 +5828,8 @@
         '【接入自己的模型】：点右上角「🔌 接入自己的本地模型」，可自由切换自建 ComfyUI / SD WebUI / OpenAI 兼容图像接口。'
       ],
       tips: [
-        '8G 显存（如主流 8GB 独立显卡）防爆铁律：系统已内置 4 层保护——文生图分辨率安全上限 1024×1024（推荐 1024×576）、Wan 2.2 视频上限 832×480 / 33帧 / 4步；每次文生视频两阶段之间会自动调用 ComfyUI /free 卸载显存。',
-        '若切换大模型或连续跑图后感觉显存偏高，随时点击左侧显存护航条的「🧹 释放显存」按钮一键清空 VRAM 缓存。'
+        '8GB 显存已深度适配优化：推荐分辨率（文生图 1024×576、Wan 2.2 视频 640×384~832×480 / 21~33帧 / 4步）实测 1 分钟以内流畅直出；文生视频两阶段之间会自动调用 ComfyUI /free 智能调度显存。',
+        '如需切换其他大模型，随时可点击「🧹 释放显存」按钮一键清空 VRAM 缓存。'
       ]
     },
     {
@@ -5860,10 +5861,10 @@
       btnLabel: '前往磁力搜索舱',
       summary: '找不到磁力链接？直接在软件内并发检索 Knaben / APIBay / Solid / 蜜柑计划 / Nyaa 五大公开源，搜完一键直投 qBittorrent 或 Aria2，并自动注入高速 Tracker。',
       steps: [
-        '在「🔍 站内全网磁力搜索引擎」输入影视、动漫、软件、镜像或游戏关键词（中文动漫自动由蜜柑计划+Nyaa+Knaben 精准命中，欧美影视/软件推荐英文原名如 Interstellar 2160p、Ubuntu）。',
-        '按需点击来源筛选芯片（全网5源 / Knaben / APIBay / Solid / 蜜柑中文动漫 / Nyaa）或排序芯片（🔥 做种最多 / 📦 体积最大 / 🕒 最新）。',
+        '在「🔍 站内全网磁力搜索引擎」输入开源镜像、CC 公共素材或合法授权资源关键词（支持中英文，如 Ubuntu 24.04、Blender、Big Buck Bunny）。',
+        '按需点击来源筛选芯片或排序芯片（🔥 做种最多 / 📦 体积最大 / 🕒 最新），自动按 InfoHash 去重。',
         '找到高做种资源后，直接点卡片上的「🌀 投递 qB」或「🌐 投递 Aria2」即可开下；也可点「📋 复制磁力」或「🔍 填入解析」查看 InfoHash。',
-        '若遇到老磁力 0 速度或 DHT 无节点：在右侧「🛰️ Tracker 集群与 DHT 诊断」依次点击「⚡ 热更新公共 Tracker」与「🔧 一键修复磁力/DHT」。'
+        '若遇到磁力解析偏慢或 DHT 无节点：在右侧「🛰️ Tracker 集群与 DHT 诊断」依次点击「⚡ 热更新公共 Tracker」与「🔧 一键修复磁力/DHT」。'
       ],
       tips: [
         '投递磁力时后端会自动注入几十个高可用公共 Tracker，并尝试秒级预取 .torrent 种子元数据，大幅缓解死链卡元数据问题。',
@@ -5940,8 +5941,8 @@
         '【修改保存目录】：在「🛠️ 系统」页点各目录旁的「📁」按钮，可自由把视频、音乐、声音克隆、AI 作品与 BT 下载放到任意磁盘（如 D 盘），改完点「💾 保存设置」立即生效。',
         '【一键自检 & 备份】：定期点击「🩺 一键自检」检查 Aria2 / qB / yt-dlp / ffmpeg / ComfyUI 连通性；改重要配置前点「💾 备份配置」留档。',
         '【FAQ · 页面改了没刷新？】在控制台页面按 F5 或 Ctrl+F5 强制刷新；若重启过后端确保只运行一个本地 18550 端口实例。',
-        '【FAQ · 磁力 0 速度 / 搜不到？】搜欧美资源优先用英文名，搜中文动漫选「蜜柑计划 / 全网5源」；下载前点一次「⚡ 热更新公共 Tracker」。',
-        '【FAQ · AI 画室爆显存？】确认分辨率在 1024×576 / 视频 832×480 以内，点「🧹 释放显存」清理缓存后再生成。'
+        '【FAQ · 磁力 0 速度 / 搜不到？】国际开源资源优先用英文关键词；下载前点一次「⚡ 热更新公共 Tracker」。',
+        '【FAQ · 如何保持 8G 显存极速出片？】使用默认适配档位即可 1 分钟内流畅出图/出视频；连续切换模型后可点「🧹 释放显存」清理缓存。'
       ],
       tips: [
         '安全边界：点击「⏹ 停止全部服务」只会按顺序安全关闭由本面板记录 PID 的服务，绝不会误杀你系统里的其他进程。'

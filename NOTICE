@@ -1,15 +1,18 @@
 Third-party notice
 
-This repository ships ONLY our own source code. No third-party binaries are
-bundled. install.bat downloads these programs from their official release
-pages at setup time; they stay separate programs with their own licenses:
+This repository ships ONLY our own source code. No third-party binaries or AI model weights
+are bundled. External tools stay separate programs installed/configured by the user under
+their own independent licenses:
 
-  aria2        GPL-2.0    https://github.com/aria2/aria2/releases
-  AriaNg       MIT        https://github.com/mayswind/AriaNg/releases
-  qBittorrent  GPL-2.0    https://www.qbittorrent.org/
-  yt-dlp       Unlicense  https://github.com/yt-dlp/yt-dlp/releases
+  aria2        GPL-2.0         https://github.com/aria2/aria2/releases
+  AriaNg       MIT             https://github.com/mayswind/AriaNg/releases
+  qBittorrent  GPL-2.0         https://www.qbittorrent.org/
+  yt-dlp       Unlicense       https://github.com/yt-dlp/yt-dlp/releases
+  FFmpeg       LGPL-2.1/GPL    https://ffmpeg.org/
+  ComfyUI      GPL-3.0         https://github.com/comfyanonymous/ComfyUI (optional user-hosted)
+  F5-TTS       MIT             https://github.com/SWivid/F5-TTS (optional isolated venv)
+  edge-tts     GPL-3.0         https://github.com/rany2/edge-tts (optional)
 
 Python packages installed by the user via pip:
 
-  flet      Apache-2.0
-  requests  Apache-2.0
+  requests     Apache-2.0

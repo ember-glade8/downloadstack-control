@@ -160,6 +160,7 @@ downloadstack-control/
 ├─ tests/test_core.py    核心单元测试
 ├─ TUTORIAL.md           全功能 11 章图文步骤使用教程手册
 ├─ CHANGELOG.md          版本发布说明（v2.5）
+├─ DISCLAIMER.md         中英文免责声明与合法合规使用协议
 └─ LICENSE / NOTICE / SECURITY.md / CONTRIBUTING.md
 ```
 
@@ -174,10 +175,12 @@ python -m unittest discover -s tests -v
 
 ---
 
-## 📄 License & 合规声明
+## ⚖️ License、合规边界与免责声明
 
-MIT © DownloadStack Control contributors  
-第三方组件许可信息见 [NOTICE](NOTICE)。
+MIT © DownloadStack Control contributors ｜ 第三方独立组件许可见 [NOTICE](NOTICE) ｜ 完整中英文免责条款见 **[DISCLAIMER.md](DISCLAIMER.md)**。
 
-> 本仓库仅包含自有源码与文档，**不包含任何第三方二进制文件、模型权重、API 密钥或个人配置**。  
-> 请仅下载与处理您拥有合法权限的内容，严格遵守所在地法律法规及各平台服务条款。
+> **重要合规声明（使用即同意）**：
+> 1. **纯本地开源调度工具**：本仓库仅包含自有源码与文档，**不托管、不存储、不分发任何音视频、种子、第三方二进制文件或 AI 模型权重**，不包含任何破解 VIP、绕过付费墙或解除 DRM 保护的功能。
+> 2. **版权合法用途**：视频/音频/磁力协议检索功能仅限用于开源镜像（如 Linux ISO）、Creative Commons 公共领域素材、个人原创归档及已获合法授权的内容；请严格遵守所在地著作权法及各平台服务条款。
+> 3. **AI 声音权与深度合成合规**：使用 AI 声音克隆及内容生成功能时，**仅限使用本人声音或已获得明确书面授权的素材**，严禁冒充他人、深度伪造欺诈或侵害他人声音权/肖像权/隐私权；对外传播 AI 生成内容须依法显著标识。
+> 4. **按“现状”提供（AS IS）**：依据 [MIT License](LICENSE)，文件删除（看完即删 / 一键清空）及定时休眠/关机功能均由用户主动确认触发，作者不对误操作、数据丢失或任何违规使用行为承担法律责任。
