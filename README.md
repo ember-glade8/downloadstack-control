@@ -1,19 +1,20 @@
 <div align="center">
 
-# DownloadStack Control · Spatial 3D Command OS
+# DownloadStack Control v2.5 · Spatial 3D Command OS
 
-**本地运行、全站内嵌入的下载 / 影音 / AI 一体化 3D 空间桌面控制中心**
+**开箱即用、全站内闭环的桌面下载 / 4K 影音 / 本地 AI 一体化 3D 空间控制中心**
 
-支持 Windows / Linux / macOS · 全程站内闭环零外跳 · 不打包第三方二进制与模型权重 · 凭据永不落仓库
+支持 Windows / Linux / macOS · 全程站内同源嵌入零外跳 · 不打包第三方二进制与模型权重 · 凭据仅存本地永不入库
 
+[![Version](https://img.shields.io/badge/Release-v2.5-00E5FF?style=flat-square)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![WebGL](https://img.shields.io/badge/UI-Spatial%203D%20HUD%20%2B%20WebGL%20GLSL-00E5FF)](#-核心功能全景)
+[![WebGL](https://img.shields.io/badge/UI-Spatial%203D%20HUD%20%2B%20WebGL2%20CAS-a78bfa)](#-核心功能全景)
 [![Tutorial](https://img.shields.io/badge/Docs-全功能使用教程-FFB347)](TUTORIAL.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-00F5B8)](#-快速开始)
 [![License](https://img.shields.io/badge/License-MIT-FFB020)](LICENSE)
-[![PRs](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
 
-> 📖 **新手必看**：软件顶部导航已内置 **「📖 教程」交互式教程模块**（支持关键词检索 + 一键跳转功能页），也可直接阅读完整文档 **[《全功能使用教程手册 (TUTORIAL.md)》](TUTORIAL.md)**。
+> 🎉 **v2.5 正式定版**：全新集成 **5 源并发站内搜磁力**、**站内原画 4K 影院（零压缩直出 + GPU WebGL2 FidelityFX CAS 4K画质修复 + RTX 重建纯 4K + 看完即删）**、**4K 原画截图/无损剪辑联动 AI 画室与声音克隆**、**磁盘空间实时卫士 + 通宵挂机自动睡眠/关机**、以及 **11 章交互式教程中心**。  
+> 📖 完整指南见 **[《DownloadStack Control v2.5 使用教程手册》](TUTORIAL.md)** ｜ 更新详情见 **[CHANGELOG.md](CHANGELOG.md)**。
 
 </div>
 
@@ -45,7 +46,7 @@
 
 ---
 
-## ✨ 核心功能全景（9 大站内工坊 + 常驻智能体）
+## ✨ 核心功能全景（11 大站内工坊 + 12 项首页传送门 + 常驻智能体）
 
 ### 1. ✦ 3D 空间控制台总览大屏（Cockpit）
 - **3D 全息轨道指挥核**：实时 3D 轨道雷达 + 6 颗引擎运行卫星 + 5 层实时吞吐量能量波面 + 5 项核心指标（总下行/峰值速率、活跃任务/连接、BT 种子/DHT 节点、本地 GPU 显存占用、AI 与智能体状态）。
@@ -157,6 +158,8 @@ downloadstack-control/
 │  ├─ scan_secrets.py    提交前敏感信息与个人路径扫描器
 │  └─ build.ps1          打包辅助脚本
 ├─ tests/test_core.py    核心单元测试
+├─ TUTORIAL.md           全功能 11 章图文步骤使用教程手册
+├─ CHANGELOG.md          版本发布说明（v2.5）
 └─ LICENSE / NOTICE / SECURITY.md / CONTRIBUTING.md
 ```
 
