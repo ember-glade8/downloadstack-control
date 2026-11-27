@@ -74,6 +74,20 @@ CN_EN_CONCEPTS = {
     "奔跑": "running dynamically forward", "跳舞": "gracefully dancing in flowing fabric",
     "战斗": "epic dynamic combat action", "魔法": "swirling luminous arcane magic",
     "火焰": "glowing embers and rising firelight", "水下": "bioluminescent deep underwater world",
+    "一剑开天门": "a transcendent Chinese xianxia swordsman cleaving the storm-filled heavens open with a single blazing celestial sword arc, parting towering clouds to reveal a colossal golden heavenly gate",
+    "天门": "colossal radiant celestial heavenly gate amidst parting thunderclouds",
+    "剑": "gleaming ancient sword radiating ethereal energy",
+    "仙": "ethereal Chinese immortal xianxia realm",
+    "神": "mythic divine celestial majesty",
+    "武侠": "classic Chinese wuxia martial arts cinema",
+    "云海": "endless billowing sunlit sea of clouds",
+    "雷电": "crackling bolts of celestial lightning",
+    "雪夜": "quiet snow-covered midnight atmosphere",
+    "古亭": "ancient wooden pavilion with curved eaves",
+    "竹林": "misty emerald bamboo forest",
+    "水墨": "flowing traditional ink-wash cloud atmosphere",
+    "海": "vast shimmering ocean", "雨": "falling rain", "花": "blooming delicate flowers",
+    "月": "luminous glowing moon", "星": "glittering starry cosmos", "城": "towering atmospheric city",
 }
 
 def _tpl(cid, title, tags, summary, prompt, neg=None, size="1024x576", mode="t2i"):
@@ -481,9 +495,13 @@ def search_prompts(query: str = "", category: str = "all", mode: str = "t2i", li
             "msg": f"已加载 {min(len(pool), limit)} 套大师级提示词模板（库内共 {len(MASTER_PROMPTS)} 套精选）",
         }
 
-    # Tokenize query (Chinese chars/words + English words) and expand with synonyms
+    # Tokenize query (Chinese phrases, bigrams, key single chars + English words) and expand with synonyms
     tokens = [t for t in re.split(r"[\s,，、/|+]+", q.lower()) if t]
     expanded = set(tokens)
+    # Add Chinese 2-char n-grams so phrases like "一剑开天门" match "天门", "开天", etc.
+    cn_only = re.sub(r"[^\u4e00-\u9fff]+", "", q)
+    for i in range(len(cn_only) - 1):
+        expanded.add(cn_only[i : i + 2])
     for cn, en in CN_EN_CONCEPTS.items():
         if cn in q:
             expanded.add(cn)
