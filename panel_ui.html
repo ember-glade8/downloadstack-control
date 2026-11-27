@@ -884,6 +884,58 @@
     display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
   }
 
+  /* In-App Tutorial Hub (NEVER shrink or clip!) */
+  .tut-nav-item {
+    flex-shrink: 0;
+    display: flex; align-items: center; gap: 9px;
+    padding: 9px 11px; border-radius: 11px;
+    background: rgba(7, 15, 34, 0.72);
+    border: 1px solid rgba(148, 192, 255, 0.14);
+    color: var(--text-1); cursor: pointer; text-align: left;
+    transition: border-color 0.18s, background 0.18s, transform 0.16s;
+  }
+  .tut-nav-item:hover {
+    border-color: rgba(0, 229, 255, 0.45);
+    background: rgba(14, 29, 64, 0.85);
+    transform: translateX(2px);
+  }
+  .tut-nav-item.active {
+    border-color: rgba(0, 229, 255, 0.72);
+    background: linear-gradient(135deg, rgba(0, 229, 255, 0.16), rgba(167, 139, 250, 0.14));
+    box-shadow: 0 0 18px rgba(0, 229, 255, 0.16);
+  }
+  .tut-card {
+    flex-shrink: 0;
+    padding: 14px 16px; border-radius: 14px;
+    background: linear-gradient(155deg, rgba(13, 25, 56, 0.90), rgba(6, 12, 28, 0.96));
+    border: 1px solid rgba(120, 190, 255, 0.24);
+    display: flex; flex-direction: column; gap: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.36);
+  }
+  .tut-card-hd {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+    border-bottom: 1px solid rgba(148, 192, 255, 0.14); padding-bottom: 9px;
+  }
+  .tut-step {
+    display: flex; align-items: flex-start; gap: 9px;
+    padding: 8px 10px; border-radius: 10px;
+    background: rgba(4, 10, 24, 0.78);
+    border: 1px solid rgba(148, 192, 255, 0.12);
+    font-size: 12px; color: var(--text-1); line-height: 1.62;
+  }
+  .tut-step-num {
+    flex-shrink: 0; min-width: 22px; height: 22px; border-radius: 999px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: rgba(0, 229, 255, 0.16); border: 1px solid rgba(0, 229, 255, 0.45);
+    color: var(--cyan); font-size: 11px; font-weight: 800;
+  }
+  .tut-tip {
+    padding: 9px 11px; border-radius: 10px;
+    background: rgba(255, 179, 71, 0.08);
+    border: 1px solid rgba(255, 179, 71, 0.30);
+    font-size: 11.5px; color: #fde68a; line-height: 1.65;
+  }
+
   /* AIGC Gallery */
   .gallery-grid {
     display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
@@ -1074,6 +1126,7 @@
       <button class="nav-btn" data-view="downloads" onclick="switchView('downloads', this)">⚡ 下载核心 <span class="nav-badge mono" id="nav-task-cnt">0</span></button>
       <button class="nav-btn" data-view="codex" onclick="switchView('codex', this)">👾 智能体</button>
       <button class="nav-btn" data-view="system" onclick="switchView('system', this)">🛠️ 系统</button>
+      <button class="nav-btn" data-view="tutorial" onclick="switchView('tutorial', this)">📖 教程</button>
     </nav>
 
     <div class="top-right">
@@ -2458,6 +2511,47 @@
       </div>
     </section>
 
+    <!-- ========== VIEW 10: INTERACTIVE TUTORIAL HUB ========== -->
+    <section id="view-tutorial" class="view hidden" data-aura="amber">
+      <div class="sub-hero" style="border-color:rgba(255,179,71,0.42);">
+        <canvas id="cv-hero-tut"></canvas>
+        <div class="sub-hero-left">
+          <div class="portal-ico" style="width:42px;height:42px;font-size:22px;border-color:rgba(255,179,71,0.55);">📖</div>
+          <div>
+            <div class="sub-hero-h c-amber">全功能使用教程模板 · 10 大站内工坊速通手册</div>
+            <div class="sub-hero-p">覆盖全能调度 / 4K视频 / 6源音乐 / 全屏3D歌词 / AI画室防爆显存 / 声音克隆 / 5源搜磁力 / 内嵌下载 / 赛博小怪兽 / FAQ</div>
+          </div>
+        </div>
+        <div class="sub-hero-right" style="gap:8px;">
+          <input id="tut-search" class="inp" style="width:240px;" placeholder="🔍 搜教程关键词（如 4K、显存、磁力、歌词）…" oninput="filterTutorialHub(this.value)" />
+          <button class="btn btn-sm btn-cyan" id="btn-tut-all" onclick="selectTutorialChapter('all')">📚 全览全部章节</button>
+        </div>
+      </div>
+
+      <div class="split-2" style="grid-template-columns:300px minmax(0, 1fr);">
+        <!-- LEFT: CHAPTER TOC -->
+        <div class="holo-card" style="display:flex;flex-direction:column;min-height:0;">
+          <div class="card-hd">
+            <div class="card-title c-amber">🗂️ 功能教程目录 <span class="nav-badge mono" id="tut-ch-cnt">10</span></div>
+          </div>
+          <div class="card-body" style="min-height:0;">
+            <div id="tut-nav-list" class="list-scroll"></div>
+          </div>
+        </div>
+
+        <!-- RIGHT: STEP-BY-STEP TUTORIAL CARDS -->
+        <div class="holo-card" style="display:flex;flex-direction:column;min-height:0;">
+          <div class="card-hd">
+            <div class="card-title c-cyan" id="tut-detail-title">📘 全功能图文步骤指南</div>
+            <span class="mono c-dim" style="font-size:10.5px;" id="tut-detail-sub">点击每章右上角「立即前往」可直达对应功能页面</span>
+          </div>
+          <div class="card-body" style="min-height:0;">
+            <div id="tut-content-list" class="list-scroll"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
   </main>
 </div>
 
@@ -2665,6 +2759,7 @@
     downloads: { a1: 'rgba(0,245,184,0.19)',  a2: 'rgba(0,229,255,0.14)',  c1: [0,245,184],   c2: [0,229,255] },
     codex:     { a1: 'rgba(56,189,248,0.22)', a2: 'rgba(167,139,250,0.16)',c1: [56,189,248],  c2: [167,139,250] },
     system:    { a1: 'rgba(0,229,255,0.16)',  a2: 'rgba(56,189,248,0.12)', c1: [0,229,255],   c2: [56,189,248] },
+    tutorial:  { a1: 'rgba(255,179,71,0.20)', a2: 'rgba(0,229,255,0.14)',  c1: [255,179,71],  c2: [0,229,255] },
   };
 
   /* ===================== HELPERS ===================== */
@@ -2776,6 +2871,7 @@
     }
     if (v === 'aigc' && !S.aiPromptsLoaded) searchAigcPrompts('', 'all', true);
     if (v === 'downloads') setDlTab(S.dlTab);
+    if (v === 'tutorial') renderTutorialHub();
     updateMiniPlayerVisibility();
     requestAnimationFrame(resizeAllCanvases);
   }
@@ -4098,6 +4194,304 @@
     toast('已填入解析器并自动解析 InfoHash', 'cyan');
   }
   window.loadMagnetResult = loadMagnetResult;
+
+  /* ===================== IN-APP INTERACTIVE TUTORIAL HUB ===================== */
+  const TUTORIAL_CHAPTERS = [
+    {
+      id: 'cockpit',
+      ico: '✦',
+      tag: '第 1 章 · 总控入门',
+      title: '3D 主控制台 & 全能输入栏',
+      color: '#00e5ff',
+      target: { view: 'cockpit' },
+      btnLabel: '前往控制台首页',
+      summary: '一屏掌控 5 大核心引擎（Aria2 / qBittorrent / ComfyUI / YT / Codex），全能输入栏自动识别链接、歌名、提示词、磁力关键词与提问。',
+      steps: [
+        '左侧【核心动力舱】：点击「▶ 全启」可一键拉起 Aria2 与 qBittorrent；点击每个引擎卡片上的「启动/停止」或「站内AriaNg / 站内qB」可直接站内管理。',
+        '顶部【全能输入栏】：默认「⚡ 智能识别」模式会自动判断你输入的是视频链接、直链、磁力、歌名还是提问；也可手动点选模式芯片（如点「🧲 磁力 / 搜磁力」直接输关键词搜磁力）。',
+        '中间【10 大传送门矩阵】：把软件全部核心能力（YT视频、6源音乐、3D歌词、ComfyUI画室、声音克隆、实时队列、AriaNg、qB、磁力搜索、赛博小怪兽）全部直观呈现，一键直达。',
+        '底部【最近成品直出舱 & AI 迷你画廊】：刚下载的视频/音频/图片与 AI 作品会自动出现在这里，点击图片/视频直接站内灯箱高清预览。'
+      ],
+      tips: [
+        '所有界面严格「站内闭环，零外跳浏览器」，不需要在十几个浏览器标签页之间来回切换。',
+        '右侧【即时榜单】点击任意歌曲的播放键即可边操作其他功能边后台听歌（底部会自动浮现迷你播放器）。'
+      ]
+    },
+    {
+      id: 'yt',
+      ico: '🎬',
+      tag: '第 2 章 · 4K 视频',
+      title: 'YT / B站 / 抖音全平台 4K 视频工坊',
+      color: '#ffb347',
+      target: { view: 'yt' },
+      btnLabel: '前往 YT 视频工坊',
+      summary: '基于 yt-dlp + ffmpeg，支持 YouTube、B站、抖音、小红书、TikTok、X 等主流平台，真正请求 2160p/HDR 并在下载后用 ffprobe 自动验真真实分辨率。',
+      steps: [
+        '粘贴视频链接到输入框（支持单个视频、B站分P、播放列表），按需勾选「下载整个播放列表」。',
+        '选择画质档位：【4K/最高画质】会强制优先请求 2160p / HDR / 高帧率 / 高码率流；也可按需选 1080P、720P 或「仅提取无损音频」。',
+        '如需下载 B站大会员 / YouTube 年龄限制或高码率 4K 流，可在「浏览器 Cookies 来源」选择 Edge / Chrome，自动复用本机登录态。',
+        '点击「🚀 开始下载」后，右侧实时输出下载进度与合并日志；下载完成后会自动调用 ffprobe 核验成品真实分辨率（例如 3840×2160 4K），并可直接站内预览或定位目录。'
+      ],
+      tips: [
+        '为何有时选 4K 但成品是 1080P？如果源视频本身最高只上传了 1080P，或未传登录 Cookies 导致平台限流，实测日志会明确提示真实分辨率（如「实际仅 1920×1080」），绝不虚假标注。',
+        '如想把 1080P 源片放大增强，可勾选「2x GPU 超分增强」或调高音频码率。'
+      ]
+    },
+    {
+      id: 'music',
+      ico: '🎵',
+      tag: '第 3 章 · 6 源音乐',
+      title: '6 音源聚合搜歌 & 6 大热门榜单',
+      color: '#ff3d71',
+      target: { view: 'music' },
+      btnLabel: '前往音乐榜单',
+      summary: '同时并发搜索 QQ音乐 / 酷狗 / 网易云 / 酷我 / B站音乐 / YouTube 六大音源，内置 6 大官方实时榜单，支持站内无损直播与一键下载。',
+      steps: [
+        '顶部 6 大榜单标签（热歌榜 / 飙升榜 / 抖音热歌 / 国风古风 / 说唱榜 / 电音榜）一点即加载，右侧自动展示歌曲列表。',
+        '在搜索框输入「歌名」或「歌名 歌手」，可指定「全网 6 源」或单独锁定某个平台，点击「🔍 全网搜歌」。',
+        '点击列表中的「▶ 播放」立即通过本地同源音频流代理秒播（支持进度条拖动，自动同步 LRC 歌词）；点击「⬇ 下载」按 MP3/FLAC 保存到本地音乐目录。',
+        '点击歌曲旁的「🌌 3D歌词」按钮，立刻无缝切入全屏 WebGL 沉浸歌词舞台。'
+      ],
+      tips: [
+        '若单曲在某平台为版权试听版，切换搜索栏中的其他音源（如 B站音乐 / 酷狗 / YouTube）往往能找到完整现场版或无损伴奏。'
+      ]
+    },
+    {
+      id: 'lyrics3d',
+      ico: '🌌',
+      tag: '第 4 章 · 沉浸舞台',
+      title: 'GPU WebGL 映画级全屏 3D 歌词舞台',
+      color: '#f472b6',
+      target: { view: 'lyrics3d' },
+      btnLabel: '进入 3D 歌词舞台',
+      summary: '采用 GPU WebGL GLSL 实景着色器 + ACES 电影级色调映射 + 35mm 胶片微粒，画面随歌曲意境与实时音频频谱 (FFT) 呼吸律动。',
+      steps: [
+        '播放任意在线或本地歌曲后，切到「🌌 3D歌词」标签页，系统自动按歌名/歌手进行三层 LRC 时间轴歌词匹配（本地 → 网易云 → 酷狗）。',
+        '系统会自动根据歌曲风格切换 6 大电影意境（潮汐海面 / 霓虹雨夜 / 樱吹雪 / 东方青绿山水 / 赛博都市 / 深空星云），也可在顶部手动切换任意场景。',
+        '点击右上角「⛶ 全屏沉浸」进入 100% 全屏零遮挡影院模式：鼠标静置 2.4 秒后所有按钮与进度条自动隐身，只留电影实景画面与悬浮歌词；移动鼠标立即唤出控制栏，按 ESC 退出。',
+        '歌词列表中点击任意一句歌词，音频播放进度会精确跳转到对应时间点。'
+      ],
+      tips: [
+        '如果遇到冷门歌曲未匹配到歌词，可在左侧小输入框手动输入「歌名 歌手」点「匹配」重新抓取 LRC。'
+      ]
+    },
+    {
+      id: 'aigc',
+      ico: '🎨',
+      tag: '第 5 章 · AI 画室',
+      title: '本地 ComfyUI 画室、提示词引擎 & 8G 显存护航',
+      color: '#a78bfa',
+      target: { view: 'aigc' },
+      btnLabel: '前往 AI 创作画室',
+      summary: '直连本机 ComfyUI 实现 Z-Image Turbo 极速文生图、Wan 2.2 一键文生视频/图生视频，内置 54 套大师模板库 + AI 提示词优化器 + 4 层 8G 显存防爆保护。',
+      steps: [
+        '先看顶部状态栏：如果 ComfyUI 显示离线，点击「▶ 启动 ComfyUI」等待上线（显示「在线 ✔」及 Z-Image / Wan2.2 就绪标志）。',
+        '【找提示词】：右侧「✨ 提示词引擎 & 模板库」输入任意中文想法（如「雨夜赛博少女」「一剑开天门」），点「🔍 搜索模板」即出精选大师库 + 6 套定制风格模板；每张卡片可直接点「📥 填入」或「⚡ 立即生成」。',
+        '【AI 大师优化】：在左侧写一句口语想法，点「✨ AI 大师优化」，调用赛博小怪兽直接生成 3 套差异化电影级方案（写实版 / 概念美学版 / Wan2.2 运镜视频版），点击一键填入。',
+        '【生成模式】：选「文生图 (Z-Image)」约数秒出图；选「文生视频 (一键链)」会自动先用 Z-Image 出首帧 → 自动释放显存 → 再交 Wan 2.2 生成动态视频；也可在画廊灯箱中把任意满意图片「🎞️ 设为视频首帧」。',
+        '【接入自己的模型】：点右上角「🔌 接入自己的本地模型」，可自由切换自建 ComfyUI / SD WebUI / OpenAI 兼容图像接口。'
+      ],
+      tips: [
+        '8G 显存（如 RTX 4060 Laptop 8G）防爆铁律：系统已内置 4 层保护——文生图分辨率安全上限 1024×1024（推荐 1024×576）、Wan 2.2 视频上限 832×480 / 33帧 / 4步；每次文生视频两阶段之间会自动调用 ComfyUI /free 卸载显存。',
+        '若切换大模型或连续跑图后感觉显存偏高，随时点击左侧显存护航条的「🧹 释放显存」按钮一键清空 VRAM 缓存。'
+      ]
+    },
+    {
+      id: 'voice',
+      ico: '🎙️',
+      tag: '第 6 章 · 声音克隆',
+      title: '开源 AI 声音克隆 (F5-TTS) & 神经配音',
+      color: '#e879f9',
+      target: { view: 'voice' },
+      btnLabel: '前往声音克隆工坊',
+      summary: '提供零显卡秒出的 Edge-TTS 神经配音、独立虚拟环境 (.venv-voice) 一键部署的本地 GPU F5-TTS 声音克隆，以及外部克隆 API 接口。',
+      steps: [
+        '【快速配音（零显存）】：选择「Edge-TTS 神经配音」，挑选音色、语速与音调，输入文案后点击「🎙️ 生成语音」，几秒即可试听和保存。',
+        '【本地 GPU 克隆音色】：切换到「F5-TTS 本地克隆」，首次使用点击「📦 一键安装独立克隆环境」，会自动在 .venv-voice 中安装 CUDA 环境，绝不污染主 Python。',
+        '上传一段 3~15 秒清晰人声（无背景音乐最佳），或直接点击「🔴 麦克风录音」现录一段参考音，填写参考音对应的文字内容。',
+        '输入你想让这个声音说的新台词，点「🎙️ 开始克隆」，生成后自动在站内播放器试听。'
+      ],
+      tips: [
+        '参考音频越干净（5~10 秒单人清晰说话、无回声与 BGM）、参考文本与录音一字不差，克隆相似度越高。'
+      ]
+    },
+    {
+      id: 'magnet',
+      ico: '🧲',
+      tag: '第 7 章 · 搜磁力',
+      title: '5 源并发站内磁力搜索引擎 & DHT 修复',
+      color: '#818cf8',
+      target: { view: 'downloads', dlTab: 'magnet' },
+      btnLabel: '前往磁力搜索舱',
+      summary: '找不到磁力链接？直接在软件内并发检索 Knaben / APIBay / Solid / 蜜柑计划 / Nyaa 五大公开源，搜完一键直投 qBittorrent 或 Aria2，并自动注入高速 Tracker。',
+      steps: [
+        '在「🔍 站内全网磁力搜索引擎」输入影视、动漫、软件、镜像或游戏关键词（中文动漫自动由蜜柑计划+Nyaa+Knaben 精准命中，欧美影视/软件推荐英文原名如 Interstellar 2160p、Ubuntu）。',
+        '按需点击来源筛选芯片（全网5源 / Knaben / APIBay / Solid / 蜜柑中文动漫 / Nyaa）或排序芯片（🔥 做种最多 / 📦 体积最大 / 🕒 最新）。',
+        '找到高做种资源后，直接点卡片上的「🌀 投递 qB」或「🌐 投递 Aria2」即可开下；也可点「📋 复制磁力」或「🔍 填入解析」查看 InfoHash。',
+        '若遇到老磁力 0 速度或 DHT 无节点：在右侧「🛰️ Tracker 集群与 DHT 诊断」依次点击「⚡ 热更新公共 Tracker」与「🔧 一键修复磁力/DHT」。'
+      ],
+      tips: [
+        '投递磁力时后端会自动注入几十个高可用公共 Tracker，并尝试秒级预取 .torrent 种子元数据，大幅缓解死链卡元数据问题。',
+        '在首页全能栏切到「🧲 磁力 / 搜磁力」输入关键词，或在下载队列栏点「🔍 搜磁力」，都能一键直达开搜！'
+      ]
+    },
+    {
+      id: 'downloads',
+      ico: '⚡',
+      tag: '第 8 章 · 下载核心',
+      title: '实时队列 + 站内同源 AriaNg / qBittorrent',
+      color: '#00f5b8',
+      target: { view: 'downloads', dlTab: 'queue' },
+      btnLabel: '前往下载核心',
+      summary: '将 Aria2 多线程直链、完整 AriaNg 界面、完整 qBittorrent WebUI 全部同源内嵌在同一个工作台内，支持自动分流与任务统一管控。',
+      steps: [
+        '【实时队列页】：在顶部快捷框粘贴任意 HTTP/HTTPS 直链、磁力链接或 .torrent 地址，点「⚡ 自动分流」自动把直链交 Aria2、把磁力/种子交 qBittorrent。',
+        '下方双栏实时展示 Aria2 与 qBittorrent 的活跃任务进度、速度与状态，支持一键暂停、继续与移除。',
+        '【内置 AriaNg】：点击顶部「🌐 内置 AriaNg」子标签，免输密钥直接同源加载完整 AriaNg，高级分片/限速/历史记录一站搞定。',
+        '【内置 qBittorrent】：点击「🌀 内置 qBittorrent」子标签，由后端同源反代 /qbit/，直接在软件内管理做种、优先级、分类与限速。'
+      ],
+      tips: [
+        '如果内置 qBittorrent 提示未连接，先回左侧引擎栏启动 qBittorrent；切勿短时间内反复输错密码，避免触发 qB 本地 IP 登录退避保护。'
+      ]
+    },
+    {
+      id: 'codex',
+      ico: '👾',
+      tag: '第 9 章 · 智能体',
+      title: '赛博小怪兽 · Codex 内置智能体配置与对话',
+      color: '#38bdf8',
+      target: { view: 'codex' },
+      btnLabel: '前往智能体中枢',
+      summary: '右下角全站常驻的赛博小怪兽可随时弹窗对话，能感知本机下载/音乐/AI画室状态，同时驱动 AI 画室的「✨ AI 大师提示词优化」。',
+      steps: [
+        '点击任意页面右下角悬浮的「👾 赛博小怪兽」图标即可弹出站内多轮问答窗；也可进入「👾 智能体」全屏工作区深度对话。',
+        '【接入你自己的中转 / API】：在「👾 智能体」右侧配置面板填入你的 OpenAI / Codex 兼容中转地址（Base URL）和 API Key。',
+        '点击「🔎 拉取可用模型」自动获取中转支持的模型列表（若代理异常会自动代理/直连回退），选中目标模型后点「💾 保存配置」。',
+        '配置完成后，不仅小怪兽随时可聊，AI 画室的「✨ AI 大师优化」也会立即解锁，一键把口语想法改写成电影级提示词。'
+      ],
+      tips: [
+        '安全红线：API Key 与中转地址仅保存在本机未入库的 config.json 文件中，绝不会写入代码或推送到 GitHub。'
+      ]
+    },
+    {
+      id: 'system',
+      ico: '🛠️',
+      tag: '第 10 章 · 运维与 FAQ',
+      title: '系统配置、安全边界与常见问题速查',
+      color: '#34d399',
+      target: { view: 'system' },
+      btnLabel: '前往系统设置',
+      summary: '统一管理所有引擎端口、保存目录、开机自启、日志导出与安全清理，附带高频故障秒级排查对照表。',
+      steps: [
+        '【修改保存目录】：在「🛠️ 系统」页点各目录旁的「📁」按钮，可自由把视频、音乐、声音克隆、AI 作品与 BT 下载放到任意磁盘（如 D 盘），改完点「💾 保存设置」立即生效。',
+        '【一键自检 & 备份】：定期点击「🩺 一键自检」检查 Aria2 / qB / yt-dlp / ffmpeg / ComfyUI 连通性；改重要配置前点「💾 备份配置」留档。',
+        '【FAQ · 页面改了没刷新？】在控制台页面按 F5 或 Ctrl+F5 强制刷新；若重启过后端确保只运行一个本地 18550 端口实例。',
+        '【FAQ · 磁力 0 速度 / 搜不到？】搜欧美资源优先用英文名，搜中文动漫选「蜜柑计划 / 全网5源」；下载前点一次「⚡ 热更新公共 Tracker」。',
+        '【FAQ · AI 画室爆显存？】确认分辨率在 1024×576 / 视频 832×480 以内，点「🧹 释放显存」清理缓存后再生成。'
+      ],
+      tips: [
+        '安全边界：点击「⏹ 停止全部服务」只会按顺序安全关闭由本面板记录 PID 的服务，绝不会误杀你系统里的其他进程。'
+      ]
+    }
+  ];
+
+  let _tutActiveId = 'all';
+  let _tutQuery = '';
+
+  function renderTutorialHub() {
+    const navBox = $('tut-nav-list');
+    const contentBox = $('tut-content-list');
+    if (!navBox || !contentBox) return;
+
+    const q = (_tutQuery || '').trim().toLowerCase();
+    const matched = TUTORIAL_CHAPTERS.filter(ch => {
+      if (!q) return true;
+      const hay = [ch.tag, ch.title, ch.summary, ...(ch.steps || []), ...(ch.tips || [])].join(' ').toLowerCase();
+      return hay.includes(q);
+    });
+
+    if ($('tut-ch-cnt')) $('tut-ch-cnt').textContent = String(matched.length);
+
+    navBox.innerHTML = `<button class="tut-nav-item ${_tutActiveId === 'all' ? 'active' : ''}" onclick="selectTutorialChapter('all')">
+      <span style="font-size:17px;">📚</span>
+      <div style="min-width:0;">
+        <div style="font-size:12px;font-weight:800;color:var(--text-0);">全览 10 大功能教程</div>
+        <div class="c-dim" style="font-size:10.5px;">一页浏览完整操作手册</div>
+      </div>
+    </button>` + matched.map(ch => `
+      <button class="tut-nav-item ${_tutActiveId === ch.id ? 'active' : ''}" onclick="selectTutorialChapter('${ch.id}')">
+        <span style="font-size:17px;">${ch.ico}</span>
+        <div style="min-width:0;">
+          <div style="font-size:12px;font-weight:700;color:var(--text-0);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(ch.title)}</div>
+          <div class="c-dim" style="font-size:10px;">${esc(ch.tag)}</div>
+        </div>
+      </button>
+    `).join('');
+
+    const visible = _tutActiveId === 'all' ? matched : matched.filter(ch => ch.id === _tutActiveId);
+    const activeCh = visible.length === 1 && _tutActiveId !== 'all' ? visible[0] : null;
+    if ($('tut-detail-title')) {
+      $('tut-detail-title').textContent = activeCh ? `${activeCh.ico} ${activeCh.tag} · ${activeCh.title}` : `📘 全功能使用教程（当前显示 ${visible.length} 章）`;
+    }
+
+    if (!visible.length) {
+      contentBox.innerHTML = `<div class="eng-tile c-dim" style="font-size:12.5px;">未在教程中搜到「${esc(_tutQuery)}」，清空搜索框可恢复全部 10 章内容。</div>`;
+      return;
+    }
+
+    contentBox.innerHTML = visible.map(ch => `
+      <div class="tut-card" style="border-color:${ch.color}44;">
+        <div class="tut-card-hd">
+          <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+            <div class="portal-ico" style="width:36px;height:36px;font-size:18px;border-color:${ch.color}88;">${ch.ico}</div>
+            <div>
+              <div class="mono" style="font-size:10.5px;color:${ch.color};font-weight:800;">${esc(ch.tag)}</div>
+              <div style="font-size:14px;font-weight:800;color:var(--text-0);">${esc(ch.title)}</div>
+            </div>
+          </div>
+          <button class="btn btn-xs btn-cyan" onclick="jumpTutorialTarget('${ch.id}')">🚀 ${esc(ch.btnLabel)}</button>
+        </div>
+        <div style="font-size:12px;color:var(--text-1);line-height:1.6;">${esc(ch.summary)}</div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          ${(ch.steps || []).map((st, idx) => `
+            <div class="tut-step">
+              <span class="tut-step-num mono">${idx + 1}</span>
+              <div class="selectable">${esc(st)}</div>
+            </div>
+          `).join('')}
+        </div>
+        ${(ch.tips && ch.tips.length) ? `
+          <div class="tut-tip">
+            <div style="font-weight:800;margin-bottom:3px;">💡 进阶技巧 &amp; 避坑提示</div>
+            ${ch.tips.map(t => `<div>• ${esc(t)}</div>`).join('')}
+          </div>
+        ` : ''}
+      </div>
+    `).join('');
+  }
+
+  function selectTutorialChapter(id) {
+    _tutActiveId = id || 'all';
+    renderTutorialHub();
+    const box = $('tut-content-list');
+    if (box) box.scrollTop = 0;
+  }
+  window.selectTutorialChapter = selectTutorialChapter;
+
+  function filterTutorialHub(val) {
+    _tutQuery = val || '';
+    _tutActiveId = 'all';
+    renderTutorialHub();
+  }
+  window.filterTutorialHub = filterTutorialHub;
+
+  function jumpTutorialTarget(chId) {
+    const ch = TUTORIAL_CHAPTERS.find(c => c.id === chId);
+    if (!ch || !ch.target) return;
+    switchView(ch.target.view);
+    if (ch.target.dlTab) setDlTab(ch.target.dlTab);
+  }
+  window.jumpTutorialTarget = jumpTutorialTarget;
 
   /* ===================== CYBER MONSTER & CODEX AGENT ===================== */
   function toggleMonsterChat(force) {

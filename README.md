@@ -8,9 +8,12 @@
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![WebGL](https://img.shields.io/badge/UI-Spatial%203D%20HUD%20%2B%20WebGL%20GLSL-00E5FF)](#-核心功能全景)
+[![Tutorial](https://img.shields.io/badge/Docs-全功能使用教程-FFB347)](TUTORIAL.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-00F5B8)](#-快速开始)
 [![License](https://img.shields.io/badge/License-MIT-FFB020)](LICENSE)
 [![PRs](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
+
+> 📖 **新手必看**：软件顶部导航已内置 **「📖 教程」交互式教程模块**（支持关键词检索 + 一键跳转功能页），也可直接阅读完整文档 **[《全功能使用教程手册 (TUTORIAL.md)》](TUTORIAL.md)**。
 
 </div>
 
@@ -99,8 +102,9 @@
 - 全站右下角常驻悬浮 **赛博小怪兽**（SVG 霓虹精灵 + 实时跟随鼠标转动的电子眼），在任意页面点击即弹出站内多轮问答框，自动感知当前页面与本机引擎状态（严格脱敏）。
 - 支持在 **👾 智能体** 页面配置任意 OpenAI / Codex 兼容中转地址、模型名与 API Key（支持一键拉取可用模型列表，代理/直连自动回退，密钥仅写本地 `config.json`）。
 
-### 9. 🛠️ 系统与运维中心
-- 全局端口/路径配置、开机自启开关、一键自检、端口扫描、一键备份配置、日志清空/导出、清理缓存与安全停止全部服务。
+### 9. 🛠️ 系统与运维中心 & 📖 内置交互式教程模块
+- **系统与运维中心**：全局端口/路径配置、开机自启开关、一键自检、端口扫描、一键备份配置、日志清空/导出、清理缓存与安全停止全部服务。
+- **📖 站内全功能教程模板**：顶部导航直达，内置 10 大功能完整步骤教程、避坑技巧、FAQ 与关键词实时筛选，每章提供「🚀 立即前往」按钮一键跳转对应工坊；离线文档同步维护于 [TUTORIAL.md](TUTORIAL.md)。
 
 ---
 
