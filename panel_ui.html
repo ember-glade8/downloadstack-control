@@ -3081,6 +3081,36 @@
   </div>
 </div>
 
+<!-- ================= MODAL: IN-APP SKILL PROMPT REMIX ================= -->
+<div id="modal-prompt-remix" class="modal-mask hidden" onclick="if(event.target===this)closeRemixModal()">
+  <div class="modal-box" style="width:620px;max-width:94vw;">
+    <div class="card-hd">
+      <div class="card-title c-magenta">🎭 Skill 模板精改（控制台内置闭环 · 保留骨架换主体）</div>
+      <button class="btn btn-xs btn-rose" onclick="closeRemixModal()">✕</button>
+    </div>
+    <div style="padding:14px;display:flex;flex-direction:column;gap:10px;">
+      <div style="display:flex;gap:10px;align-items:flex-start;background:rgba(8,15,35,0.85);padding:10px;border-radius:10px;border:1px solid rgba(167,139,250,0.28);">
+        <img id="remix-tpl-thumb" class="prompt-thumb hidden" style="width:86px;height:86px;" alt="模板样图" />
+        <div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:4px;">
+          <div id="remix-tpl-title" style="font-size:13px;font-weight:800;color:#fff;">源实战模板</div>
+          <div id="remix-tpl-excerpt" class="mono c-dim" style="font-size:11px;line-height:1.45;max-height:66px;overflow:auto;word-break:break-word;"></div>
+        </div>
+      </div>
+      <div class="fld">
+        <label>你想替换的新主体 / 场景 / 服装 / 文案（中文即可；留空则自动去除参考图依赖并精修直出）</label>
+        <textarea id="remix-idea-inp" class="txt" rows="3" placeholder="例如：雨夜穿银白汉服撑油纸伞的女孩 / 极简冰川蓝高端香水瓶悬浮水花…（留空直接精修原模板）" onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey))submitRemixModal()"></textarea>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span class="mono c-dim" style="font-size:10.5px;">按 Ctrl+Enter 快速提交 · 全程控制台站内完成</span>
+        <div style="display:flex;gap:8px;">
+          <button class="btn" onclick="closeRemixModal()">取消</button>
+          <button id="remix-submit-btn" class="btn btn-violet" onclick="submitRemixModal()">🎭 开始 Skill 精改（生成2套大片词）</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ================= MODAL: IN-APP MEDIA LIGHTBOX ================= -->
 <div id="modal-lightbox" class="modal-mask hidden" onclick="if(event.target===this)closeLightbox()">
   <div class="modal-box" style="width:860px;">
@@ -5424,24 +5454,49 @@
   }
   window.syncAigcPromptSkill = syncAigcPromptSkill;
 
-  async function remixPromptCard(idx) {
+  S.remixTarget = null;
+
+  function remixPromptCard(idx) {
     const it = S.aiPromptItems[idx];
     if (!it) return;
+    S.remixTarget = it;
     const defaultIdea = (($('ai-prompt').value || '').trim() && $('ai-prompt').value.trim().length <= 120)
       ? $('ai-prompt').value.trim()
       : ($('ai-ps-query').value || '').trim();
-    const userIdea = window.prompt(
-      `🎭 Skill 模板精改（保留「${it.title}」的光影、镜头与构图骨架）\n\n请输入你想替换的新主体/场景/文字（中文即可；留空则直接去除参考图依赖并优化为 Z-Image / Wan2.2 直出大片词）：`,
-      defaultIdea
-    );
-    if (userIdea === null) return;
+    $('remix-tpl-title').textContent = it.title || '社区实战模板';
+    $('remix-tpl-excerpt').textContent = (it.prompt || '').slice(0, 360);
+    const thumb = $('remix-tpl-thumb');
+    if (thumb) {
+      if (it.preview_url) {
+        thumb.src = '/api/prompt_preview?url=' + encodeURIComponent(it.preview_url);
+        thumb.classList.remove('hidden');
+      } else {
+        thumb.classList.add('hidden');
+      }
+    }
+    $('remix-idea-inp').value = defaultIdea;
+    $('modal-prompt-remix').classList.remove('hidden');
+    setTimeout(() => $('remix-idea-inp')?.focus(), 60);
+  }
+  window.remixPromptCard = remixPromptCard;
+
+  function closeRemixModal() {
+    $('modal-prompt-remix').classList.add('hidden');
+  }
+  window.closeRemixModal = closeRemixModal;
+
+  async function submitRemixModal() {
+    const it = S.remixTarget;
+    if (!it) return;
+    const userIdea = ($('remix-idea-inp').value || '').trim();
+    closeRemixModal();
     setAigcRightTab('prompts');
     $('ai-ps-meta').textContent = `🎭 正在用 Skill Remix 引擎精改「${(it.title || '').slice(0, 26)}」…`;
     $('ai-ps-list').innerHTML = '<div class="c-cyan mono" style="margin:auto;text-align:center;font-size:12px;line-height:1.9;">🎭 正在完整保留原模板视觉骨架，精准替换主体并适配 Z-Image Turbo / Wan2.2…<br/>约 3~8 秒内出炉</div>';
     const res = await act('aigc_prompt_remix', {
       template_prompt: it.prompt || '',
       template_title: it.title || '',
-      user_idea: userIdea.trim(),
+      user_idea: userIdea,
       mode: S.aigcMode,
     }, false);
     if (res && res.ok && res.variants && res.variants.length) {
@@ -5453,7 +5508,7 @@
       searchAigcPrompts(undefined, undefined, true, false);
     }
   }
-  window.remixPromptCard = remixPromptCard;
+  window.submitRemixModal = submitRemixModal;
 
   function applyPromptCard(idx, runNow = false) {
     const it = S.aiPromptItems[idx];
@@ -6256,10 +6311,54 @@
   }
   window.toggleMonsterChat = toggleMonsterChat;
 
+  S.codexSkillPool = [];
+
+  function applyCodexSkillPrompt(poolIdx, runNow = false) {
+    const it = S.codexSkillPool[poolIdx];
+    if (!it) return;
+    switchView('aigc');
+    $('ai-prompt').value = it.prompt || '';
+    if (it.neg_prompt) $('ai-neg').value = it.neg_prompt;
+    if (it.mode && (it.mode === 't2i' || it.mode === 't2v' || it.mode === 'i2v')) pickAigcMode(it.mode);
+    if (it.size && Array.from($('ai-size').options).some(o => o.value === it.size)) $('ai-size').value = it.size;
+    if (it.steps) $('ai-steps').value = it.steps;
+    if (it.length) $('ai-length').value = Math.min(25, Number(it.length));
+    updateAigcVramGuard();
+    toast(`已从小怪兽 Skill 卡片填入「${it.title}」✔`, 'mint');
+    if (runNow) {
+      setAigcRightTab('gallery');
+      startAigcGenerate();
+    }
+  }
+  window.applyCodexSkillPrompt = applyCodexSkillPrompt;
+
   function renderCodexStreams() {
+    S.codexSkillPool = [];
     const html = S.codexMsgs.map(m => {
       const cls = m.role === 'user' ? 'msg-user' : 'msg-bot';
-      return `<div class="msg-bubble ${cls} selectable">${renderMdSafe(m.content)}</div>`;
+      let extra = '';
+      if (m.role === 'assistant' && Array.isArray(m.skill_prompts) && m.skill_prompts.length) {
+        extra = '<div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">' +
+          '<div class="mono c-cyan" style="font-size:10px;">🧩 控制台内置 20,000+ 提示词 Skill 匹配范本（一键直达 AI 画室）：</div>' +
+          m.skill_prompts.map(sp => {
+            const pIdx = S.codexSkillPool.push(sp) - 1;
+            const th = sp.preview_url
+              ? `<img src="/api/prompt_preview?url=${encodeURIComponent(sp.preview_url)}" style="width:48px;height:48px;border-radius:7px;object-fit:cover;flex-shrink:0;cursor:zoom-in;border:1px solid rgba(0,229,255,0.35);" onclick="openPreviewLightbox('${escJs(sp.preview_url)}','${escJs(sp.title || 'Skill 样图')}')" onerror="this.style.display='none'" />`
+              : '';
+            return `<div style="display:flex;gap:8px;align-items:center;padding:7px 8px;border-radius:9px;background:rgba(4,10,24,0.85);border:1px solid rgba(167,139,250,0.32);">
+              ${th}
+              <div style="min-width:0;flex:1;">
+                <div style="font-size:11.5px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(sp.title || 'Skill 模板')}</div>
+                <div class="mono c-dim" style="font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc((sp.prompt || '').slice(0, 90))}</div>
+              </div>
+              <div style="display:flex;gap:4px;flex-shrink:0;">
+                <button class="btn btn-xs btn-cyan" onclick="applyCodexSkillPrompt(${pIdx}, false)">📥 填入</button>
+                <button class="btn btn-xs btn-violet" onclick="applyCodexSkillPrompt(${pIdx}, true)">⚡ 生成</button>
+              </div>
+            </div>`;
+          }).join('') + '</div>';
+      }
+      return `<div class="msg-bubble ${cls} selectable">${renderMdSafe(m.content)}${extra}</div>`;
     }).join('') + (S.codexSending ? '<div class="msg-bubble msg-bot c-cyan mono">👾 赛博小怪兽思考中…</div>' : '');
     ['monster-stream', 'cx-page-stream'].forEach(id => {
       const el = $(id);
@@ -6301,9 +6400,9 @@
     const res = await act('codex_chat', { messages: payloadMsgs, view: S.view }, true);
     S.codexSending = false;
     if (res && res.ok && res.reply) {
-      S.codexMsgs.push({ role: 'assistant', content: res.reply });
+      S.codexMsgs.push({ role: 'assistant', content: res.reply, skill_prompts: res.skill_prompts || [] });
     } else {
-      S.codexMsgs.push({ role: 'assistant', content: '⚠️ 回复失败：' + ((res && res.msg) || '请检查「智能体」页面的中转配置与网络连通性。') });
+      S.codexMsgs.push({ role: 'assistant', content: '⚠️ 回复失败：' + ((res && res.msg) || '请检查「智能体」页面的中转配置与网络连通性。'), skill_prompts: (res && res.skill_prompts) || [] });
     }
     renderCodexStreams();
   }

@@ -4121,18 +4121,56 @@ class ControlBackend:
                 msgs = [{"role": "user", "content": q}]
             active_view = str(body.get("view") or "cockpit")
             aigc_env = self._get_aigc_env_cached()
+
+            # Auto-invoke built-in 20,000+ Prompt Skill inside the console whenever user asks about prompts/drawing/video!
+            skill_prompts = []
+            skill_ctx = ""
+            if PE is not None:
+                last_user = ""
+                for m in reversed(msgs):
+                    if isinstance(m, dict) and m.get("role") == "user":
+                        last_user = str(m.get("content") or "").strip()
+                        break
+                prompt_triggers = (
+                    "提示词", "prompt", "生图", "画画", "画一个", "画张", "画幅", "出图",
+                    "模板", "skill", "生视频", "运镜", "封面", "海报", "头像", "写真",
+                    "wan2", "z-image", "comfy", "赛博", "古风", "二次元",
+                )
+                low_u = last_user.lower()
+                if last_user and (active_view == "aigc" or any(k in low_u for k in prompt_triggers)):
+                    import re as _re
+                    q_clean = _re.sub(
+                        r"(帮我|请|找几个|找一些|推荐|给我|写一个|写个|生成|关于|的|提示词|模板|prompt|skill|画室|调用|用)",
+                        " ", last_user, flags=_re.I
+                    ).strip()
+                    p_mode = "t2v" if any(k in low_u for k in ("视频", "运镜", "wan2", "动态")) else "t2i"
+                    sr = PE.search_prompts(query=q_clean or last_user, category="all", mode=p_mode, limit=4, page=1, source="all")
+                    skill_prompts = (sr.get("results") or [])[:3]
+                    if skill_prompts:
+                        lines = [
+                            f"{idx}. [{it.get('source','')}] {it.get('title','')}: {str(it.get('prompt',''))[:260]}"
+                            for idx, it in enumerate(skill_prompts, 1)
+                        ]
+                        skill_ctx = (
+                            "\n【已自动调用控制台内置 20,000+ 提示词 Skill 检索到以下实战范本，下方聊天卡片已附带一键送入画室/生成按钮，"
+                            "你可以直接点评、精选或帮用户改写成更精准的 Z-Image Turbo / Wan 2.2 提示词】：\n"
+                            + "\n".join(lines)
+                        )
+
             sys_prompt = (
                 "你是「赛博小怪兽」，内嵌在 DownloadStack 3D Spatial Command OS 桌面控制台里的全能智能体助手。"
                 "说话风格灵动专业、简洁直击重点，优先用中文回答。\n"
-                "本软件内置全部 9 大本地工坊（禁止让用户跳外部网页）：控制台、任务队列、内置 AriaNg、内置 qBittorrent、磁力/DHT修复、"
-                "全平台视频下载(yt-dlp+2x超分)、音乐6大榜单+任意搜歌、3D同步歌词舞台、开源AI声音克隆(F5-TTS/神经配音)、AI画室(本地ComfyUI Z-Image Turbo生图 + Wan 2.2 I2V生视频 + 自定义本地模型接入)。\n"
-                "当前本机实时状态（脱敏）：Aria2=%s, qBittorrent=%s, YT运行中=%s, 本地ComfyUI在线=%s, 当前页面=%s。"
+                "本软件内置全部 10 大本地工坊（严禁让用户跳外部网页或打开外部程序）：控制台、任务队列、内置 AriaNg、内置 qBittorrent、5源磁力搜索与DHT修复、"
+                "站内原画4K影院(WebGL2 4K画质修复+看完即删)、全平台视频下载(yt-dlp)、音乐6大榜单+3D歌词舞台、开源AI声音克隆(F5-TTS/神经配音)、"
+                "AI画室(本地ComfyUI Z-Image Turbo生图 + Wan 2.2 I2V生视频 + 内置 20,000+ 提示词 Skill 引擎与 Skill Remix)。\n"
+                "当前本机实时状态（脱敏）：Aria2=%s, qBittorrent=%s, YT运行中=%s, 本地ComfyUI在线=%s, 当前页面=%s。%s"
                 % (
                     "在线" if self.pr.a.get("on") else "离线",
                     "在线" if self.pr.q.get("on") else "离线",
                     "是" if self.yt_job.get("running") else "否",
                     "在线" if (aigc_env.get("server") or {}).get("online") else "离线",
                     active_view,
+                    skill_ctx,
                 )
             )
             ok, reply = MS.codex_chat_request(
@@ -4144,7 +4182,7 @@ class ControlBackend:
                 api_style=str(cx.get("api_style") or "auto"),
                 proxy=self._sys_proxy(),
             )
-            return ok, ("已回复" if ok else reply), {"reply": reply}
+            return ok, ("已回复" if ok else reply), {"reply": reply, "skill_prompts": skill_prompts}
 
         if act == "start_y":
             bat = Path(self.cfg["yt"]["bat"])
