@@ -22,7 +22,10 @@ def _import_with_stubs(mod_name: str):
             try:
                 importlib.import_module(dep)
             except Exception:
-                sys.modules[dep] = types.ModuleType(dep)
+                stub = types.ModuleType(dep)
+                if dep == "flet":
+                    stub.Page = object
+                sys.modules[dep] = stub
                 added.append(dep)
     try:
         if mod_name in sys.modules:

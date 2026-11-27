@@ -10,6 +10,8 @@
 2. 打开「2x 超分」时，若检测到 video2x，下载完成后自动超分（否则提示跳过）
 3. 取消会结束整个进程树（不会留后台下载）
 """
+from __future__ import annotations
+
 import os
 import re
 import shutil
