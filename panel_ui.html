@@ -1898,7 +1898,7 @@
             <div class="card-title">📊 下载实时进度与内核输出</div>
             <div style="display:flex;gap:6px;">
               <button class="btn btn-xs" onclick="act('yt_clear_log')">清空日志</button>
-              <button class="btn btn-xs btn-cyan" onclick="act('open_path',{key:'yt_out'})">打开成品目录</button>
+              <button class="btn btn-xs btn-cyan" onclick="act('open_path',{key:'yt_out',path:($('yt-out')?.value||'').trim()})">📂 打开成品目录</button>
             </div>
           </div>
           <div class="card-body">
@@ -2646,6 +2646,7 @@
             <div class="card-hd">
               <div class="card-title c-cyan">📡 实时下载进度监视器 <span class="nav-badge mono" id="mag-live-cnt">0</span></div>
               <div style="display:flex;gap:5px;">
+                <button class="btn btn-xs btn-mint" onclick="act('magnet_boost')" title="注入 100+ IP/UDP Tracker、提升 qB 连接并发至 1000/200 并强制唤醒卡住的种子">🚀 极速破卡</button>
                 <button class="btn btn-xs btn-violet" onclick="switchView('cinema')" title="下完直接进站内 4K 影院原画观看">🎞️ 去影院看片</button>
                 <button class="btn btn-xs btn-rose" onclick="purgeAll()" title="一键清空全部下载任务与缓存">🗑 一键清空</button>
               </div>

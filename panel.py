@@ -97,17 +97,36 @@ def shell_run(script, cwd=None, env=None):
     return subprocess.Popen(args, cwd=cwd or str(ROOT), env=env, **_popen_kwargs())
 
 
-def open_path(path):
-    p = str(path)
+def open_path(path, select_file: bool = False):
+    """跨平台可靠打开本地目录或定位文件（Windows 使用 explorer.exe 置顶前台，绝不静默失效）。"""
+    p = os.path.normpath(str(path or "").strip())
+    if not p:
+        return False, "路径为空"
     try:
         if IS_WIN:
+            if select_file and Path(p).is_file():
+                subprocess.Popen(["explorer.exe", "/select," + p])
+                return True, "已定位并打开成品文件"
+            if Path(p).is_dir():
+                subprocess.Popen(["explorer.exe", p])
+                return True, "已打开本地目录"
             os.startfile(p)
+            return True, "已打开本地路径"
         elif IS_MAC:
-            subprocess.Popen(["open", p])
+            subprocess.Popen(["open", "-R", p] if (select_file and Path(p).is_file()) else ["open", p])
+            return True, "已打开本地路径"
         else:
-            subprocess.Popen(["xdg-open", p])
-    except Exception:
-        pass
+            target = str(Path(p).parent) if (select_file and Path(p).is_file()) else p
+            subprocess.Popen(["xdg-open", target])
+            return True, "已打开本地路径"
+    except Exception as ex:
+        try:
+            if IS_WIN:
+                os.startfile(p)
+                return True, "已打开本地路径"
+        except Exception:
+            pass
+        return False, "打开目录失败：%s" % ex
 
 try:
     import magnet_tools as MT
@@ -1468,13 +1487,13 @@ class ControlBackend:
             self.log("%s 失败 %s" % (title, ex), "ERROR")
             return False, "%s 失败" % title
 
-    def _open_local(self, path):
+    def _open_local(self, path, select_file: bool = False):
         if not path or not Path(path).exists():
             self.log("路径不存在 %s" % path, "WARN")
-            return False, "路径不存在"
-        open_path(path)
-        self.log("打开 %s" % path)
-        return True, "已打开本地路径"
+            return False, "路径不存在：%s" % path
+        ok, msg = open_path(path, select_file=select_file)
+        self.log(("打开 %s" % path) if ok else ("打开失败 %s: %s" % (path, msg)), "INFO" if ok else "ERROR")
+        return ok, msg
 
     def _run_key(self, name, cmd, on):
         try:
@@ -1875,7 +1894,7 @@ class ControlBackend:
         pct_re = re.compile(r"(\d+(?:\.\d+)?)%")
         spd_re = re.compile(r"at\s+([^\s]+/s)")
         eta_re = re.compile(r"ETA\s+([0-9:]+)")
-        dest_re = re.compile(r"(?:Destination:|Merging formats into\s+\"?)(.+?)\"?$")
+        dest_re = re.compile(r"(?:Destination:|Merging formats into\s+\"?|\[download\]\s+)(.+?)(?:\"\s*$|\s+has already been downloaded\s*$|$)")
 
         proc = subprocess.Popen(
             cmd, cwd=str(out_dir), env=env,
@@ -1909,7 +1928,7 @@ class ControlBackend:
                         self.yt_job["eta"] = m_eta.group(1)
                 continue
             m_dst = dest_re.search(line)
-            if m_dst:
+            if m_dst and ("Destination:" in line or "Merging formats into" in line or "has already been downloaded" in line):
                 cand = m_dst.group(1).strip().strip('"')
                 if cand:
                     last_file = cand
@@ -2026,21 +2045,111 @@ class ControlBackend:
                 self.log("YT 工坊下载完成%s → %s" % (res_note, last_file or out_dir), "OK")
                 if upscale and quality != "audio":
                     v2x = self._find_video2x()
-                    if v2x and last_file and Path(last_file).is_file():
+                    if last_file and Path(last_file).is_file():
                         with self.lock:
-                            self.yt_job["status"] = "2x AI 超分中…"
-                        self._yt_append_log("[INFO] 检测到 Video2X，开始 2x 超分：%s" % Path(last_file).name)
-                        out_up = str(Path(last_file).with_stem(Path(last_file).stem + "_2x"))
-                        up_proc = subprocess.Popen([v2x, "-i", last_file, "-o", out_up, "-s", "2"],
-                                                   cwd=str(out_dir), **_popen_kwargs())
-                        with self.lock:
-                            self.yt_job["pid"] = up_proc.pid
-                        up_rc = up_proc.wait()
-                        with self.lock:
-                            self.yt_job["status"] = "2x 超分完成 ✔" if up_rc == 0 else "下载完成（超分异常）"
-                        self._yt_append_log("[OK] 2x 超分完成 → %s" % out_up if up_rc == 0 else "[WARN] 超分退出码 %s" % up_rc)
+                            self.yt_job["status"] = "2x AI 超分中（GPU 加速）…"
+                        src_p = Path(last_file)
+                        out_up = str(src_p.with_stem(src_p.stem + "_2x"))
+                        ff_dir = self._find_ffmpeg()
+                        ffmpeg_exe = str(Path(ff_dir) / ("ffmpeg.exe" if IS_WIN else "ffmpeg")) if ff_dir else (shutil.which("ffmpeg") or "")
+                        ffprobe_exe = str(Path(ff_dir) / ("ffprobe.exe" if IS_WIN else "ffprobe")) if ff_dir else (shutil.which("ffprobe") or "")
+
+                        def _probe_wh(fp: str):
+                            if not ffprobe_exe or not Path(fp).is_file() or Path(fp).stat().st_size < 4096:
+                                return 0, 0
+                            try:
+                                r_p = subprocess.run(
+                                    [ffprobe_exe, "-v", "error", "-select_streams", "v:0",
+                                     "-show_entries", "stream=width,height", "-of", "csv=p=0", fp],
+                                    capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                    timeout=6, **_popen_kwargs()
+                                )
+                                pts = [x.strip() for x in (r_p.stdout or "").strip().split(",") if x.strip()]
+                                if len(pts) >= 2:
+                                    return int(pts[0]), int(pts[1])
+                            except Exception:
+                                pass
+                            return 0, 0
+
+                        sw, sh = _probe_wh(last_file)
+                        tw = min(3840, (sw * 2) if sw > 0 else 1920)
+                        th = min(2160, (sh * 2) if sh > 0 else 1080)
+                        tw -= tw % 2
+                        th -= th % 2
+
+                        def _run_upscale_cmd(cmd_args, label: str) -> bool:
+                            self._yt_append_log("[INFO] %s → 目标 %dx%d：%s" % (label, tw, th, src_p.name))
+                            try:
+                                if Path(out_up).is_file():
+                                    Path(out_up).unlink(missing_ok=True)
+                            except Exception:
+                                pass
+                            up_proc = subprocess.Popen(
+                                cmd_args, cwd=str(out_dir),
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                text=True, encoding="utf-8", errors="replace",
+                                **_popen_kwargs()
+                            )
+                            with self.lock:
+                                self.yt_job["pid"] = up_proc.pid
+                            if up_proc.stdout is not None:
+                                for uln in up_proc.stdout:
+                                    tln = uln.strip()
+                                    if tln and any(k in tln.lower() for k in ("error", "warn", "fps", "frame=", "completed", "vulkan", "nvenc")):
+                                        self._yt_append_log("[V2X] %s" % tln[:180])
+                            rc_u = up_proc.wait()
+                            ow, oh = _probe_wh(out_up)
+                            if ow >= max(640, sw) and oh >= max(360, sh):
+                                return True
+                            self._yt_append_log("[WARN] %s 未产出有效文件（退出码 %s），尝试备用 GPU 管线…" % (label, rc_u))
+                            return False
+
+                        up_ok = False
+                        if v2x:
+                            # Tier 1: Video2X v6 Vulkan libplacebo (Anime4K v4) + RTX h264_nvenc（极速零崩溃）
+                            up_ok = _run_upscale_cmd([
+                                v2x, "-i", last_file, "-o", out_up,
+                                "-w", str(tw), "-h", str(th),
+                                "-p", "libplacebo", "--libplacebo-shader", "anime4k-v4-a+a",
+                                "-d", "0", "-c", "h264_nvenc", "-e", "cq=18", "-e", "preset=p5",
+                                "--no-progress",
+                            ], "Video2X Vulkan AI (NVENC)")
+                            # Tier 2: 非 N 卡环境回退 libx264 编码
+                            if not up_ok:
+                                up_ok = _run_upscale_cmd([
+                                    v2x, "-i", last_file, "-o", out_up,
+                                    "-w", str(tw), "-h", str(th),
+                                    "-p", "libplacebo", "--libplacebo-shader", "anime4k-v4-a+a",
+                                    "-c", "libx264", "-e", "crf=18", "-e", "preset=fast",
+                                    "--no-progress",
+                                ], "Video2X Vulkan AI (x264)")
+                        # Tier 3: FFmpeg 硬件 Lanczos 2x + CAS 锐化兜底（100% 稳定兜底）
+                        if not up_ok and ffmpeg_exe:
+                            vf = "scale=%d:%d:flags=lanczos,cas=0.45" % (tw, th)
+                            for enc_name, enc_args in (
+                                ("FFmpeg NVENC 2x+CAS", ["-c:v", "h264_nvenc", "-cq", "18", "-preset", "p5"]),
+                                ("FFmpeg x264 2x+CAS",  ["-c:v", "libx264", "-crf", "18", "-preset", "fast"]),
+                            ):
+                                up_ok = _run_upscale_cmd(
+                                    [ffmpeg_exe, "-y", "-i", last_file, "-vf", vf]
+                                    + enc_args + ["-c:a", "copy", "-movflags", "+faststart", out_up],
+                                    enc_name,
+                                )
+                                if up_ok:
+                                    break
+                        if up_ok:
+                            ow, oh = _probe_wh(out_up)
+                            with self.lock:
+                                self.yt_job["file"] = out_up
+                                self.yt_job["status"] = "2x AI 超分完成 ✔（%dx%d）" % (ow or tw, oh or th)
+                            self._recent_ts = 0.0
+                            self._yt_append_log("[OK] 2x AI 超分完成（实测 %dx%d）→ %s" % (ow or tw, oh or th, out_up))
+                        else:
+                            with self.lock:
+                                self.yt_job["status"] = "下载完成（超分已跳过）"
+                            self._yt_append_log("[WARN] 超分管线全部未通过，已完整保留原始高清视频：%s" % last_file)
                     else:
-                        self._yt_append_log("[WARN] 未检测到 Video2X 或目标文件，已跳过 2x 超分")
+                        self._yt_append_log("[WARN] 未检测到目标视频文件，已跳过 2x 超分")
             else:
                 with self.lock:
                     if self.yt_job["status"] != "已取消":
@@ -3397,7 +3506,22 @@ class ControlBackend:
                             if r.status_code == 200 and "fails" not in (r.text or "").lower():
                                 added_ok = True
                         if added_ok:
-                            note = "（已秒级预取种子 %s）" % tor_src if used_tor else "（已自动补全公共 Tracker）"
+                            # 投递后立即对新任务注入全量 IP+UDP Tracker 并强制 Reannounce，大幅缩短冷启动时间！
+                            if MT is not None and ih:
+                                try:
+                                    if not getattr(self, "_qbit_turbo_applied", False):
+                                        turbo = MT.build_qbit_turbo_prefs(tr_pool)
+                                        s.post(base + "/api/v2/app/setPreferences", timeout=3.0, headers=hdr,
+                                               data={"json": json.dumps(turbo)})
+                                        self._qbit_turbo_applied = True
+                                    tr_lines = "\n".join(tr_pool[:100])
+                                    s.post(base + "/api/v2/torrents/addTrackers", timeout=2.5, headers=hdr,
+                                           data={"hash": ih.lower(), "urls": tr_lines})
+                                    s.post(base + "/api/v2/torrents/reannounce", timeout=2.5, headers=hdr,
+                                           data={"hashes": ih.lower()})
+                                except Exception:
+                                    pass
+                            note = "（已秒级预取种子 %s + 注入百源 Tracker）" % tor_src if used_tor else "（已注入 100+ IP/UDP Tracker 并强制唤醒节点）"
                             self.log("qBittorrent 磁力投递成功 %s" % note, "OK")
                             time.sleep(0.25)
                             self.poll_once()
@@ -3534,6 +3658,64 @@ class ControlBackend:
             msg = "已更新 %d 个公共 Tracker（来源：%s%s）" % (len(tr), src, hot)
             self.log(msg, "OK")
             return True, msg, {"count": len(tr), "source": src}
+
+        if act == "magnet_boost":
+            if MT is None:
+                return False, "magnet_tools 模块不可用", {}
+            tr, src = MT.fetch_trackers(CACHE / "trackers.txt", proxy=self._sys_proxy())
+            dht_ep = ""
+            try:
+                dht_ep = MT.discover_dht_entry_point(timeout=2.0)
+            except Exception:
+                dht_ep = ""
+            MT.repair_aria2_conf(self.cfg["aria2"]["conf"], trackers=tr, dht_entry=dht_ep)
+            boosted = []
+            reannounced = 0
+            try:
+                if port_open(self.cfg["qbit"]["host"], self.cfg["qbit"]["port"]):
+                    s, base = self.pr.q_login(timeout=3.5)
+                    hdr = {"Referer": base + "/", "Origin": base}
+                    turbo = MT.build_qbit_turbo_prefs(tr)
+                    s.post(base + "/api/v2/app/setPreferences", timeout=3.5, headers=hdr,
+                           data={"json": json.dumps(turbo)})
+                    self._qbit_turbo_applied = True
+                    tors = s.get(base + "/api/v2/torrents/info", timeout=3.5).json()
+                    if isinstance(tors, list) and tors:
+                        tr_blob = "\n".join(tr[:120])
+                        hashes = []
+                        for t in tors:
+                            h = str(t.get("hash") or "").strip().lower()
+                            if not h:
+                                continue
+                            hashes.append(h)
+                            try:
+                                s.post(base + "/api/v2/torrents/addTrackers", timeout=2.5, headers=hdr,
+                                       data={"hash": h, "urls": tr_blob})
+                            except Exception:
+                                pass
+                        if hashes:
+                            s.post(base + "/api/v2/torrents/reannounce", timeout=3.0, headers=hdr,
+                                   data={"hashes": "|".join(hashes)})
+                            reannounced = len(hashes)
+                    boosted.append("qBittorrent 极速调优(1000连接/200握手)")
+            except Exception as ex:
+                self.log("qB 加速调优部分跳过：%s" % ex, "WARN")
+            try:
+                if port_open(self.cfg["aria2"]["host"], self.cfg["aria2"]["port"]):
+                    self.pr.a_call("aria2.changeGlobalOption", [{
+                        "bt-tracker": ",".join(tr[:120]),
+                        "bt-max-peers": "256",
+                        "max-connection-per-server": "16",
+                    }])
+                    boosted.append("Aria2 热更新")
+            except Exception:
+                pass
+            extra_r = (" · 已强制唤醒 %d 个种子" % reannounced) if reannounced else ""
+            msg = "🚀 磁力极速破卡完成：注入 %d 个 IP+域名 Tracker（%s）· %s%s" % (
+                len(tr), src, " + ".join(boosted) if boosted else "配置已写入", extra_r
+            )
+            self.log(msg, "OK")
+            return True, msg, {"tracker_count": len(tr), "reannounced": reannounced, "dht_entry": dht_ep}
 
         if act == "magnet_repair":
             if MT is None:
@@ -4425,21 +4607,29 @@ class ControlBackend:
                 "aigc_dl": self.aigc_output(),
                 "downloads": str(dl_base),
             }
+            select_file = False
             if key == "custom":
                 raw_p = str(body.get("path") or "").strip()
                 p_obj = Path(raw_p) if raw_p else None
                 if p_obj and body.get("reveal"):
-                    target = str(p_obj.parent if p_obj.is_file() else p_obj)
+                    select_file = p_obj.is_file()
+                    target = str(p_obj) if select_file else str(p_obj)
                 else:
                     target = raw_p
             else:
-                target = mapping.get(key, "")
-            if key in ("aria2_dl", "qbit_dl", "yt_out", "music_dl", "voice_dl", "aigc_dl", "downloads") and target:
+                custom_override = str(body.get("path") or "").strip()
+                target = custom_override if (key == "yt_out" and custom_override) else mapping.get(key, "")
+                if key == "yt_out":
+                    last_f = str(self.yt_job.get("file") or "").strip()
+                    if last_f and Path(last_f).is_file():
+                        target = last_f
+                        select_file = True
+            if key in ("aria2_dl", "qbit_dl", "yt_out", "music_dl", "voice_dl", "aigc_dl", "downloads") and target and not select_file:
                 try:
                     Path(target).mkdir(parents=True, exist_ok=True)
                 except Exception:
                     pass
-            ok, msg = self._open_local(target)
+            ok, msg = self._open_local(target, select_file=select_file)
             return ok, msg, {}
 
         if act == "clear_log":

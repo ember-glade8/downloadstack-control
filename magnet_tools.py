@@ -23,9 +23,11 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-# 公共 Tracker 源（按国内直连友好度排序，自动回退）
+# 公共 Tracker 源（同时融合域名源与直连 IP 源，绕过 DNS 污染大幅加速磁力冷启动）
 TRACKER_SOURCES = [
+    "https://cf.trackerslist.com/best_ip.txt",
     "https://cf.trackerslist.com/best.txt",
+    "https://fastly.jsdelivr.net/gh/ngosang/trackerslist@master/trackers_best_ip.txt",
     "https://cdn.jsdelivr.net/gh/XIU2/TrackersListCollection@master/best.txt",
     "https://fastly.jsdelivr.net/gh/ngosang/trackerslist@master/trackers_best.txt",
     "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_best.txt",
@@ -58,7 +60,7 @@ BUILTIN_TRACKERS = [
     "wss://tracker.btorrent.xyz",
 ]
 
-# aria2 磁力 / DHT 正常工作所需的推荐配置项
+# aria2 磁力 / DHT 极速工作所需的推荐配置项
 ARIA2_BT_DEFAULTS = {
     "enable-dht": "true",
     "enable-dht6": "true",
@@ -71,12 +73,15 @@ ARIA2_BT_DEFAULTS = {
     "follow-torrent": "true",
     "bt-save-metadata": "true",
     "bt-load-saved-metadata": "true",
-    "bt-max-peers": "128",
-    "bt-request-peer-speed-limit": "10M",
+    "bt-max-peers": "256",
+    "bt-max-open-files": "256",
+    "bt-request-peer-speed-limit": "50M",
+    "max-connection-per-server": "16",
+    "split": "16",
     "bt-detach-seed-only": "true",
     "bt-remove-unselected-file": "true",
-    "peer-id-prefix": "-qB4520-",
-    "peer-agent": "qBittorrent/4.5.2",
+    "peer-id-prefix": "-qB4650-",
+    "peer-agent": "qBittorrent/4.6.5",
 }
 
 _HEX40_RE = re.compile(r"^[0-9a-fA-F]{40}$")
@@ -164,8 +169,8 @@ def parse_magnet(raw: str) -> dict:
     return {"valid": True, "uri": s, "infohash": ih, "name": name, "trackers": trackers, "error": ""}
 
 
-def enhance_magnet(raw: str, extra_trackers=None, max_trackers: int = 30) -> str:
-    """校验磁力链接并自动补全去重后的公共 Tracker，提升冷启动成功率。"""
+def enhance_magnet(raw: str, extra_trackers=None, max_trackers: int = 80) -> str:
+    """校验磁力链接并自动补全去重后的高速公共 Tracker（含 IP 直连源），大幅提升冷启动速度。"""
     info = parse_magnet(raw)
     if not info["valid"]:
         raise ValueError(info["error"])
@@ -206,28 +211,51 @@ def fetch_trackers(cache_file=None, proxy: str = "", timeout: float = 6.0) -> tu
         with opener.open(req, timeout=timeout) as resp:
             return resp.read().decode("utf-8", errors="ignore")
 
-    # 先直连拉取，若全失败且存在系统代理则走代理重试
+    # 先直连拉取，若不足则走代理合并 IP 源 + 域名源（IP Tracker 可直接绕过 DNS 污染！）
     attempts = [(False, "直连")]
     if proxy:
         attempts.append((True, "代理"))
 
+    merged = []
+    seen = set()
+    used_hosts = []
     for use_proxy, mode in attempts:
         for url in TRACKER_SOURCES:
             try:
                 txt = _get(url, use_proxy)
                 tr = parse_tracker_text(txt)
                 if len(tr) >= 5:
-                    if cache_file:
-                        try:
-                            p = Path(cache_file)
-                            p.parent.mkdir(parents=True, exist_ok=True)
-                            p.write_text("\n".join(tr) + "\n", encoding="utf-8")
-                        except Exception:
-                            pass
+                    for t in tr:
+                        if t not in seen:
+                            seen.add(t)
+                            merged.append(t)
                     host = urllib.parse.urlparse(url).netloc
-                    return tr, "%s（%s）" % (host, mode)
+                    lbl = "%s(%s)" % (host, mode)
+                    if lbl not in used_hosts:
+                        used_hosts.append(lbl)
+                    # 同时拿到 IP 源和域名源（>= 65 个）即满足高速要求
+                    if len(merged) >= 85 and len(used_hosts) >= 2:
+                        break
             except Exception:
                 continue
+        if len(merged) >= 45:
+            break
+
+    # 追加内置保底去重
+    for t in BUILTIN_TRACKERS:
+        if t not in seen:
+            seen.add(t)
+            merged.append(t)
+
+    if len(merged) > len(BUILTIN_TRACKERS):
+        if cache_file:
+            try:
+                p = Path(cache_file)
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text("\n".join(merged) + "\n", encoding="utf-8")
+            except Exception:
+                pass
+        return merged, "+".join(used_hosts[:2]) if used_hosts else "在线源"
 
     # 回退：本地缓存
     if cache_file:
@@ -418,11 +446,37 @@ def verify_torrent_infohash(torrent_bytes: bytes, expected_hex: str) -> bool:
         return False
 
 
-def resolve_magnet_torrent(infohash: str, proxy: str = "", timeout: float = 5.0) -> tuple:
-    """尝试从公共种子缓存秒级预取 .torrent 元数据并做 SHA1 完整性校验。
+def build_qbit_turbo_prefs(trackers=None) -> dict:
+    """生成 qBittorrent 极速磁力/BT 防卡死优化配置（高并发握手 + 全量 IP/UDP Tracker + 双栈传输）。"""
+    tr_list = parse_tracker_text("\n".join(trackers)) if trackers else list(BUILTIN_TRACKERS)
+    return {
+        "dht": True,
+        "pex": True,
+        "lsd": True,
+        "upnp": True,
+        "bittorrent_protocol": 0,          # TCP + uTP 双栈（穿透 NAT 能力最强）
+        "encryption": 0,                   # 允许加密与明文混合握手，不丢任何节点
+        "anonymous_mode": False,
+        "dl_limit": 0,                     # 不限下载速度
+        "max_connec": 1000,                # 全局最大连接数提升至 1000
+        "max_connec_per_torrent": 300,     # 单种子最大连接数提升至 300
+        "connection_speed": 200,           # 每秒新建连接握手速率 50 -> 200（4倍速破卡）
+        "async_io_threads": 16,
+        "checking_memory_use": 128,
+        "enable_piece_extent_affinity": True,
+        "announce_to_all_trackers": True,
+        "announce_to_all_tiers": True,
+        "reannounce_when_address_changed": True,
+        "add_trackers_enabled": True,
+        "add_trackers": "\n".join(tr_list[:140]),
+    }
+
+
+def resolve_magnet_torrent(infohash: str, proxy: str = "", timeout: float = 2.8) -> tuple:
+    """并发从 5 大公共种子缓存秒级预取 .torrent 元数据并做 SHA1 完整性校验。
 
     成功返回 (torrent_bytes, source_host)，失败返回 (b"", "")。
-    这样即使在 UDP/DHT 受限或冷启动环境下，也能跳过 [METADATA] 卡顿阶段直接开始下载。
+    并发竞速最多 2.8 秒，彻底避免顺序超时拖慢磁力投递。
     """
     ih = (infohash or "").strip()
     if _B32_RE.match(ih):
@@ -437,16 +491,18 @@ def resolve_magnet_torrent(infohash: str, proxy: str = "", timeout: float = 5.0)
     ih_up = ih.upper()
     urls = [
         "https://itorrents.org/torrent/%s.torrent" % ih_up,
+        "https://itorrents.net/torrent/%s.torrent" % ih_up,
+        "https://torrage.info/torrent.php?h=%s" % ih_up,
         "https://btcache.me/torrent/%s" % ih_up,
+        "https://watercache.nanobay.org/get/%s" % ih_up,
     ]
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) DownloadStack/1.0"}
-    attempts = [False] + ([True] if proxy else [])
+    headers = {"User-Agent": _MAGNET_SEARCH_UA}
+    px_opts = ([{"http": proxy, "https": proxy}] if proxy else []) + [{}]
 
-    for use_proxy in attempts:
-        handlers = [urllib.request.ProxyHandler({"http": proxy, "https": proxy} if use_proxy else {})]
-        opener = urllib.request.build_opener(*handlers)
-        for u in urls:
+    def _try_one(u: str):
+        for px in px_opts:
             try:
+                opener = urllib.request.build_opener(urllib.request.ProxyHandler(px))
                 req = urllib.request.Request(u, headers=headers)
                 with opener.open(req, timeout=timeout) as resp:
                     data = resp.read(8 * 1024 * 1024)
@@ -454,6 +510,22 @@ def resolve_magnet_torrent(infohash: str, proxy: str = "", timeout: float = 5.0)
                     return data, urllib.parse.urlparse(u).netloc
             except Exception:
                 continue
+        return b"", ""
+
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=len(urls))
+    try:
+        futs = [pool.submit(_try_one, u) for u in urls]
+        for fut in concurrent.futures.as_completed(futs, timeout=timeout + 0.8):
+            try:
+                data, host = fut.result()
+                if data:
+                    return data, host
+            except Exception:
+                continue
+    except Exception:
+        pass
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
     return b"", ""
 
 
