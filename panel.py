@@ -966,8 +966,11 @@ class ControlBackend:
                 dns[:] = []
             dns[:] = [d for d in dns if not d.startswith(".") and d.lower() not in ("$recycle.bin", "node_modules", "__pycache__")]
             for fn in fns:
+                low_fn = fn.lower()
                 if os.path.splitext(fn)[1].lower() not in self._VIDEO_EXTS:
                     continue
+                if any(tok in low_fn for tok in (".tmp.", ".part.", ".upscaling.", ".!qb")):
+                    continue  # skip unfinished / staging files
                 if os.path.exists(os.path.join(dp, fn + ".aria2")):
                     continue  # aria2 still downloading
                 fp = Path(dp) / fn
@@ -1178,7 +1181,12 @@ class ControlBackend:
                                 info["fps"] = round(float(a_n) / float(b_n), 2)
                         except Exception:
                             pass
-                    info["can_copy_video"] = vc in self._COPY_VCODECS
+                    # 浏览器对 10bit H.264 / yuv444p / gbrp / rgb24 无法直接硬解，必须标记为需兼容性转码
+                    bad_h264_pf = (vc == "h264" and pf and pf not in ("yuv420p", "yuvj420p", "nv12"))
+                    bad_any_pf = (pf in ("yuv444p", "yuv444p10le", "gbrp", "rgb24", "bgr24"))
+                    info["can_copy_video"] = (vc in self._COPY_VCODECS) and (not bad_h264_pf) and (not bad_any_pf)
+                    if bad_h264_pf or bad_any_pf:
+                        info["needs_remux"] = True
                     ct = str(v_st.get("color_transfer") or "").lower()
                     cp = str(v_st.get("color_primaries") or "").lower()
                     info["color_transfer"] = ct
@@ -1431,9 +1439,15 @@ class ControlBackend:
         )
         try:
             init_arg = initial if (initial and Path(initial).is_dir()) else ""
+            py_exe = sys.executable
+            if IS_WIN:
+                pyw = Path(sys.executable).with_name("pythonw.exe")
+                if pyw.is_file():
+                    py_exe = str(pyw)
             res = subprocess.run(
-                [sys.executable, "-B", "-c", code, init_arg],
+                [py_exe, "-B", "-c", code, init_arg],
                 capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120,
+                **_popen_kwargs()
             )
             return (res.stdout or "").strip()
         except Exception:
@@ -2050,6 +2064,7 @@ class ControlBackend:
                             self.yt_job["status"] = "2x AI 超分中（GPU 加速）…"
                         src_p = Path(last_file)
                         out_up = str(src_p.with_stem(src_p.stem + "_2x"))
+                        tmp_up = str(src_p.with_name(src_p.stem + "_2x.tmp.mp4"))
                         ff_dir = self._find_ffmpeg()
                         ffmpeg_exe = str(Path(ff_dir) / ("ffmpeg.exe" if IS_WIN else "ffmpeg")) if ff_dir else (shutil.which("ffmpeg") or "")
                         ffprobe_exe = str(Path(ff_dir) / ("ffprobe.exe" if IS_WIN else "ffprobe")) if ff_dir else (shutil.which("ffprobe") or "")
@@ -2080,8 +2095,8 @@ class ControlBackend:
                         def _run_upscale_cmd(cmd_args, label: str) -> bool:
                             self._yt_append_log("[INFO] %s → 目标 %dx%d：%s" % (label, tw, th, src_p.name))
                             try:
-                                if Path(out_up).is_file():
-                                    Path(out_up).unlink(missing_ok=True)
+                                if Path(tmp_up).is_file():
+                                    Path(tmp_up).unlink(missing_ok=True)
                             except Exception:
                                 pass
                             up_proc = subprocess.Popen(
@@ -2098,41 +2113,47 @@ class ControlBackend:
                                     if tln and any(k in tln.lower() for k in ("error", "warn", "fps", "frame=", "completed", "vulkan", "nvenc")):
                                         self._yt_append_log("[V2X] %s" % tln[:180])
                             rc_u = up_proc.wait()
-                            ow, oh = _probe_wh(out_up)
+                            ow, oh = _probe_wh(tmp_up)
                             if ow >= max(640, sw) and oh >= max(360, sh):
+                                os.replace(tmp_up, out_up)
                                 return True
+                            try:
+                                if Path(tmp_up).is_file():
+                                    Path(tmp_up).unlink(missing_ok=True)
+                            except Exception:
+                                pass
                             self._yt_append_log("[WARN] %s 未产出有效文件（退出码 %s），尝试备用 GPU 管线…" % (label, rc_u))
                             return False
 
                         up_ok = False
                         if v2x:
-                            # Tier 1: Video2X v6 Vulkan libplacebo (Anime4K v4) + RTX h264_nvenc（极速零崩溃）
+                            # Tier 1: Video2X v6 Vulkan libplacebo (Anime4K v4) + RTX h264_nvenc（强制 yuv420p 确保站内影院 100% 兼容）
                             up_ok = _run_upscale_cmd([
-                                v2x, "-i", last_file, "-o", out_up,
+                                v2x, "-i", last_file, "-o", tmp_up,
                                 "-w", str(tw), "-h", str(th),
                                 "-p", "libplacebo", "--libplacebo-shader", "anime4k-v4-a+a",
-                                "-d", "0", "-c", "h264_nvenc", "-e", "cq=18", "-e", "preset=p5",
-                                "--no-progress",
+                                "-d", "0", "-c", "h264_nvenc", "--pix-fmt", "yuv420p",
+                                "-e", "cq=18", "-e", "preset=p5", "--no-progress",
                             ], "Video2X Vulkan AI (NVENC)")
                             # Tier 2: 非 N 卡环境回退 libx264 编码
                             if not up_ok:
                                 up_ok = _run_upscale_cmd([
-                                    v2x, "-i", last_file, "-o", out_up,
+                                    v2x, "-i", last_file, "-o", tmp_up,
                                     "-w", str(tw), "-h", str(th),
                                     "-p", "libplacebo", "--libplacebo-shader", "anime4k-v4-a+a",
-                                    "-c", "libx264", "-e", "crf=18", "-e", "preset=fast",
-                                    "--no-progress",
+                                    "-c", "libx264", "--pix-fmt", "yuv420p",
+                                    "-e", "crf=18", "-e", "preset=fast", "--no-progress",
                                 ], "Video2X Vulkan AI (x264)")
                         # Tier 3: FFmpeg 硬件 Lanczos 2x + CAS 锐化兜底（100% 稳定兜底）
                         if not up_ok and ffmpeg_exe:
                             vf = "scale=%d:%d:flags=lanczos,cas=0.45" % (tw, th)
                             for enc_name, enc_args in (
-                                ("FFmpeg NVENC 2x+CAS", ["-c:v", "h264_nvenc", "-cq", "18", "-preset", "p5"]),
-                                ("FFmpeg x264 2x+CAS",  ["-c:v", "libx264", "-crf", "18", "-preset", "fast"]),
+                                ("FFmpeg NVENC 2x+CAS", ["-c:v", "h264_nvenc", "-cq", "18", "-preset", "p5", "-pix_fmt", "yuv420p"]),
+                                ("FFmpeg x264 2x+CAS",  ["-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p"]),
                             ):
                                 up_ok = _run_upscale_cmd(
                                     [ffmpeg_exe, "-y", "-i", last_file, "-vf", vf]
-                                    + enc_args + ["-c:a", "copy", "-movflags", "+faststart", out_up],
+                                    + enc_args + ["-c:a", "copy", "-movflags", "+faststart", tmp_up],
                                     enc_name,
                                 )
                                 if up_ok:
@@ -4902,29 +4923,46 @@ def run_3d_server(open_browser=True):
                 rng = self.headers.get("Range")
                 if rng:
                     hdrs["Range"] = rng
-                px = backend._sys_proxy() if info.get("use_proxy") else ""
-                proxies = {"http": px, "https": px} if px else {"http": None, "https": None}
-                try:
-                    with requests.get(info["url"], headers=hdrs, proxies=proxies, stream=True, timeout=18) as r:
-                        self.send_response(r.status_code)
-                        self.send_header("Content-Type", r.headers.get("Content-Type") or info.get("mime") or "audio/mp4")
-                        self.send_header("Accept-Ranges", r.headers.get("Accept-Ranges") or "bytes")
-                        self.send_header("Cache-Control", "no-store")
-                        if r.headers.get("Content-Range"):
-                            self.send_header("Content-Range", r.headers["Content-Range"])
-                        if r.headers.get("Content-Length"):
-                            self.send_header("Content-Length", r.headers["Content-Length"])
-                        self.end_headers()
-                        for chunk in r.iter_content(chunk_size=65536):
-                            if not chunk:
-                                continue
-                            try:
-                                self.wfile.write(chunk)
-                            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
-                                break
-                except Exception as ex:
+                px_sys = backend._sys_proxy()
+                want_px = bool(info.get("use_proxy")) and bool(px_sys)
+                route_plan = [px_sys, ""] if want_px else (["", px_sys] if px_sys else [""])
+                last_ex = None
+                sent = False
+                for route_px in route_plan:
+                    sess = requests.Session()
+                    if not route_px:
+                        sess.trust_env = False
+                    proxies = {"http": route_px, "https": route_px} if route_px else None
                     try:
-                        self.send_error(502, "Audio stream error: %s" % ex)
+                        with sess.get(info["url"], headers=hdrs, proxies=proxies, stream=True, timeout=16) as r:
+                            if r.status_code in (403, 502, 503) and route_px != route_plan[-1]:
+                                continue
+                            self.send_response(r.status_code)
+                            self.send_header("Content-Type", r.headers.get("Content-Type") or info.get("mime") or "audio/mp4")
+                            self.send_header("Accept-Ranges", r.headers.get("Accept-Ranges") or "bytes")
+                            self.send_header("Cache-Control", "no-store")
+                            if r.headers.get("Content-Range"):
+                                self.send_header("Content-Range", r.headers["Content-Range"])
+                            if r.headers.get("Content-Length"):
+                                self.send_header("Content-Length", r.headers["Content-Length"])
+                            self.end_headers()
+                            sent = True
+                            for chunk in r.iter_content(chunk_size=65536):
+                                if not chunk:
+                                    continue
+                                try:
+                                    self.wfile.write(chunk)
+                                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                                    break
+                            break
+                    except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                        sent = True
+                        break
+                    except Exception as ex:
+                        last_ex = ex
+                if not sent and last_ex is not None:
+                    try:
+                        self.send_error(502, "Audio stream error: %s" % last_ex)
                     except Exception:
                         pass
                 return
@@ -5023,8 +5061,8 @@ def run_3d_server(open_browser=True):
                 pinfo = backend.probe_video(str(target))
                 vcodec = str(pinfo.get("vcodec") or "").lower()
                 acodec = str(pinfo.get("acodec") or "").lower()
-                # 原画质零压缩：现代编码 (H.264/HEVC/AV1/VP9) 一律 -c:v copy 比特级直出！
-                can_copy_v = (not vcodec) or (vcodec in backend._COPY_VCODECS)
+                # 原画质零压缩：现代浏览器兼容编码与像素格式一律 -c:v copy 比特级直出；10bit H.264/yuv444p 自动高码率兼容转 yuv420p
+                can_copy_v = bool(pinfo.get("can_copy_video", True)) and ((not vcodec) or (vcodec in backend._COPY_VCODECS))
                 can_copy_a = acodec in backend._COPY_ACODECS
                 cmd = [ffmpeg_exe, "-v", "error", "-nostdin"]
                 if start_sec > 0.2:
