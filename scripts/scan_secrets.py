@@ -7,7 +7,7 @@ import re
 import sys
 from pathlib import Path
 
-SKIP_DIRS = {".git", "__pycache__", "state", "logs", "cache", "backups", "build", "dist", ".venv", "venv"}
+SKIP_DIRS = {".git", "__pycache__", "state", "logs", "cache", "backups", "build", "dist", ".venv", ".venv-voice", "venv"}
 SKIP_FILES = {"config.json", "pw.txt", "scan_secrets.py"}  # 扫描器自身的规则串不算泄露
 
 PATTERNS = [

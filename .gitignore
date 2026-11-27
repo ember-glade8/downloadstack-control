@@ -29,6 +29,7 @@ diag-report.txt
 __pycache__/
 *.pyc
 .venv/
+.venv-voice/
 venv/
 
 # 构建

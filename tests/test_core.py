@@ -115,9 +115,30 @@ class TestMagnetTools(unittest.TestCase):
         self.assertEqual(res["uri"], "magnet:?xt=urn:btih:" + ih)
 
 
+class TestMediaStudio(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.ms = _import_with_stubs("media_studio")
+
+    def test_safe_filename_and_fmt_dur(self):
+        self.assertEqual(self.ms._safe_filename('a/b:c*d?"e'), "a_b_c_d_e")
+        self.assertEqual(self.ms._fmt_dur(215), "03:35")
+        self.assertEqual(self.ms._fmt_dur(3661), "1:01:01")
+
+    def test_scan_recent_downloads(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td)
+            (p / "song.mp3").write_bytes(b"ID3" + b"\x00" * 64)
+            (p / "temp.part").write_bytes(b"skip")
+            items = self.ms.scan_recent_downloads([("音乐", str(p))], limit=5)
+            self.assertEqual(len(items), 1)
+            self.assertEqual(items[0]["name"], "song.mp3")
+            self.assertEqual(items[0]["kind"], "audio")
+
+
 class TestSyntaxAll(unittest.TestCase):
     def test_all_python_files_parse(self):
-        for name in ("panel.py", "magnet_tools.py", "ytdl_gui.py", "setup_wizard.py", "scripts/scan_secrets.py"):
+        for name in ("panel.py", "magnet_tools.py", "media_studio.py", "ytdl_gui.py", "setup_wizard.py", "scripts/scan_secrets.py"):
             src = (ROOT / name).read_text(encoding="utf-8")
             ast.parse(src, filename=name)
 

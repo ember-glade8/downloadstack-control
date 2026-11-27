@@ -326,6 +326,7 @@ EOF
 if [ -f "$(dirname "$0")/panel.py" ]; then cp "$(dirname "$0")/panel.py" "$ROOT/ControlPanel/" 2>/dev/null || true; fi
 if [ -f "$(dirname "$0")/panel_ui.html" ]; then cp "$(dirname "$0")/panel_ui.html" "$ROOT/ControlPanel/" 2>/dev/null || true; fi
 if [ -f "$(dirname "$0")/magnet_tools.py" ]; then cp "$(dirname "$0")/magnet_tools.py" "$ROOT/ControlPanel/" 2>/dev/null || true; fi
+if [ -f "$(dirname "$0")/media_studio.py" ]; then cp "$(dirname "$0")/media_studio.py" "$ROOT/ControlPanel/" 2>/dev/null || true; fi
 if [ -f "$(dirname "$0")/启动面板.sh" ]; then cp "$(dirname "$0")/启动面板.sh" "$ROOT/ControlPanel/" 2>/dev/null || true; fi
 if [ -f "$(dirname "$0")/ytdl_gui.py" ]; then cp "$(dirname "$0")/ytdl_gui.py" "$ROOT/ControlPanel/" 2>/dev/null || true; fi
 cat > "$ROOT/ControlPanel/yt-download.sh" <<EOF

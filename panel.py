@@ -109,6 +109,11 @@ try:
 except Exception:
     MT = None
 
+try:
+    import media_studio as MS
+except Exception:
+    MS = None
+
 # ------------------------------------------------------------------ 路径（原样）
 APP_DIR = Path(__file__).resolve().parent
 HOME = Path(os.environ.get("USERPROFILE") or Path.home())
@@ -215,7 +220,8 @@ DEFAULT_CFG = {
     },
     "ui": {"theme": "dark", "autostart_panel": False, "autostart_aria2": False,
            "upscale": False},
-    "paths": {"downloads": str(DL_HOME)},
+    "paths": {"downloads": str(DL_HOME), "music": "", "voice": ""},
+    "voice": {"api_url": "http://127.0.0.1:9880"},
 }
 
 
@@ -549,6 +555,27 @@ class ControlBackend:
             "pct": 0.0, "speed": "", "eta": "", "status": "就绪",
             "logs": [], "file": "",
         }
+        self.music_job = {
+            "running": False, "pid": None, "query": "", "source": "all",
+            "fmt": "mp3", "title": "", "artist": "",
+            "pct": 0.0, "speed": "", "eta": "", "status": "就绪",
+            "results": [], "logs": [], "file": "",
+        }
+        cached_ref = CACHE / "ref_voice.wav"
+        self.voice_job = {
+            "running": False, "pid": None, "installing": False,
+            "engine": "edge", "status": "就绪", "pct": 0.0,
+            "ref_wav": str(cached_ref) if cached_ref.is_file() else "",
+            "ref_name": "已加载上次参考音色 (ref_voice.wav)" if cached_ref.is_file() else "",
+            "ref_text": "",
+            "out_file": "",
+            "api_url": str((self.cfg.get("voice") or {}).get("api_url") or "http://127.0.0.1:9880"),
+            "logs": [],
+        }
+        self._voice_env_cache = None
+        self._voice_env_ts = 0.0
+        self._recent_cache = []
+        self._recent_ts = 0.0
         self.log("Spatial 3D 控制台启动，配置 %s" % CONFIG)
         self.poll_once()
         t = threading.Thread(target=self._poll_loop, daemon=True)
@@ -602,6 +629,67 @@ class ControlBackend:
                 return got
         base = self.cfg.get("paths", {}).get("downloads") or str(DL_HOME)
         return str(Path(base) / "yt-dlp")
+
+    def music_output(self):
+        custom = (self.cfg.get("paths", {}).get("music") or "").strip()
+        if custom:
+            return custom
+        base = self.cfg.get("paths", {}).get("downloads") or str(DL_HOME)
+        return str(Path(base) / "music")
+
+    def voice_output(self):
+        custom = (self.cfg.get("paths", {}).get("voice") or "").strip()
+        if custom:
+            return custom
+        base = self.cfg.get("paths", {}).get("downloads") or str(DL_HOME)
+        return str(Path(base) / "voice-clone")
+
+    def _allowed_media_roots(self):
+        base = Path(self.cfg.get("paths", {}).get("downloads") or str(DL_HOME))
+        cands = [
+            base,
+            base / "aria2",
+            Path(self.cfg.get("qbit", {}).get("save_dir") or str(base / "qBittorrent")),
+            Path(self.yt_output()),
+            Path(self.music_output()),
+            Path(self.voice_output()),
+            CACHE,
+        ]
+        with self.lock:
+            for fp in (self.yt_job.get("file"), self.music_job.get("file"),
+                       self.voice_job.get("out_file"), self.voice_job.get("ref_wav")):
+                if fp:
+                    try:
+                        cands.append(Path(fp).resolve().parent)
+                    except Exception:
+                        pass
+        roots = []
+        for c in cands:
+            try:
+                roots.append(c.resolve())
+            except Exception:
+                pass
+        return roots
+
+    def _is_allowed_media(self, raw_path: str):
+        if not raw_path:
+            return None
+        try:
+            target = Path(raw_path).resolve()
+        except Exception:
+            return None
+        if not target.is_file():
+            return None
+        allowed_exts = {".mp3", ".flac", ".wav", ".m4a", ".ogg", ".aac", ".opus", ".webm", ".mp4", ".mkv", ".mov"}
+        if target.suffix.lower() not in allowed_exts:
+            return None
+        for rt in self._allowed_media_roots():
+            try:
+                target.relative_to(rt)
+                return target
+            except ValueError:
+                continue
+        return None
 
     @staticmethod
     def _pick_folder_dialog(initial: str = "") -> str:
@@ -1134,6 +1222,7 @@ class ControlBackend:
                     with self.lock:
                         self.yt_job["pct"] = 100.0
                         self.yt_job["status"] = "下载完成 ✔"
+                    self._recent_ts = 0.0
                     self._yt_append_log("[OK] 抖音视频下载完成 → %s" % (last_file or out_dir))
                     self.log("YT 工坊抖音下载完成 → %s" % (last_file or out_dir), "OK")
                     return
@@ -1196,6 +1285,7 @@ class ControlBackend:
                 with self.lock:
                     self.yt_job["pct"] = 100.0
                     self.yt_job["status"] = "下载完成 ✔"
+                self._recent_ts = 0.0
                 self._yt_append_log("[OK] 下载完成 → %s" % (last_file or out_dir))
                 self.log("YT 工坊下载完成 → %s" % (last_file or out_dir), "OK")
                 if upscale and quality != "audio":
@@ -1231,6 +1321,413 @@ class ControlBackend:
                 self.yt_job["running"] = False
                 self.yt_job["pid"] = None
 
+    def _music_append_log(self, line: str):
+        ts = datetime.now().strftime("%H:%M:%S")
+        with self.lock:
+            self.music_job["logs"].append("%s %s" % (ts, line))
+            if len(self.music_job["logs"]) > 180:
+                self.music_job["logs"] = self.music_job["logs"][-180:]
+
+    def _voice_append_log(self, line: str):
+        ts = datetime.now().strftime("%H:%M:%S")
+        with self.lock:
+            self.voice_job["logs"].append("%s %s" % (ts, line))
+            if len(self.voice_job["logs"]) > 220:
+                self.voice_job["logs"] = self.voice_job["logs"][-220:]
+
+    def _run_music_worker(self, url: str, query: str, title: str, artist: str, fmt: str, out_dir_str: str):
+        import re
+        out_dir = Path(out_dir_str or self.music_output())
+        out_dir.mkdir(parents=True, exist_ok=True)
+        fmt = fmt if fmt in ("mp3", "flac", "wav", "m4a") else "mp3"
+        t_start = time.time()
+        try:
+            ytdlp = self._find_ytdlp()
+            if not ytdlp:
+                with self.lock:
+                    self.music_job["status"] = "未检测到 yt-dlp"
+                self._music_append_log("[ERROR] 未检测到 yt-dlp，请先运行一键配置安装")
+                return
+            ff_dir = self._find_ffmpeg()
+            px = self._sys_proxy()
+            targets = MS.build_music_download_targets(url, query, bool(px)) if MS else ([(url, bool(px), "直链音源")] if url else [])
+            if not targets:
+                with self.lock:
+                    self.music_job["status"] = "未找到可用音源"
+                self._music_append_log("[ERROR] 未能匹配到可下载的音源，请换个关键词重试")
+                return
+
+            safe_stem = ""
+            if title and MS:
+                raw_name = ("%s - %s" % (artist, title)) if (artist and artist not in ("未知歌手", "B站音乐", "YouTube")) else title
+                safe_stem = MS._safe_filename(raw_name, "song")
+
+            pct_re = re.compile(r"(\d+(?:\.\d+)?)%")
+            spd_re = re.compile(r"at\s+([^\s]+/s)")
+            eta_re = re.compile(r"ETA\s+([0-9:]+)")
+            dst_re = re.compile(r"(?:\[ExtractAudio\]\s*Destination:|Destination:)\s*(.+)$")
+
+            final_file = ""
+            ok = False
+            for idx, (target_url, use_proxy, label) in enumerate(targets):
+                with self.lock:
+                    if not self.music_job.get("running"):
+                        return
+                    self.music_job["status"] = "尝试 %s (%d/%d)…" % (label, idx + 1, len(targets))
+                    self.music_job["pct"] = 0.0
+                self._music_append_log("[INFO] 音源[%s]：%s" % (label, target_url))
+
+                cmd = [ytdlp, "--newline", "--progress", "--no-color", "--no-playlist",
+                       "-P", str(out_dir), "-x", "--audio-format", fmt, "--audio-quality", "0", "--add-metadata"]
+                if ff_dir:
+                    cmd += ["--ffmpeg-location", ff_dir]
+                    if fmt in ("mp3", "m4a", "flac"):
+                        cmd += ["--embed-thumbnail"]
+                if safe_stem:
+                    cmd += ["-o", safe_stem + ".%(ext)s"]
+                else:
+                    cmd += ["-o", "%(title).70s.%(ext)s"]
+                if "bilibili.com" in target_url.lower() or "b23.tv" in target_url.lower():
+                    cmd += ["--add-header", "Referer:https://www.bilibili.com/"]
+                elif "youtube" in target_url.lower() or target_url.startswith("ytsearch"):
+                    cmd += ["--extractor-args", "youtube:player_client=android,web"]
+                cmd.append(target_url)
+
+                env = os.environ.copy()
+                if use_proxy and px:
+                    env["HTTP_PROXY"] = env["HTTPS_PROXY"] = env["http_proxy"] = env["https_proxy"] = px
+                    env.pop("ALL_PROXY", None)
+                    env.pop("all_proxy", None)
+                    env["NO_PROXY"] = env["no_proxy"] = "localhost,127.0.0.1,::1,.local"
+                else:
+                    for k in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
+                        env.pop(k, None)
+
+                proc = subprocess.Popen(
+                    cmd, cwd=str(out_dir), env=env,
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    text=True, encoding="utf-8", errors="replace",
+                    **_popen_kwargs()
+                )
+                with self.lock:
+                    self.music_job["pid"] = proc.pid
+                self.pids["music_job"] = proc.pid
+                save_pids(self.pids)
+
+                last_dst = ""
+                assert proc.stdout is not None
+                for raw in proc.stdout:
+                    line = raw.strip()
+                    if not line:
+                        continue
+                    m_p = pct_re.search(line)
+                    if m_p and "[download]" in line:
+                        m_s = spd_re.search(line)
+                        m_e = eta_re.search(line)
+                        with self.lock:
+                            self.music_job["pct"] = float(m_p.group(1))
+                            if m_s:
+                                self.music_job["speed"] = m_s.group(1)
+                            if m_e:
+                                self.music_job["eta"] = m_e.group(1)
+                        continue
+                    m_d = dst_re.search(line)
+                    if m_d:
+                        cand = m_d.group(1).strip().strip('"')
+                        if cand:
+                            last_dst = cand
+                    if "[ExtractAudio]" in line or "ERROR:" in line or "WARNING:" in line:
+                        self._music_append_log(line)
+                rc = proc.wait()
+                if rc == 0:
+                    ok = True
+                    if safe_stem and (out_dir / ("%s.%s" % (safe_stem, fmt))).is_file():
+                        final_file = str(out_dir / ("%s.%s" % (safe_stem, fmt)))
+                    elif last_dst and Path(last_dst).is_file():
+                        final_file = str(Path(last_dst).resolve())
+                    else:
+                        cands = sorted(
+                            [f for f in out_dir.iterdir() if f.is_file() and f.suffix.lower() in (".mp3", ".flac", ".wav", ".m4a", ".ogg", ".opus") and f.stat().st_mtime >= t_start - 3],
+                            key=lambda x: x.stat().st_mtime, reverse=True
+                        )
+                        if cands:
+                            final_file = str(cands[0].resolve())
+                    break
+                self._music_append_log("[WARN] 音源[%s]退出码 %s，自动切换下一候选音源…" % (label, rc))
+
+            if ok:
+                with self.lock:
+                    self.music_job["pct"] = 100.0
+                    self.music_job["status"] = "下载完成 ✔"
+                    self.music_job["file"] = final_file
+                self._recent_ts = 0.0
+                self._music_append_log("[OK] 歌曲已保存 → %s" % (final_file or out_dir))
+                self.log("音乐工坊下载完成 → %s" % (Path(final_file).name if final_file else out_dir), "OK")
+            else:
+                with self.lock:
+                    if self.music_job["status"] != "已取消":
+                        self.music_job["status"] = "下载失败"
+                self._music_append_log("[ERROR] 全部候选音源均失败，请换一个关键词或检查代理设置")
+        except Exception as ex:
+            with self.lock:
+                self.music_job["status"] = "执行异常"
+            self._music_append_log("[ERROR] %s" % ex)
+        finally:
+            self.pids.pop("music_job", None)
+            save_pids(self.pids)
+            with self.lock:
+                self.music_job["running"] = False
+                self.music_job["pid"] = None
+
+    def _run_voice_install_f5_worker(self):
+        try:
+            if MS is None:
+                self._voice_append_log("[ERROR] media_studio 模块缺失")
+                return
+            py312 = MS.find_compatible_py312()
+            if not py312:
+                with self.lock:
+                    self.voice_job["status"] = "缺少 Python 3.10~3.12"
+                self._voice_append_log("[ERROR] 未找到 Python 3.10~3.12（PyTorch CUDA 暂不支持 3.15），请安装 Python 3.12 后重试")
+                return
+            venv_dir = PANEL_DIR / ".venv-voice"
+            vpy = MS.voice_venv_python(PANEL_DIR)
+            gpu = MS.detect_gpu_name()
+            has_nv = "NVIDIA" in gpu.upper()
+            self._voice_append_log("[INFO] 检测到显卡：%s | 解释器：%s" % (gpu, py312))
+
+            def _run_step(cmd, label):
+                self._voice_append_log("[INFO] %s…" % label)
+                with self.lock:
+                    self.voice_job["status"] = label + "…"
+                env = os.environ.copy()
+                env["PYTHONUTF8"] = "1"
+                px = self._sys_proxy()
+                if px:
+                    env["HTTP_PROXY"] = env["HTTPS_PROXY"] = env["http_proxy"] = env["https_proxy"] = px
+                    env.pop("ALL_PROXY", None)
+                    env.pop("all_proxy", None)
+                proc = subprocess.Popen(
+                    cmd, cwd=str(PANEL_DIR), env=env,
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    text=True, encoding="utf-8", errors="replace",
+                    **_popen_kwargs()
+                )
+                with self.lock:
+                    self.voice_job["pid"] = proc.pid
+                self.pids["voice_job"] = proc.pid
+                save_pids(self.pids)
+                assert proc.stdout is not None
+                for raw in proc.stdout:
+                    line = raw.strip()
+                    if line:
+                        self._voice_append_log(line)
+                return proc.wait()
+
+            if not vpy.is_file():
+                rc = _run_step([py312, "-m", "venv", str(venv_dir)], "创建独立隔离环境 .venv-voice")
+                if rc != 0:
+                    raise RuntimeError("创建 .venv-voice 失败 (码 %s)" % rc)
+
+            with self.lock:
+                self.voice_job["pct"] = 20.0
+            _run_step([str(vpy), "-m", "pip", "install", "-U", "pip"], "升级 pip")
+
+            with self.lock:
+                self.voice_job["pct"] = 45.0
+            if has_nv:
+                rc = _run_step(
+                    [str(vpy), "-m", "pip", "install", "torch", "torchaudio",
+                     "--index-url", "https://download.pytorch.org/whl/cu124"],
+                    "安装 PyTorch CUDA 12.4（RTX GPU 加速）"
+                )
+                if rc != 0:
+                    rc = _run_step(
+                        [str(vpy), "-m", "pip", "install", "torch", "torchaudio"],
+                        "回退标准 PyPI 安装 PyTorch"
+                    )
+            else:
+                rc = _run_step([str(vpy), "-m", "pip", "install", "torch", "torchaudio"], "安装 PyTorch (CPU)")
+            if rc != 0:
+                raise RuntimeError("PyTorch 安装失败 (码 %s)" % rc)
+
+            with self.lock:
+                self.voice_job["pct"] = 78.0
+            rc = _run_step([str(vpy), "-m", "pip", "install", "f5-tts"], "安装开源顶尖 F5-TTS 引擎")
+            if rc != 0:
+                rc = _run_step(
+                    [str(vpy), "-m", "pip", "install", "-i", "https://pypi.tuna.tsinghua.edu.cn/simple", "f5-tts"],
+                    "切换清华镜像安装 F5-TTS"
+                )
+            if rc != 0:
+                raise RuntimeError("f5-tts 安装失败 (码 %s)" % rc)
+
+            self._voice_env_ts = 0.0
+            with self.lock:
+                self.voice_job["pct"] = 100.0
+                self.voice_job["status"] = "F5-TTS 安装就绪 ✔"
+            self._voice_append_log("[OK] F5-TTS 开源声音克隆引擎安装完成！现在上传 3~10 秒人声即可零样本克隆")
+            self.log("F5-TTS 开源声音克隆引擎安装完成", "OK")
+        except Exception as ex:
+            with self.lock:
+                self.voice_job["status"] = "安装失败"
+            self._voice_append_log("[ERROR] %s" % ex)
+        finally:
+            self.pids.pop("voice_job", None)
+            save_pids(self.pids)
+            with self.lock:
+                self.voice_job["installing"] = False
+                self.voice_job["running"] = False
+                self.voice_job["pid"] = None
+
+    def _run_voice_synth_worker(self, engine: str, text: str, ref_text: str, voice_id: str,
+                                rate: str, pitch: str, api_url: str, out_dir_str: str):
+        out_dir = Path(out_dir_str or self.voice_output())
+        out_dir.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        snip = MS._safe_filename(text[:16], "voice") if MS else "voice"
+        try:
+            if MS is None:
+                raise RuntimeError("media_studio 模块缺失")
+            if engine == "edge":
+                out_file = out_dir / ("tts_%s_%s.mp3" % (snip, stamp))
+                with self.lock:
+                    self.voice_job["status"] = "神经配音合成中…"
+                    self.voice_job["pct"] = 35.0
+                self._voice_append_log("[INFO] 使用神经音色 %s（语速 %s / 音调 %s）合成…" % (voice_id, rate, pitch))
+                ok, msg = MS.run_edge_tts(text, voice_id, rate, pitch, out_file, proxy=self._sys_proxy())
+                if not ok:
+                    raise RuntimeError(msg)
+                with self.lock:
+                    self.voice_job["out_file"] = str(out_file.resolve())
+                    self.voice_job["pct"] = 100.0
+                    self.voice_job["status"] = "合成完成 ✔"
+                self._recent_ts = 0.0
+                self._voice_append_log("[OK] %s → %s" % (msg, out_file.name))
+                self.log("声音工坊神经配音完成 → %s" % out_file.name, "OK")
+                return
+
+            with self.lock:
+                ref_wav = self.voice_job.get("ref_wav") or ""
+            if not ref_wav or not Path(ref_wav).is_file():
+                raise RuntimeError("请先上传参考音频（3~15 秒清晰人声）或点击「🎙️ 麦克风录制」")
+
+            if engine == "api":
+                out_file = out_dir / ("clone_api_%s_%s.wav" % (snip, stamp))
+                with self.lock:
+                    self.voice_job["status"] = "调用外部开源克隆 API…"
+                    self.voice_job["pct"] = 40.0
+                self._voice_append_log("[INFO] 正在请求外部开源声音克隆 API：%s" % api_url)
+                ok, msg = MS.run_external_clone_api(api_url, Path(ref_wav), ref_text, text, out_file)
+                if not ok:
+                    raise RuntimeError(msg)
+                with self.lock:
+                    self.voice_job["out_file"] = str(out_file.resolve())
+                    self.voice_job["pct"] = 100.0
+                    self.voice_job["status"] = "外部克隆完成 ✔"
+                self._recent_ts = 0.0
+                self._voice_append_log("[OK] %s → %s" % (msg, out_file.name))
+                self.log("声音克隆完成（外部 API）→ %s" % out_file.name, "OK")
+                return
+
+            # engine == "f5"
+            f5_cli = MS.voice_venv_f5cli(PANEL_DIR)
+            cli_path = str(f5_cli) if f5_cli.is_file() else (shutil.which("f5-tts_infer-cli") or "")
+            if not cli_path:
+                raise RuntimeError("本机尚未安装 F5-TTS，请先点击「⚡ 一键部署 F5-TTS (CUDA)」或切换「⚡ 神经配音即用」")
+            out_name = "clone_f5_%s_%s.wav" % (snip, stamp)
+            out_file = out_dir / out_name
+            cmd = [
+                cli_path, "--model", "F5TTS_v1_Base",
+                "--ref_audio", ref_wav,
+                "--ref_text", ref_text,
+                "--gen_text", text,
+                "--output_dir", str(out_dir),
+                "--output_file", out_name,
+            ]
+            env = os.environ.copy()
+            env["PYTHONUTF8"] = "1"
+            env["PYTHONIOENCODING"] = "utf-8"
+            ff_dir = self._find_ffmpeg()
+            if ff_dir:
+                env["PATH"] = ff_dir + os.pathsep + env.get("PATH", "")
+            px = self._sys_proxy()
+            if px:
+                env["HTTP_PROXY"] = env["HTTPS_PROXY"] = env["http_proxy"] = env["https_proxy"] = px
+                env.pop("ALL_PROXY", None)
+                env.pop("all_proxy", None)
+            else:
+                env.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
+
+            self._voice_append_log("[INFO] 启动 F5-TTS 零样本声音克隆（首次运行将自动拉取 F5TTS_v1_Base 开源权重）…")
+            with self.lock:
+                self.voice_job["status"] = "F5-TTS 推理克隆中…"
+                self.voice_job["pct"] = 25.0
+            proc = subprocess.Popen(
+                cmd, cwd=str(out_dir), env=env,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding="utf-8", errors="replace",
+                **_popen_kwargs()
+            )
+            with self.lock:
+                self.voice_job["pid"] = proc.pid
+            self.pids["voice_job"] = proc.pid
+            save_pids(self.pids)
+            assert proc.stdout is not None
+            step_n = 0
+            for raw in proc.stdout:
+                line = raw.strip()
+                if not line:
+                    continue
+                step_n += 1
+                with self.lock:
+                    self.voice_job["pct"] = min(94.0, 25.0 + step_n * 2.5)
+                self._voice_append_log(line)
+            rc = proc.wait()
+            if rc == 0 and out_file.is_file() and out_file.stat().st_size > 1000:
+                with self.lock:
+                    self.voice_job["out_file"] = str(out_file.resolve())
+                    self.voice_job["pct"] = 100.0
+                    self.voice_job["status"] = "F5-TTS 克隆完成 ✔"
+                self._recent_ts = 0.0
+                self._voice_append_log("[OK] F5-TTS 声音克隆完成 → %s" % out_file.name)
+                self.log("F5-TTS 声音克隆完成 → %s" % out_file.name, "OK")
+            else:
+                raise RuntimeError("F5-TTS 退出码 %s，请查看上方日志" % rc)
+        except Exception as ex:
+            with self.lock:
+                if self.voice_job["status"] != "已取消":
+                    self.voice_job["status"] = "合成失败"
+            self._voice_append_log("[ERROR] %s" % ex)
+        finally:
+            self.pids.pop("voice_job", None)
+            save_pids(self.pids)
+            with self.lock:
+                self.voice_job["running"] = False
+                self.voice_job["pid"] = None
+
+    def _get_voice_env_cached(self):
+        now = time.time()
+        if self._voice_env_cache is None or (now - self._voice_env_ts) > 15.0:
+            self._voice_env_cache = MS.detect_voice_env(PANEL_DIR) if MS else {"gpu": "-", "py312": "", "f5_ready": False, "edge_ready": False, "voices": []}
+            self._voice_env_ts = now
+        return dict(self._voice_env_cache)
+
+    def _get_recent_files_cached(self):
+        now = time.time()
+        if (now - self._recent_ts) > 3.5:
+            dl_base = Path(self.cfg.get("paths", {}).get("downloads") or str(DL_HOME))
+            dirs = [
+                ("视频", self.yt_output()),
+                ("音乐", self.music_output()),
+                ("克隆", self.voice_output()),
+                ("直链", str(dl_base / "aria2")),
+                ("BT", self.cfg.get("qbit", {}).get("save_dir") or str(dl_base / "qBittorrent")),
+            ]
+            self._recent_cache = MS.scan_recent_downloads(dirs, limit=8) if MS else []
+            self._recent_ts = now
+        return list(self._recent_cache)
+
     def _magnet_diag(self):
         if MT is None:
             return {"ok": False, "tracker_count": 0, "missing": ["magnet_tools"], "dht_dat_size": 0}
@@ -1250,6 +1747,11 @@ class ControlBackend:
             wave = list(self.wave)
             yt_job = dict(self.yt_job)
             yt_job["logs"] = list(self.yt_job["logs"][-120:])
+            music_job = dict(self.music_job)
+            music_job["logs"] = list(self.music_job["logs"][-80:])
+            music_job["results"] = list(self.music_job["results"][:30])
+            voice_job = dict(self.voice_job)
+            voice_job["logs"] = list(self.voice_job["logs"][-100:])
         yt_state = dict(self.pr.y)
         yt_state["upscale"] = bool(self.cfg.get("ui", {}).get("upscale"))
         yt_state["on"] = bool(yt_state.get("on") or yt_job.get("running"))
@@ -1258,11 +1760,19 @@ class ControlBackend:
         yt_job["has_video2x"] = bool(self._find_video2x())
         yt_job["out_dir"] = self.yt_output()
         yt_job["proxy"] = self._sys_proxy() or "直连"
+        music_job["out_dir"] = self.music_output()
+        music_job["has_ytdlp"] = yt_job["has_ytdlp"]
+        music_job["has_ffmpeg"] = yt_job["has_ffmpeg"]
+        voice_job["out_dir"] = self.voice_output()
+        voice_job["env"] = self._get_voice_env_cached()
         return {
             "aria2": dict(self.pr.a),
             "qbit": dict(self.pr.q),
             "yt": yt_state,
             "yt_studio": yt_job,
+            "music_studio": music_job,
+            "voice_studio": voice_job,
+            "recent_files": self._get_recent_files_cached(),
             "magnet": self._magnet_diag(),
             "tasks": {
                 "aria2": list(self.pr.a_tasks),
@@ -1419,6 +1929,10 @@ class ControlBackend:
             if not init:
                 if target == "yt":
                     init = self.yt_output()
+                elif target == "music":
+                    init = self.music_output()
+                elif target == "voice":
+                    init = self.voice_output()
                 elif target in ("qbit", "magnet"):
                     init = self.cfg["qbit"].get("save_dir") or str(DL_HOME)
                 else:
@@ -1430,6 +1944,14 @@ class ControlBackend:
                 self.cfg["yt"]["output"] = chosen
                 save_cfg(self.cfg)
                 self.log("YT 视频保存目录已设为：%s" % chosen, "OK")
+            elif target == "music":
+                self.cfg.setdefault("paths", {})["music"] = chosen
+                save_cfg(self.cfg)
+                self.log("音乐保存目录已设为：%s" % chosen, "OK")
+            elif target == "voice":
+                self.cfg.setdefault("paths", {})["voice"] = chosen
+                save_cfg(self.cfg)
+                self.log("声音克隆保存目录已设为：%s" % chosen, "OK")
             elif target == "qbit":
                 self.cfg["qbit"]["save_dir"] = chosen
                 save_cfg(self.cfg)
@@ -1740,6 +2262,129 @@ class ControlBackend:
                 self.yt_job["logs"] = []
             return True, "YT 日志已清空", {}
 
+        if act == "music_search":
+            if MS is None:
+                return False, "media_studio 模块不可用", {}
+            q = str(body.get("query") or "").strip()
+            src = str(body.get("source") or "all").strip().lower()
+            if not q:
+                return False, "请输入歌名、歌手或歌词片段", {}
+            res = MS.search_songs(q, source=src, ytdlp=self._find_ytdlp(), proxy=self._sys_proxy())
+            with self.lock:
+                self.music_job["query"] = q
+                self.music_job["source"] = src
+                self.music_job["results"] = res
+            self.log("音乐检索 [%s]「%s」命中 %d 首" % (src, q, len(res)), "OK" if res else "WARN")
+            return bool(res), ("找到 %d 首歌曲" % len(res)) if res else "未找到匹配歌曲，请更换关键词或切换音源", {"results": res}
+
+        if act == "music_download":
+            import threading
+            url = str(body.get("url") or "").strip()
+            q = str(body.get("query") or "").strip()
+            title = str(body.get("title") or "").strip()
+            artist = str(body.get("artist") or "").strip()
+            fmt = str(body.get("fmt") or "mp3").strip().lower()
+            save_dir = str(body.get("save_dir") or "").strip()
+            if not url and not q and not title:
+                return False, "请先选择歌曲或输入歌名/音频链接", {}
+            with self.lock:
+                if self.music_job.get("running"):
+                    return False, "当前已有歌曲正在下载，请稍候或先取消", {}
+                if save_dir:
+                    self.cfg.setdefault("paths", {})["music"] = save_dir
+                    save_cfg(self.cfg)
+                self.music_job.update({
+                    "running": True, "pid": None, "fmt": fmt,
+                    "title": title or q, "artist": artist,
+                    "pct": 0.0, "speed": "", "eta": "", "status": "初始化下载…", "file": "",
+                })
+            t = threading.Thread(
+                target=self._run_music_worker,
+                args=(url, q or title, title, artist, fmt, save_dir or self.music_output()),
+                daemon=True,
+            )
+            t.start()
+            return True, "开始下载「%s」(%s)" % (title or q or "音频", fmt.upper()), {}
+
+        if act == "music_cancel":
+            with self.lock:
+                pid = self.music_job.get("pid")
+                self.music_job["running"] = False
+                self.music_job["status"] = "已取消"
+            if pid and pid_alive(pid):
+                kill_tree(pid)
+                self._music_append_log("[WARN] 已取消下载 PID=%s" % pid)
+                return True, "已取消音乐下载", {}
+            return True, "已重置音乐下载状态", {}
+
+        if act == "music_clear_log":
+            with self.lock:
+                self.music_job["logs"] = []
+            return True, "音乐日志已清空", {}
+
+        if act == "voice_install_f5":
+            import threading
+            with self.lock:
+                if self.voice_job.get("installing") or self.voice_job.get("running"):
+                    return False, "声音工坊当前有任务在运行，请等待完成", {}
+                self.voice_job.update({
+                    "installing": True, "running": True, "pid": None,
+                    "pct": 5.0, "status": "正在初始化 F5-TTS (CUDA) 独立环境…",
+                })
+            t = threading.Thread(target=self._run_voice_install_f5_worker, daemon=True)
+            t.start()
+            return True, "已启动 F5-TTS 独立环境一键部署（不污染主环境，详见右侧日志）", {}
+
+        if act == "voice_synthesize":
+            import threading
+            engine = str(body.get("engine") or "edge").strip().lower()
+            text = str(body.get("text") or "").strip()
+            ref_text = str(body.get("ref_text") or "").strip()
+            voice_id = str(body.get("voice_id") or "zh-CN-XiaoxiaoNeural").strip()
+            rate = str(body.get("rate") or "+0%").strip()
+            pitch = str(body.get("pitch") or "+0Hz").strip()
+            api_url = str(body.get("api_url") or self.voice_job.get("api_url") or "").strip()
+            save_dir = str(body.get("save_dir") or "").strip()
+            if not text:
+                return False, "请先输入要合成或克隆朗读的文案", {}
+            with self.lock:
+                if self.voice_job.get("running"):
+                    return False, "当前已有语音合成任务在进行中，请稍候", {}
+                if save_dir:
+                    self.cfg.setdefault("paths", {})["voice"] = save_dir
+                if api_url:
+                    self.cfg.setdefault("voice", {})["api_url"] = api_url
+                save_cfg(self.cfg)
+                self.voice_job.update({
+                    "running": True, "pid": None, "engine": engine,
+                    "ref_text": ref_text, "api_url": api_url,
+                    "pct": 10.0, "status": "正在启动语音引擎…", "out_file": "",
+                })
+            t = threading.Thread(
+                target=self._run_voice_synth_worker,
+                args=(engine, text, ref_text, voice_id, rate, pitch, api_url, save_dir or self.voice_output()),
+                daemon=True,
+            )
+            t.start()
+            return True, "已开始语音合成/克隆", {}
+
+        if act == "voice_cancel":
+            with self.lock:
+                pid = self.voice_job.get("pid")
+                self.voice_job["running"] = False
+                self.voice_job["installing"] = False
+                self.voice_job["status"] = "已取消"
+            if pid and pid_alive(pid):
+                kill_tree(pid)
+                self._voice_append_log("[WARN] 已取消任务 PID=%s" % pid)
+                return True, "已终止声音任务进程树", {}
+            return True, "已重置声音任务状态", {}
+
+        if act == "voice_clear_log":
+            with self.lock:
+                self.voice_job["logs"] = []
+            return True, "声音工坊日志已清空", {}
+
         if act == "start_y":
             bat = Path(self.cfg["yt"]["bat"])
             if not bat.exists():
@@ -1886,10 +2531,20 @@ class ControlBackend:
                 "qbit_cfg": self.cfg["qbit"]["config_dir"],
                 "qbit_dl": self.cfg["qbit"]["save_dir"],
                 "yt_out": self.yt_output(),
+                "music_dl": self.music_output(),
+                "voice_dl": self.voice_output(),
                 "downloads": str(dl_base),
             }
-            target = mapping.get(key, "")
-            if key in ("aria2_dl", "qbit_dl", "yt_out", "downloads") and target:
+            if key == "custom":
+                raw_p = str(body.get("path") or "").strip()
+                p_obj = Path(raw_p) if raw_p else None
+                if p_obj and body.get("reveal"):
+                    target = str(p_obj.parent if p_obj.is_file() else p_obj)
+                else:
+                    target = raw_p
+            else:
+                target = mapping.get(key, "")
+            if key in ("aria2_dl", "qbit_dl", "yt_out", "music_dl", "voice_dl", "downloads") and target:
                 try:
                     Path(target).mkdir(parents=True, exist_ok=True)
                 except Exception:
@@ -1927,6 +2582,10 @@ class ControlBackend:
                 self.cfg["yt"]["bat"] = str(body.get("yt_bat") or "").strip()
                 if "downloads" in body and str(body.get("downloads") or "").strip():
                     self.cfg["paths"]["downloads"] = str(body.get("downloads")).strip()
+                if "music_dir" in body:
+                    self.cfg.setdefault("paths", {})["music"] = str(body.get("music_dir") or "").strip()
+                if "voice_dir" in body:
+                    self.cfg.setdefault("paths", {})["voice"] = str(body.get("voice_dir") or "").strip()
                 if "yt_out" in body:
                     self.cfg["yt"]["output"] = str(body.get("yt_out") or "").strip()
                 save_cfg(self.cfg)
@@ -2024,6 +2683,52 @@ def run_3d_server(open_browser=True):
             if req_path == "/api/state":
                 self._send_json(backend.get_state())
                 return
+            if req_path == "/api/media":
+                from urllib.parse import parse_qs, urlsplit
+                qs = parse_qs(urlsplit(self.path).query)
+                raw_p = (qs.get("path") or [""])[0]
+                target = backend._is_allowed_media(raw_p)
+                if target is None:
+                    self.send_error(403, "Media not accessible")
+                    return
+                size = target.stat().st_size
+                ctype = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
+                rng = self.headers.get("Range")
+                start, end = 0, size - 1
+                code = 200
+                if rng and rng.startswith("bytes="):
+                    try:
+                        part = rng[6:].split(",")[0].strip()
+                        a, b = part.split("-", 1)
+                        start = int(a) if a else 0
+                        end = int(b) if b else (size - 1)
+                        start = max(0, min(start, size - 1))
+                        end = max(start, min(end, size - 1))
+                        code = 206
+                    except Exception:
+                        start, end, code = 0, size - 1, 200
+                length = end - start + 1
+                self.send_response(code)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Accept-Ranges", "bytes")
+                self.send_header("Cache-Control", "no-store")
+                if code == 206:
+                    self.send_header("Content-Range", "bytes %d-%d/%d" % (start, end, size))
+                self.send_header("Content-Length", str(length))
+                self.end_headers()
+                with open(target, "rb") as f:
+                    f.seek(start)
+                    rem = length
+                    while rem > 0:
+                        chunk = f.read(min(131072, rem))
+                        if not chunk:
+                            break
+                        try:
+                            self.wfile.write(chunk)
+                        except BrokenPipeError:
+                            break
+                        rem -= len(chunk)
+                return
             if req_path == "/ariang" or req_path.startswith("/ariang/"):
                 base_dir = backend._ariang_dir()
                 if base_dir is None:
@@ -2071,6 +2776,36 @@ def run_3d_server(open_browser=True):
                 if isinstance(extra, dict):
                     payload.update(extra)
                 self._send_json(payload)
+                return
+            if req_path == "/api/upload_ref":
+                from urllib.parse import parse_qs, urlsplit
+                qs = parse_qs(urlsplit(self.path).query)
+                orig_name = (qs.get("name") or ["mic_sample.webm"])[0]
+                length = int(self.headers.get("Content-Length") or 0)
+                if length <= 0 or length > 26 * 1024 * 1024:
+                    self._send_json({"ok": False, "msg": "音频文件为空或超过 25MB 限制"}, code=400)
+                    return
+                raw = self.rfile.read(length)
+                ext = Path(orig_name).suffix.lower()
+                if ext not in (".wav", ".mp3", ".m4a", ".flac", ".ogg", ".webm", ".aac", ".opus"):
+                    ext = ".webm"
+                raw_path = CACHE / ("ref_raw" + ext)
+                raw_path.write_bytes(raw)
+                dst_wav = CACHE / "ref_voice.wav"
+                if MS is not None:
+                    MS.normalize_ref_audio(raw_path, dst_wav, backend._find_ffmpeg())
+                else:
+                    shutil.copy2(raw_path, dst_wav)
+                with backend.lock:
+                    backend.voice_job["ref_wav"] = str(dst_wav.resolve())
+                    backend.voice_job["ref_name"] = Path(orig_name).name
+                backend._voice_append_log("[OK] 已载入并标准化参考音色：%s → 24kHz 单声道 WAV" % Path(orig_name).name)
+                self._send_json({
+                    "ok": True,
+                    "msg": "参考音频已载入并标准化 ✔",
+                    "ref_name": Path(orig_name).name,
+                    "ref_wav": str(dst_wav.resolve()),
+                })
                 return
             self.send_error(404)
 

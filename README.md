@@ -2,7 +2,7 @@
 
 # DownloadStack Control
 
-**把 aria2 / AriaNg / qBittorrent / Magnet 磁力增强 / yt-dlp 统一收拢进一个曲面 3D 空间控制台的跨平台桌面面板**
+**把 aria2 / AriaNg / qBittorrent / Magnet 磁力增强 / yt-dlp 全平台视频 / 全网歌曲搜下 / 开源 AI 声音克隆 统一收拢进 7 大 3D 空间工坊的跨平台桌面控制台**
 
 Windows / Linux / macOS · 零前端构建 · 离线可用 · 同源直出 AriaNg · 不内置任何下载引擎二进制
 
@@ -109,9 +109,17 @@ DOWNLOADSTACK_WEB_PORT=18550 python panel.py
 
 ## ✨ 核心功能
 
-### 1. 曲面 3D 空间控制台（`panel_ui.html`）
+### 1. 曲面 3D 空间控制台（`panel_ui.html` · 7 大专属工坊）
 - **零外链离线运行**：纯原生 HTML5 / CSS3 3D / Canvas 渲染，无需 Node.js、无需构建、无 CDN 依赖。
-- **曲面环抱驾驶舱**：左翼双通道液态吞吐波形、中枢 3D 极光能量地形台与万能直投舱、右翼实时任务雷达，下方四大带独立 3D 动态画布的实体操控台（Aria2 超光速隧道 / qBittorrent 3D P2P 球网 / Magnet 3D 磁感力场 / YT-DLP 声光频谱）。
+- **实用化中枢驾驶舱**：中枢整合紧凑 3D 极光吞吐条、**双模式命令栏（万能直投 / 搜歌直下 + 原生 `📁 选目录`）** 与 **最近下载成品秒开舱**（支持站内直播音乐/克隆语音、一键打开视频与文件夹）。
+- **七大面板各有专属 3D 动效与输入框**：`✦ 控制台`、`⚡ 任务队列`（3D 轨道吞吐雷达）、`🌐 内置 AriaNg`（光速光纤脉冲）、`🧲 磁力工坊`（3D 磁感力场）、`🎬 YT 视频`（3D 影院扫描矩阵 + 2x 超分）、`🎵 音乐搜下`（3D 全息黑胶唱片 + Hi-Fi 播放器）、`🎙️ 声音克隆`（3D 神经声纹双螺旋 + 麦克风直录）。
+
+### 6. 全网任意歌曲检索下载 & 开源 AI 声音克隆（`media_studio.py`）
+- **多源搜歌无损下**：聚合网易云音乐 + B站高码率 + YouTube Music，支持 `MP3 320K` / `FLAC 无损` / `WAV` / `M4A`，自动内嵌封面与元信息，下完直接在站内 Hi-Fi 播放器试听。
+- **开源顶尖声音克隆**：
+  - **F5-TTS（MIT 开源零样本 3~15 秒真克隆）**：支持在独立 `.venv-voice` 一键部署 PyTorch CUDA + `f5-tts`（绝不污染主环境、不打包权重进仓库），支持浏览器麦克风直录或上传参考音频（自动 `ffmpeg` 标准化为 24kHz WAV）。
+  - **外部开源 API 兼容**：支持直连本机运行的 CosyVoice / GPT-SoVITS / Fish Speech / Chatterbox API。
+  - **即用神经配音**：内置 12 款高拟真中文/方言/英/日神经声线（`edge-tts`），免显卡 1 秒出片。
 
 ### 2. 万能极速直投舱 & 实时任务队列
 - **粘贴即下**：在中枢输入框粘贴 HTTP/HTTPS 直链、`magnet:?`、纯 40 位 Hex / 32 位 Base32 InfoHash、或视频平台链接，自动识别并分流投递。
@@ -165,8 +173,9 @@ install.bat / .sh  三平台组件安装器（目录初始化 + 官方包 SHA256
 ```text
 downloadstack-control/
 ├─ panel.py              面板主程序（3D 控制台后端服务 + 探测 + 动作 + 平台差异层）
-├─ panel_ui.html         曲面 3D 空间控制台前端（零外链离线运行 + 内置 AriaNg / 磁力工坊 / 任务队列）
+├─ panel_ui.html         7 大专属 3D 空间工坊前端（零外链离线运行 + 内置 AriaNg / 磁力 / 视频 / 音乐 / 声音克隆）
 ├─ magnet_tools.py       磁力解析 / Tracker 热更新 / DHT 修复 / 种子预取校验模块
+├─ media_studio.py       全网歌曲检索下载（网易云/B站/YouTube）+ 开源声音克隆（F5-TTS / 外部 API / Edge-TTS）
 ├─ ytdl_gui.py           独立视频下载器 GUI
 ├─ setup_wizard.py       图形/文本引导（--auto / --text / --scan）
 ├─ 一键配置.bat / .sh     一键配置（依赖 + 组件 + 环境变量）

@@ -19,7 +19,7 @@ jobs:
         run: python scripts/scan_secrets.py .
 
       - name: Syntax check (py_compile)
-        run: python -m py_compile panel.py magnet_tools.py ytdl_gui.py setup_wizard.py scripts/scan_secrets.py
+        run: python -m py_compile panel.py magnet_tools.py media_studio.py ytdl_gui.py setup_wizard.py scripts/scan_secrets.py
 
       - name: Lint with ruff (fatal errors / undefined names)
         run: |

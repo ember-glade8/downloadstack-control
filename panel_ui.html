@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DownloadStack // Spatial 3D Command Console</title>
+  <title>DownloadStack // Spatial 3D Command OS</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
@@ -12,365 +12,431 @@
       font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", "Microsoft YaHei UI", sans-serif;
       user-select: none; -webkit-font-smoothing: antialiased;
     }
-    button, input, textarea { font-family: inherit; }
+    button, input, textarea, select { font-family: inherit; }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
     .hidden { display: none !important; }
 
     /* Fullscreen 3D Perspective Environment */
     #bgCanvas { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 0; pointer-events: none; }
 
-    /* Silky Fluid Mouse Aura & Soft Magnetic Ring */
+    /* Fluid Cursor Aura & Magnetic Ring */
     #cursorGlow {
-      position: fixed; width: 380px; height: 380px; border-radius: 999px; pointer-events: none; z-index: 1;
+      position: fixed; width: 420px; height: 420px; border-radius: 999px; pointer-events: none; z-index: 1;
       transform: translate(-50%, -50%);
-      background: radial-gradient(circle, var(--cur-glow, rgba(0,229,184,0.15)) 0%, transparent 66%);
+      background: radial-gradient(circle, var(--cur-glow, rgba(0,229,184,0.16)) 0%, transparent 65%);
       transition: background 0.35s ease; will-change: left, top;
     }
     #cursorRing {
-      position: fixed; width: 24px; height: 24px; border-radius: 999px; pointer-events: none; z-index: 99;
+      position: fixed; width: 22px; height: 22px; border-radius: 999px; pointer-events: none; z-index: 99;
       transform: translate(-50%, -50%);
-      border: 1.5px solid var(--cur-ring, rgba(0,245,184,0.58));
-      box-shadow: 0 0 16px var(--cur-glow, rgba(0,245,184,0.38));
-      transition: width 0.24s cubic-bezier(0.22,1,0.36,1), height 0.24s cubic-bezier(0.22,1,0.36,1), border-color 0.25s ease;
+      border: 1.5px solid var(--cur-ring, rgba(0,245,184,0.62));
+      box-shadow: 0 0 18px var(--cur-glow, rgba(0,245,184,0.42));
+      transition: width 0.22s cubic-bezier(0.22,1,0.36,1), height 0.22s cubic-bezier(0.22,1,0.36,1), border-color 0.25s ease;
       will-change: left, top;
     }
-    #cursorRing.hover { width: 40px; height: 40px; background: rgba(255,255,255,0.035); }
-    #cursorRing.down { width: 16px; height: 16px; }
+    #cursorRing.hover { width: 38px; height: 38px; background: rgba(255,255,255,0.04); }
+    #cursorRing.down { width: 14px; height: 14px; }
 
-    /* Extruded 3D Glass Console Surface */
+    /* Obsidian-Titanium Extruded 3D Glass Console Surface */
     .console-glass {
-      background: linear-gradient(155deg, rgba(14, 23, 44, 0.72), rgba(5, 9, 22, 0.86));
-      backdrop-filter: blur(24px) saturate(175%);
-      -webkit-backdrop-filter: blur(24px) saturate(175%);
-      border: 1px solid rgba(165, 220, 255, 0.15);
+      background: linear-gradient(155deg, rgba(13, 22, 42, 0.78), rgba(4, 8, 19, 0.91));
+      backdrop-filter: blur(26px) saturate(185%);
+      -webkit-backdrop-filter: blur(26px) saturate(185%);
+      border: 1px solid rgba(175, 225, 255, 0.16);
       box-shadow:
-        0 26px 56px -18px rgba(0, 0, 0, 0.88),
-        0 6px 0 -1px rgba(10, 18, 36, 0.85),
-        0 7px 0 0 rgba(0, 212, 255, 0.14),
-        inset 0 1px 0 rgba(255, 255, 255, 0.18),
+        0 26px 56px -18px rgba(0, 0, 0, 0.9),
+        0 5px 0 -1px rgba(8, 15, 32, 0.88),
+        0 6px 0 0 rgba(0, 212, 255, 0.14),
+        inset 0 1px 0 rgba(255, 255, 255, 0.22),
         inset 0 -1px 0 rgba(0, 212, 255, 0.08);
     }
 
-    /* Main 3D Perspective Viewport */
+    /* Main Viewport Shell */
     .shell {
       position: relative; z-index: 10; height: 100vh; width: 100vw;
-      display: flex; flex-direction: column; gap: 11px;
-      padding: 12px 18px 14px; max-width: 1680px; margin: 0 auto;
+      display: flex; flex-direction: column; gap: 10px;
+      padding: 10px 16px 12px; max-width: 1720px; margin: 0 auto;
       perspective: 1800px;
     }
 
-    /* ==================== TOP FLOATING COMMAND HEADER ==================== */
+    /* ==================== TOP COMMAND HEADER ==================== */
     .topbar {
-      border-radius: 999px; padding: 7px 14px; flex-shrink: 0;
-      display: flex; align-items: center; justify-content: space-between; gap: 12px;
-      box-shadow: 0 18px 44px -14px rgba(0,0,0,0.85), inset 0 1px 0 rgba(255,255,255,0.18);
+      border-radius: 999px; padding: 6px 12px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      box-shadow: 0 18px 44px -14px rgba(0,0,0,0.88), inset 0 1px 0 rgba(255,255,255,0.22);
     }
-    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand { display: flex; align-items: center; gap: 9px; flex-shrink: 0; }
     .brand-gem {
-      width: 34px; height: 34px; border-radius: 999px;
-      background: conic-gradient(from 0deg, rgba(0,245,184,0.42), rgba(0,212,255,0.42), rgba(168,85,247,0.48), rgba(0,245,184,0.42));
-      border: 1px solid rgba(180,255,235,0.6);
-      box-shadow: 0 0 22px rgba(0,245,184,0.45);
+      width: 32px; height: 32px; border-radius: 999px;
+      background: conic-gradient(from 0deg, rgba(0,245,184,0.48), rgba(0,212,255,0.48), rgba(236,72,153,0.52), rgba(168,85,247,0.48), rgba(0,245,184,0.48));
+      border: 1px solid rgba(200,255,242,0.65);
+      box-shadow: 0 0 22px rgba(0,245,184,0.48);
       display: flex; align-items: center; justify-content: center; color: #fff;
     }
-    .brand-t { font-size: 13px; font-weight: 800; letter-spacing: 0.09em; }
-    .brand-t span { color: #67e8f9; font-weight: 400; }
-    .brand-s { font-size: 10px; color: #94a3b8; }
+    .brand-t { font-size: 12.5px; font-weight: 800; letter-spacing: 0.08em; }
+    .brand-t span { background: linear-gradient(90deg,#67e8f9,#c084fc); -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: 700; }
+    .brand-s { font-size: 9.5px; color: #8ea7c7; }
 
-    /* Sliding Nav Pills */
+    /* Sliding 7-Tab Nav Pills */
     .nav-track {
-      position: relative; display: flex; align-items: center; gap: 2px;
+      position: relative; display: flex; align-items: center; gap: 1px;
       padding: 3px; border-radius: 999px;
-      background: rgba(2, 6, 16, 0.68); border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(2, 6, 16, 0.74); border: 1px solid rgba(255,255,255,0.11);
+      overflow-x: auto; scrollbar-width: none;
     }
+    .nav-track::-webkit-scrollbar { display: none; }
     #navPill {
       position: absolute; top: 3px; bottom: 3px; border-radius: 999px; z-index: 0;
-      background: linear-gradient(90deg, rgba(0,245,184,0.30), rgba(0,212,255,0.30));
-      border: 1px solid rgba(0,245,184,0.52);
-      box-shadow: 0 0 20px -4px rgba(0,212,255,0.6);
-      transition: left 0.36s cubic-bezier(0.34,1.56,0.64,1), width 0.36s cubic-bezier(0.34,1.56,0.64,1);
+      background: linear-gradient(90deg, rgba(0,245,184,0.30), rgba(0,212,255,0.32), rgba(168,85,247,0.28));
+      border: 1px solid rgba(103,232,249,0.56);
+      box-shadow: 0 0 22px -4px rgba(0,212,255,0.65);
+      transition: left 0.34s cubic-bezier(0.34,1.56,0.64,1), width 0.34s cubic-bezier(0.34,1.56,0.64,1);
     }
     .nav-btn {
-      position: relative; z-index: 1; padding: 6px 14px; border-radius: 999px; border: none;
-      background: transparent; color: #8da5c4; font-size: 12px; font-weight: 600;
-      cursor: pointer; transition: color 0.22s; white-space: nowrap; display: flex; align-items: center; gap: 6px;
+      position: relative; z-index: 1; padding: 5.5px 10.5px; border-radius: 999px; border: none;
+      background: transparent; color: #8da5c4; font-size: 11.5px; font-weight: 700;
+      cursor: pointer; transition: color 0.2s; white-space: nowrap; display: flex; align-items: center; gap: 5px;
     }
     .nav-btn.active, .nav-btn:hover { color: #fff; }
     .badge-cnt {
-      padding: 1px 6px; border-radius: 999px; font-size: 10px;
-      background: rgba(0,245,184,0.22); color: #a7f3d0; border: 1px solid rgba(0,245,184,0.38);
+      padding: 0 5px; border-radius: 999px; font-size: 9.5px; line-height: 15px;
+      background: rgba(0,245,184,0.22); color: #a7f3d0; border: 1px solid rgba(0,245,184,0.42);
     }
 
-    .top-right { display: flex; align-items: center; gap: 7px; }
+    .top-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
     .top-speed {
-      display: flex; align-items: center; gap: 10px; padding: 5px 14px; border-radius: 999px;
-      background: rgba(2,6,16,0.65); border: 1px solid rgba(255,255,255,0.10); font-size: 12px;
+      display: flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 999px;
+      background: rgba(2,6,16,0.72); border: 1px solid rgba(255,255,255,0.11); font-size: 11.5px;
     }
     .spd-dn { font-weight: 800; background: linear-gradient(90deg, #6ee7b7, #67e8f9, #fff); -webkit-background-clip: text; background-clip: text; color: transparent; }
 
-    /* ==================== 3D CURVED SPATIAL COCKPIT (HIT-TEST SAFE) ==================== */
-    .view { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
-
-    #cockpitRig {
-      flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 14px;
-      will-change: transform;
+    /* ==================== SHARED HERO STAGE (EVERY TAB HAS ITS OWN 3D CANVAS) ==================== */
+    .view { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+    .sub-card { flex: 1; min-height: 0; border-radius: 22px; padding: 14px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+    .hero-stage {
+      position: relative; height: 96px; flex-shrink: 0; border-radius: 16px; overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.13);
+      background: radial-gradient(ellipse 90% 100% at 75% 50%, var(--hero-glow, rgba(0,212,255,0.18)), rgba(3,7,18,0.94) 70%);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.14), inset 0 0 38px rgba(0,0,0,0.55);
     }
+    .hero-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
+    .hero-overlay {
+      position: relative; z-index: 2; height: 100%; padding: 12px 16px;
+      display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    }
+    .hero-title { font-size: 16px; font-weight: 900; letter-spacing: 0.02em; color: #fff; text-shadow: 0 2px 16px rgba(0,0,0,0.7); display: flex; align-items: center; gap: 9px; }
+    .hero-sub { font-size: 11px; color: #9eb7d4; margin-top: 3px; }
+    .hero-metrics { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .metric-pill {
+      padding: 5px 11px; border-radius: 11px; background: rgba(2,6,16,0.74);
+      border: 1px solid rgba(255,255,255,0.13); backdrop-filter: blur(8px);
+      display: flex; flex-direction: column; align-items: flex-end; min-width: 78px;
+    }
+    .metric-pill small { font-size: 9px; color: #7e96b4; letter-spacing: 0.06em; }
+    .metric-pill b { font-size: 12.5px; font-weight: 800; }
 
-    /* UPPER CURVED 3-WING CONSOLE BAND */
+    /* Bespoke Glowing Command Input Bar (Used Across All 7 Panels) */
+    .cmd-bar {
+      position: relative; border-radius: 14px; padding: 1.5px; flex-shrink: 0;
+      background: linear-gradient(90deg, var(--b1,#00f5b8), var(--b2,#00d4ff), var(--b3,#a855f7), var(--b1,#00f5b8));
+      background-size: 220% 100%; animation: flowGrad 6s linear infinite;
+      box-shadow: 0 10px 26px -12px var(--bglow, rgba(0,212,255,0.45));
+    }
+    @keyframes flowGrad { 0%{background-position:0% 50%} 100%{background-position:220% 50%} }
+    .cmd-inner {
+      border-radius: 12.5px; background: rgba(4, 8, 20, 0.95);
+      padding: 5px 7px; display: flex; align-items: center; gap: 7px; flex-wrap: nowrap;
+    }
+    .cmd-inp { flex: 1; min-width: 0; background: transparent; border: none; outline: none; color: #fff; font-size: 12px; padding: 3px 4px; }
+    .cmd-inp::placeholder { color: #64748b; }
+
+    /* ==================== VIEW 1: CURVED 3D CONSOLE (DENSE & PRACTICAL) ==================== */
+    #cockpitRig { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+
     .upper-wings {
-      flex: 1.08; min-height: 0; display: grid;
-      grid-template-columns: 1.02fr 1.46fr 1.02fr; gap: 16px;
+      flex: 1.12; min-height: 0; display: grid;
+      grid-template-columns: 0.96fr 1.62fr 0.98fr; gap: 14px;
       position: relative; z-index: 10;
     }
     .wing-left {
-      transform: perspective(1400px) rotateY(7.5deg);
-      transform-origin: right center;
-      transition: transform 0.32s cubic-bezier(0.22,1,0.36,1), border-color 0.25s;
+      transform: perspective(1400px) rotateY(6.5deg); transform-origin: right center;
+      transition: transform 0.3s cubic-bezier(0.22,1,0.36,1), border-color 0.25s;
     }
-    .wing-left:hover { transform: perspective(1400px) rotateY(2.5deg) translateY(-2px); border-color: rgba(0,245,184,0.42); }
-
-    .wing-center {
-      transition: transform 0.32s cubic-bezier(0.22,1,0.36,1), border-color 0.25s;
-    }
-    .wing-center:hover { border-color: rgba(0,212,255,0.45); }
-
+    .wing-left:hover { transform: perspective(1400px) rotateY(2deg) translateY(-2px); border-color: rgba(0,245,184,0.44); }
+    .wing-center { transition: border-color 0.25s; }
+    .wing-center:hover { border-color: rgba(0,212,255,0.46); }
     .wing-right {
-      transform: perspective(1400px) rotateY(-7.5deg);
-      transform-origin: left center;
-      transition: transform 0.32s cubic-bezier(0.22,1,0.36,1), border-color 0.25s;
+      transform: perspective(1400px) rotateY(-6.5deg); transform-origin: left center;
+      transition: transform 0.3s cubic-bezier(0.22,1,0.36,1), border-color 0.25s;
     }
-    .wing-right:hover { transform: perspective(1400px) rotateY(-2.5deg) translateY(-2px); border-color: rgba(192,132,252,0.45); }
+    .wing-right:hover { transform: perspective(1400px) rotateY(-2deg) translateY(-2px); border-color: rgba(192,132,252,0.46); }
 
-    /* Panel Interiors */
     .panel-box {
-      border-radius: 22px; padding: 14px; display: flex; flex-direction: column; gap: 10px;
+      border-radius: 21px; padding: 12px; display: flex; flex-direction: column; gap: 9px;
       min-height: 0; position: relative; overflow: hidden;
     }
     .box-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; position: relative; z-index: 2; }
-    .box-title { font-size: 12px; font-weight: 700; letter-spacing: 0.04em; color: #e2f1ff; display: flex; align-items: center; gap: 7px; }
-    .box-sub { font-size: 10.5px; color: #7e96b4; }
+    .box-title { font-size: 12px; font-weight: 800; letter-spacing: 0.04em; color: #e8f4ff; display: flex; align-items: center; gap: 7px; }
+    .box-sub { font-size: 10px; color: #7e96b4; }
 
     .wave-wrap {
-      flex: 1; min-height: 92px; border-radius: 14px; position: relative; overflow: hidden;
-      background: rgba(2, 6, 15, 0.74); border: 1px solid rgba(255,255,255,0.08);
+      flex: 1; min-height: 82px; border-radius: 13px; position: relative; overflow: hidden;
+      background: rgba(2, 6, 15, 0.78); border: 1px solid rgba(255,255,255,0.08);
     }
     #c-wave { width: 100%; height: 100%; display: block; }
-    .kpi-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 7px; }
     .kpi-tile {
-      border-radius: 12px; padding: 8px 10px;
-      background: rgba(3, 8, 20, 0.76); border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 11px; padding: 7px 9px;
+      background: rgba(3, 8, 20, 0.8); border: 1px solid rgba(255,255,255,0.08);
     }
-    .kpi-lbl { font-size: 10px; color: #7e96b4; }
-    .kpi-val { font-size: 13px; font-weight: 700; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .kpi-lbl { font-size: 9.5px; color: #7e96b4; }
+    .kpi-val { font-size: 12.5px; font-weight: 800; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-    /* CENTER CONSOLE: 3D AURORA TERRAIN WAVE DECK (NO BORING CUBE!) */
+    /* CENTER PRACTICAL COMMAND HUB */
     .center-deck {
-      border-radius: 24px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between;
-      gap: 10px; min-height: 0; position: relative; overflow: hidden;
+      border-radius: 22px; padding: 12px; display: flex; flex-direction: column;
+      gap: 9px; min-height: 0; position: relative; overflow: hidden;
     }
-    .terrain-stage {
-      flex: 1; min-height: 150px; border-radius: 16px; position: relative; overflow: hidden;
-      background: radial-gradient(ellipse 90% 80% at 50% 85%, rgba(0,212,255,0.16), rgba(3,7,18,0.92) 70%);
-      border: 1px solid rgba(0, 212, 255, 0.20);
-      box-shadow: inset 0 0 40px rgba(0, 212, 255, 0.08);
+    .terrain-strip {
+      height: 98px; flex-shrink: 0; border-radius: 15px; position: relative; overflow: hidden;
+      background: radial-gradient(ellipse 90% 90% at 50% 90%, rgba(0,212,255,0.18), rgba(3,7,18,0.95) 72%);
+      border: 1px solid rgba(0, 212, 255, 0.24);
+      box-shadow: inset 0 0 34px rgba(0, 212, 255, 0.1);
     }
     #c-terrain { width: 100%; height: 100%; display: block; }
-
-    /* Floating Center Telemetry Overlay inside 3D Terrain Deck */
     .deck-overlay {
-      position: absolute; inset: 0; padding: 12px 14px; pointer-events: none;
+      position: absolute; inset: 0; padding: 10px 14px;
       display: flex; flex-direction: column; justify-content: space-between;
+      pointer-events: none;
     }
     .deck-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
     .deck-big-speed {
-      font-size: 32px; font-weight: 900; line-height: 1; letter-spacing: -0.02em;
+      font-size: 29px; font-weight: 900; line-height: 1; letter-spacing: -0.02em;
       background: linear-gradient(180deg, #ffffff 15%, #7dd3fc 65%, #00f5b8 100%);
       -webkit-background-clip: text; background-clip: text; color: transparent;
       filter: drop-shadow(0 0 18px rgba(0, 212, 255, 0.45));
     }
-    .deck-pills { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+    .deck-pills { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; justify-content: flex-end; pointer-events: auto; }
     .status-chip {
-      display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
-      background: rgba(2, 6, 16, 0.72); border: 1px solid rgba(255,255,255,0.12);
-      font-size: 10.5px; font-weight: 700; backdrop-filter: blur(8px);
+      display: inline-flex; align-items: center; gap: 5px; padding: 3.5px 8.5px; border-radius: 999px;
+      background: rgba(2, 6, 16, 0.78); border: 1px solid rgba(255,255,255,0.13);
+      font-size: 10px; font-weight: 700; cursor: pointer; transition: border-color 0.2s, transform 0.15s;
     }
+    .status-chip:hover { border-color: #67e8f9; transform: translateY(-1px); }
 
-    /* Quantum Omni-Drop Bar */
-    .omni-bar {
-      position: relative; border-radius: 15px; padding: 1.5px;
-      background: linear-gradient(90deg, #00f5b8, #00d4ff, #a855f7, #00f5b8);
-      background-size: 220% 100%; animation: flowGrad 6s linear infinite;
-      box-shadow: 0 10px 28px -10px rgba(0,212,255,0.45);
+    .mode-switch { display: flex; gap: 3px; background: rgba(255,255,255,0.06); padding: 2px; border-radius: 9px; flex-shrink: 0; }
+    .mode-btn {
+      border: none; background: transparent; color: #94a3b8; font-size: 10.5px; font-weight: 700;
+      padding: 4px 8px; border-radius: 7px; cursor: pointer; transition: all 0.2s; white-space: nowrap;
     }
-    @keyframes flowGrad { 0%{background-position:0% 50%} 100%{background-position:220% 50%} }
-    .omni-inner {
-      border-radius: 13.5px; background: rgba(4, 8, 20, 0.94);
-      padding: 6px 8px; display: flex; align-items: center; gap: 7px;
-    }
-    .omni-tag {
-      font-size: 10px; font-weight: 700; padding: 4px 9px; border-radius: 8px; white-space: nowrap;
-      background: rgba(0,245,184,0.16); color: #a7f3d0; border: 1px solid rgba(0,245,184,0.38);
-    }
-    .omni-inp { flex: 1; min-width: 0; background: transparent; border: none; outline: none; color: #fff; font-size: 12px; }
-    .omni-inp::placeholder { color: #64748b; }
+    .mode-btn.active { background: linear-gradient(135deg, rgba(0,245,184,0.28), rgba(0,212,255,0.24)); color: #fff; box-shadow: 0 0 10px rgba(0,212,255,0.28); }
+    .mode-btn.active-rose { background: linear-gradient(135deg, rgba(244,63,94,0.34), rgba(168,85,247,0.28)); color: #fff; box-shadow: 0 0 10px rgba(244,63,94,0.3); }
 
-    /* Right Wing: Live Task Radar */
-    .radar-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 7px; padding-right: 2px; }
+    .quick-strip { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 6px; flex-shrink: 0; }
+    .q-chip {
+      border-radius: 10px; padding: 6px 8px; border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(8, 14, 30, 0.76); color: #dbeafe; font-size: 11px; font-weight: 700;
+      cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;
+      transition: all 0.2s; white-space: nowrap;
+    }
+    .q-chip:hover { transform: translateY(-1.5px); border-color: var(--qc, #00d4ff); box-shadow: 0 0 16px -4px var(--qc, rgba(0,212,255,0.5)); color: #fff; }
+
+    /* Recent Completed Files Dock inside Center Hub */
+    .recent-dock {
+      flex: 1; min-height: 0; border-radius: 14px; padding: 9px 10px;
+      background: rgba(3, 7, 18, 0.76); border: 1px solid rgba(255,255,255,0.09);
+      display: flex; flex-direction: column; gap: 7px; overflow: hidden;
+    }
+    .recent-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; padding-right: 2px; }
+    .recent-row {
+      display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: 10px;
+      background: rgba(11, 19, 38, 0.72); border: 1px solid rgba(255,255,255,0.07);
+      transition: border-color 0.18s, transform 0.18s;
+    }
+    .recent-row:hover { border-color: rgba(0,212,255,0.42); transform: translateX(2px); }
+    .tag-pill { font-size: 9.5px; font-weight: 800; padding: 2px 6px; border-radius: 6px; flex-shrink: 0; }
+    .recent-name { flex: 1; min-width: 0; font-size: 11.5px; font-weight: 600; color: #eef6ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .recent-meta { font-size: 10px; color: #7e96b4; flex-shrink: 0; }
+
+    /* Right Wing: Live Task Radar + AI Media Studio Quick Status */
+    .radar-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 2px; }
     .task-mini {
-      border-radius: 12px; padding: 8px 10px;
-      background: rgba(3, 8, 20, 0.76); border: 1px solid rgba(255,255,255,0.08);
-      display: flex; flex-direction: column; gap: 5px; transition: border-color 0.2s, transform 0.2s;
+      border-radius: 11px; padding: 7px 9px;
+      background: rgba(3, 8, 20, 0.78); border: 1px solid rgba(255,255,255,0.08);
+      display: flex; flex-direction: column; gap: 4px; transition: border-color 0.2s, transform 0.2s;
     }
-    .task-mini:hover { border-color: rgba(0,212,255,0.42); transform: translateX(3px); }
+    .task-mini:hover { border-color: rgba(0,212,255,0.42); transform: translateX(2px); }
     .task-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .task-name { font-size: 11.5px; font-weight: 600; color: #e6f2ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .prog-track { height: 4px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden; }
-    .prog-fill { height: 100%; border-radius: 999px; transition: width 0.4s ease; }
+    .prog-fill { height: 100%; border-radius: 999px; transition: width 0.35s ease; }
 
-    /* ==================== LOWER 4 EXTRUDED 3D HARDWARE CONSOLE MODULES ==================== */
+    .studio-mini-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; flex-shrink: 0; }
+    .studio-mini {
+      border-radius: 12px; padding: 8px 9px; cursor: pointer;
+      background: linear-gradient(145deg, rgba(16, 22, 46, 0.85), rgba(6, 9, 22, 0.94));
+      border: 1px solid var(--sb, rgba(255,255,255,0.12));
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .studio-mini:hover { transform: translateY(-2px); box-shadow: 0 8px 20px -8px var(--sg, rgba(0,212,255,0.5)); }
+
+    /* ==================== LOWER 4 EXTRUDED 3D HARDWARE CONSOLE MODULES (HIT-TEST SAFE) ==================== */
     .modules-deck {
-      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; flex-shrink: 0;
+      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; flex-shrink: 0;
       position: relative; z-index: 25;
     }
     .mod-wrap { position: relative; }
     .mod-card {
-      position: relative; border-radius: 22px; padding: 1.5px; height: 204px;
+      position: relative; border-radius: 20px; padding: 1.5px; height: 174px;
       background: linear-gradient(145deg, rgba(255,255,255,0.22), rgba(255,255,255,0.04) 48%, var(--c1));
       will-change: transform;
-      /* Real 3D extruded console thickness + underglow */
       box-shadow:
-        0 9px 0 -1px rgba(8, 13, 28, 0.94),
-        0 10px 0 0 var(--edge),
-        0 26px 52px -14px rgba(0,0,0,0.92),
-        0 20px 34px -16px var(--glow);
+        0 8px 0 -1px rgba(8, 13, 28, 0.94),
+        0 9px 0 0 var(--edge),
+        0 24px 48px -14px rgba(0,0,0,0.92),
+        0 18px 30px -16px var(--glow);
       transition: box-shadow 0.3s ease;
     }
     .mod-card::before {
       content: ""; position: absolute; inset: -1px; border-radius: inherit; z-index: 0; pointer-events: none;
       background: conic-gradient(from var(--ang, 0deg), transparent 0deg, transparent 200deg, var(--c1) 290deg, var(--c2) 335deg, transparent 360deg);
-      opacity: 0.35; transition: opacity 0.3s; animation: spin 3.8s linear infinite;
+      opacity: 0.36; transition: opacity 0.3s; animation: spin 3.8s linear infinite;
     }
     .mod-card:hover::before { opacity: 1; }
     .mod-card:hover {
       box-shadow:
-        0 12px 0 -1px rgba(10, 17, 36, 0.96),
-        0 13px 0 0 var(--c1),
-        0 38px 72px -14px rgba(0,0,0,0.96),
-        0 0 46px -8px var(--glow);
+        0 11px 0 -1px rgba(10, 17, 36, 0.96),
+        0 12px 0 0 var(--c1),
+        0 34px 64px -14px rgba(0,0,0,0.96),
+        0 0 42px -8px var(--glow);
     }
     @keyframes spin { to { --ang: 360deg; } }
     @property --ang { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
 
     .mod-surface {
-      position: relative; z-index: 1; height: 100%; border-radius: 20.5px;
-      background: linear-gradient(160deg, rgba(10, 17, 36, 0.86), rgba(4, 7, 16, 0.95));
-      overflow: hidden;
-      padding: 14px; display: flex; flex-direction: column; justify-content: space-between;
+      position: relative; z-index: 1; height: 100%; border-radius: 18.5px;
+      background: linear-gradient(160deg, rgba(10, 17, 36, 0.87), rgba(4, 7, 16, 0.96));
+      overflow: hidden; padding: 12px; display: flex; flex-direction: column; justify-content: space-between;
     }
     .mod-canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
     .mod-glare {
       position: absolute; inset: 0; z-index: 1; pointer-events: none; opacity: 0; transition: opacity 0.25s;
-      background: radial-gradient(250px circle at var(--gx,50%) var(--gy,50%), var(--glare), transparent 60%);
+      background: radial-gradient(240px circle at var(--gx,50%) var(--gy,50%), var(--glare), transparent 60%);
     }
     .mod-card:hover .mod-glare { opacity: 1; }
     .mod-z { position: relative; z-index: 5; }
-
     .mod-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-    .mod-id { display: flex; align-items: center; gap: 9px; min-width: 0; }
-    .mod-name { font-size: 14px; font-weight: 800; color: #fff; letter-spacing: 0.02em; text-shadow: 0 2px 12px rgba(0,0,0,0.6); }
-    .mod-desc { font-size: 10.5px; color: #94a3b8; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .mod-id { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .mod-name { font-size: 13.5px; font-weight: 800; color: #fff; letter-spacing: 0.02em; }
+    .mod-desc { font-size: 10px; color: #94a3b8; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .mod-stat { text-align: right; flex-shrink: 0; }
-    .mod-val { font-size: 14.5px; font-weight: 800; }
-    .mod-st { font-size: 9.5px; letter-spacing: 0.06em; margin-top: 1px; }
-    .mod-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .mod-val { font-size: 14px; font-weight: 800; }
+    .mod-st { font-size: 9px; letter-spacing: 0.06em; margin-top: 1px; }
+    .mod-actions { display: flex; flex-wrap: wrap; gap: 5px; }
 
     /* LED Sonar */
-    .led { position: relative; width: 10px; height: 10px; border-radius: 999px; flex-shrink: 0; }
+    .led { position: relative; width: 9px; height: 9px; border-radius: 999px; flex-shrink: 0; }
     .led-on::after { content: ""; position: absolute; inset: 0; border-radius: 999px; background: currentColor; animation: sonar 1.8s ease-out infinite; }
     @keyframes sonar { 0% { transform: scale(1); opacity: 0.85; } 100% { transform: scale(2.8); opacity: 0; } }
 
-    /* Extruded 3D Tactile Console Buttons */
+    /* Extruded 3D Tactile Buttons */
     .btn {
       position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
-      padding: 6px 11px; border-radius: 10px; font-size: 11.5px; font-weight: 600;
-      border: 1px solid rgba(255,255,255,0.14); background: rgba(15,24,45,0.78); color: #e8f3ff;
+      padding: 5.5px 10px; border-radius: 10px; font-size: 11px; font-weight: 700;
+      border: 1px solid rgba(255,255,255,0.14); background: rgba(15,24,45,0.82); color: #e8f3ff;
       cursor: pointer; white-space: nowrap;
-      box-shadow: 0 3px 0 rgba(2,5,14,0.85), inset 0 1px 0 rgba(255,255,255,0.16);
-      transition: transform 0.18s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.2s, border-color 0.2s;
+      box-shadow: 0 3px 0 rgba(2,5,14,0.85), inset 0 1px 0 rgba(255,255,255,0.18);
+      transition: transform 0.16s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.2s, border-color 0.2s;
     }
-    .btn:hover {
-      transform: translateY(-2.5px) scale(1.03);
+    .btn:hover:not(:disabled) {
+      transform: translateY(-2px) scale(1.02);
       border-color: var(--br, #00d4ff);
-      box-shadow: 0 5px 0 rgba(2,5,14,0.9), 0 0 18px -3px var(--bg, rgba(0,212,255,0.6)), inset 0 1px 0 rgba(255,255,255,0.28);
+      box-shadow: 0 5px 0 rgba(2,5,14,0.9), 0 0 18px -3px var(--bg, rgba(0,212,255,0.6)), inset 0 1px 0 rgba(255,255,255,0.3);
       color: #fff;
     }
-    .btn:active { transform: translateY(1.5px) scale(0.96); box-shadow: 0 1px 0 rgba(2,5,14,0.9); }
-    .btn-pill { border-radius: 999px; padding: 6px 12px; }
-    .btn-mint { --br:#00f5b8; --bg:rgba(0,245,184,0.58); background: linear-gradient(135deg, rgba(0,245,184,0.28), rgba(0,212,255,0.14)); border-color: rgba(0,245,184,0.5); color: #b8ffec; }
-    .btn-cyan { --br:#00d4ff; --bg:rgba(0,212,255,0.58); background: linear-gradient(135deg, rgba(0,212,255,0.25), rgba(99,102,241,0.14)); border-color: rgba(0,212,255,0.48); color: #c4f4ff; }
-    .btn-violet { --br:#c084fc; --bg:rgba(168,85,247,0.6); background: linear-gradient(135deg, rgba(168,85,247,0.30), rgba(236,72,153,0.16)); border-color: rgba(192,132,252,0.52); color: #f3d5ff; }
-    .btn-amber { --br:#ffb347; --bg:rgba(255,179,71,0.58); background: linear-gradient(135deg, rgba(255,179,71,0.28), rgba(255,90,95,0.14)); border-color: rgba(255,179,71,0.5); color: #ffe4b5; }
-    .btn-rose { --br:#ff3d71; --bg:rgba(255,61,113,0.62); background: linear-gradient(135deg, rgba(255,61,113,0.30), rgba(168,85,247,0.14)); border-color: rgba(255,61,113,0.52); color: #ffc8d6; }
+    .btn:active:not(:disabled) { transform: translateY(1px) scale(0.97); box-shadow: 0 1px 0 rgba(2,5,14,0.9); }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+    .btn-pill { border-radius: 999px; padding: 5.5px 11px; }
+    .btn-mint { --br:#00f5b8; --bg:rgba(0,245,184,0.58); background: linear-gradient(135deg, rgba(0,245,184,0.28), rgba(0,212,255,0.14)); border-color: rgba(0,245,184,0.52); color: #b8ffec; }
+    .btn-cyan { --br:#00d4ff; --bg:rgba(0,212,255,0.58); background: linear-gradient(135deg, rgba(0,212,255,0.26), rgba(99,102,241,0.14)); border-color: rgba(0,212,255,0.5); color: #c4f4ff; }
+    .btn-violet { --br:#c084fc; --bg:rgba(168,85,247,0.6); background: linear-gradient(135deg, rgba(168,85,247,0.32), rgba(236,72,153,0.16)); border-color: rgba(192,132,252,0.54); color: #f3d5ff; }
+    .btn-amber { --br:#ffb347; --bg:rgba(255,179,71,0.58); background: linear-gradient(135deg, rgba(255,179,71,0.28), rgba(255,90,95,0.15)); border-color: rgba(255,179,71,0.52); color: #ffe4b5; }
+    .btn-rose { --br:#ff3d71; --bg:rgba(255,61,113,0.62); background: linear-gradient(135deg, rgba(255,61,113,0.32), rgba(168,85,247,0.16)); border-color: rgba(255,61,113,0.55); color: #ffc8d6; }
     .flex-1 { flex: 1; }
 
     /* Mechanical Glow Switch */
-    .sw { width: 38px; height: 20px; border-radius: 999px; background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.2); position: relative; cursor: pointer; transition: all 0.25s; flex-shrink: 0; }
-    .sw i { display: block; width: 14px; height: 14px; border-radius: 999px; background: #cbd5e1; position: absolute; top: 2px; left: 2px; transition: transform 0.28s cubic-bezier(0.34,1.56,0.64,1), background 0.2s; }
+    .sw { width: 36px; height: 19px; border-radius: 999px; background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.2); position: relative; cursor: pointer; transition: all 0.25s; flex-shrink: 0; }
+    .sw i { display: block; width: 13px; height: 13px; border-radius: 999px; background: #cbd5e1; position: absolute; top: 2px; left: 2px; transition: transform 0.28s cubic-bezier(0.34,1.56,0.64,1), background 0.2s; }
     .sw.on { background: linear-gradient(90deg, #ff9f1c, #ff3d71); box-shadow: 0 0 18px rgba(255,159,28,0.7); }
-    .sw.on i { transform: translateX(18px); background: #fff; }
+    .sw.on i { transform: translateX(17px); background: #fff; }
+
+    /* Global Floating Mini Audio Dock */
+    #mini-player {
+      border-radius: 14px; padding: 6px 12px; flex-shrink: 0;
+      display: flex; align-items: center; gap: 10px;
+      border-color: rgba(244,63,94,0.42);
+      background: linear-gradient(90deg, rgba(26, 12, 38, 0.90), rgba(8, 16, 36, 0.92));
+    }
+    #mp-audio, #mu-audio, #vc-audio { height: 32px; filter: invert(0.92) hue-rotate(180deg); border-radius: 999px; }
 
     /* Bottom Slim Terminal */
-    .log-bar { border-radius: 14px; padding: 6px 12px; flex-shrink: 0; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 14px 36px -14px rgba(0,0,0,0.85); }
+    .log-bar { border-radius: 14px; padding: 5px 12px; flex-shrink: 0; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 14px 36px -14px rgba(0,0,0,0.85); }
     .log-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
     .log-sheet { max-height: 0; opacity: 0; overflow: hidden; transition: max-height 0.3s ease, opacity 0.25s; }
-    .log-sheet.open { max-height: 155px; opacity: 1; }
-    .log-list { height: 145px; overflow-y: auto; border-radius: 10px; padding: 8px 10px; background: rgba(2,5,14,0.92); border: 1px solid rgba(255,255,255,0.08); font-size: 11px; line-height: 1.5; user-select: text; }
+    .log-sheet.open { max-height: 150px; opacity: 1; }
+    .log-list { height: 140px; overflow-y: auto; border-radius: 10px; padding: 8px 10px; background: rgba(2,5,14,0.92); border: 1px solid rgba(255,255,255,0.08); font-size: 11px; line-height: 1.5; user-select: text; }
 
-    /* Sub-Views (Tasks / AriaNg / Magnet Lab) */
-    .sub-card { flex: 1; min-height: 0; border-radius: 24px; padding: 16px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
-    .ariang-frame { flex: 1; width: 100%; border: none; border-radius: 16px; background: #0f172a; }
-    .split-2 { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-    .scroll-col { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; }
-    .task-row { border-radius: 14px; padding: 11px 13px; background: rgba(3,8,20,0.8); border: 1px solid rgba(255,255,255,0.09); display: flex; flex-direction: column; gap: 7px; }
+    /* Sub-View Grids & Rows */
+    .ariang-frame { flex: 1; width: 100%; border: none; border-radius: 14px; background: #0f172a; }
+    .split-2 { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .split-64 { flex: 1; min-height: 0; display: grid; grid-template-columns: 1.25fr 0.95fr; gap: 12px; }
+    .scroll-col { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 7px; padding-right: 3px; }
+    .task-row { border-radius: 13px; padding: 10px 12px; background: rgba(3,8,20,0.82); border: 1px solid rgba(255,255,255,0.09); display: flex; flex-direction: column; gap: 6px; }
+    .song-row {
+      display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 12px;
+      background: rgba(6, 11, 26, 0.84); border: 1px solid rgba(255,255,255,0.09);
+      transition: border-color 0.2s, transform 0.16s;
+    }
+    .song-row:hover { border-color: rgba(244,63,94,0.52); transform: translateX(3px); }
 
-    /* Slide-over Settings Drawer */
+    /* Drawer, Inputs, Modals */
     .mask { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,0.58); backdrop-filter: blur(4px); }
     .drawer {
-      position: fixed; top: 12px; right: 12px; bottom: 12px; width: 390px; max-width: 92vw; z-index: 50;
-      border-radius: 24px; padding: 18px; display: flex; flex-direction: column; justify-content: space-between; gap: 14px;
+      position: fixed; top: 12px; right: 12px; bottom: 12px; width: 400px; max-width: 92vw; z-index: 50;
+      border-radius: 24px; padding: 18px; display: flex; flex-direction: column; justify-content: space-between; gap: 12px;
       overflow-y: auto; transform: translateX(112%); transition: transform 0.36s cubic-bezier(0.22,1,0.36,1);
     }
     .drawer.open { transform: translateX(0); }
-    .inp { width: 100%; border-radius: 10px; padding: 7px 10px; font-size: 11.5px; color: #fff; background: rgba(2,6,16,0.88); border: 1px solid rgba(255,255,255,0.13); outline: none; }
+    .inp { width: 100%; border-radius: 10px; padding: 7px 10px; font-size: 11.5px; color: #fff; background: rgba(2,6,16,0.9); border: 1px solid rgba(255,255,255,0.14); outline: none; }
     .inp:focus { border-color: #00d4ff; }
+    select.inp option { background: #070d1f; color: #eef6ff; }
     .lbl { display: block; font-size: 10.5px; color: #94a3b8; margin-bottom: 3px; }
     .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .g3 { display: grid; grid-template-columns: 2fr 1fr; gap: 8px; }
-
-    /* Modal & Toast */
-    .modal-wrap { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,0.72); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .modal-wrap { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,0.74); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; padding: 16px; }
     .modal-box { max-width: 400px; width: 100%; border-radius: 22px; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
-    #toasts { position: fixed; top: 68px; left: 50%; transform: translateX(-50%); z-index: 80; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
-    .toast { border-radius: 999px; padding: 7px 16px; font-size: 12px; font-weight: 600; transition: all 0.28s ease; }
+    #toasts { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 80; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+    .toast { border-radius: 999px; padding: 7px 16px; font-size: 12px; font-weight: 700; transition: all 0.28s ease; }
 
     .c-mint { color: #6ee7b7; } .c-cyan { color: #67e8f9; } .c-violet { color: #d8b4fe; } .c-amber { color: #fcd34d; } .c-rose { color: #fda4af; } .c-dim { color: #64748b; }
     .bg-mint { background: #00f5b8; color: #00f5b8; } .bg-cyan { background: #00d4ff; color: #00d4ff; }
     .bg-violet { background: #a855f7; color: #a855f7; } .bg-amber { background: #ffb347; color: #ffb347; }
     .bg-rose { background: #ff3d71; color: #ff3d71; } .bg-off { background: #475569; color: #475569; }
+    .rec-pulse { animation: recPulse 1s ease-in-out infinite; }
+    @keyframes recPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(255,61,113,0.7); } 50% { box-shadow: 0 0 22px 4px rgba(255,61,113,0.9); } }
 
     ::-webkit-scrollbar { width: 4px; }
-    ::-webkit-scrollbar-thumb { background: rgba(0,212,255,0.3); border-radius: 999px; }
+    ::-webkit-scrollbar-thumb { background: rgba(0,212,255,0.32); border-radius: 999px; }
 
     @media (max-width: 1180px) {
       html, body { overflow-y: auto; }
       .shell { height: auto; min-height: 100vh; perspective: none; }
-      .upper-wings { grid-template-columns: 1fr; }
-      .wing-left, .wing-center, .wing-right, .modules-deck { transform: none !important; }
+      .upper-wings, .split-2, .split-64 { grid-template-columns: 1fr; }
+      .wing-left, .wing-center, .wing-right { transform: none !important; }
       .modules-deck { grid-template-columns: repeat(2, minmax(0,1fr)); }
-      .split-2 { grid-template-columns: 1fr; }
       .top-speed { display: none; }
     }
-    @media (max-width: 680px) { .modules-deck { grid-template-columns: 1fr; } }
+    @media (max-width: 680px) { .modules-deck, .quick-strip { grid-template-columns: 1fr 1fr; } }
   </style>
 </head>
 <body>
@@ -381,7 +447,7 @@
   <div id="toasts"></div>
 
   <div class="shell">
-    <!-- ==================== TOP COMMAND HEADER ==================== -->
+    <!-- ==================== TOP COMMAND HEADER (7 STUDIOS) ==================== -->
     <header class="topbar console-glass">
       <div class="brand">
         <div class="brand-gem">
@@ -390,18 +456,20 @@
           </svg>
         </div>
         <div>
-          <div class="brand-t">DOWNLOADSTACK <span>// 3D CONSOLE</span></div>
-          <div class="brand-s mono">UP <span id="uptime">00:00:00</span> · 曲面空间控制台</div>
+          <div class="brand-t">DOWNLOADSTACK <span>// 3D OS</span></div>
+          <div class="brand-s mono">UP <span id="uptime">00:00:00</span> · 全栈下载 &amp; AI 影音中枢</div>
         </div>
       </div>
 
       <nav class="nav-track" id="navTrack">
         <div id="navPill"></div>
-        <button class="nav-btn active" data-view="cockpit" onclick="switchView('cockpit', this)">✦ 3D 控制台</button>
-        <button class="nav-btn" data-view="tasks" onclick="switchView('tasks', this)">⚡ 任务队列 <span id="nav-task-cnt" class="badge-cnt mono">0</span></button>
-        <button class="nav-btn" data-view="ariang" onclick="switchView('ariang', this)">🌐 内置 AriaNg</button>
-        <button class="nav-btn" data-view="magnet" onclick="switchView('magnet', this)">🧲 磁力工坊</button>
-        <button class="nav-btn" data-view="yt" onclick="switchView('yt', this)">🎬 YT 视频</button>
+        <button class="nav-btn active" data-view="cockpit" onclick="switchView('cockpit', this)">✦ 控制台</button>
+        <button class="nav-btn" data-view="tasks" onclick="switchView('tasks', this)">⚡ 队列 <span id="nav-task-cnt" class="badge-cnt mono">0</span></button>
+        <button class="nav-btn" data-view="ariang" onclick="switchView('ariang', this)">🌐 AriaNg</button>
+        <button class="nav-btn" data-view="magnet" onclick="switchView('magnet', this)">🧲 磁力</button>
+        <button class="nav-btn" data-view="yt" onclick="switchView('yt', this)">🎬 视频</button>
+        <button class="nav-btn" data-view="music" onclick="switchView('music', this)">🎵 音乐</button>
+        <button class="nav-btn" data-view="voice" onclick="switchView('voice', this)">🎙️ 声音克隆</button>
       </nav>
 
       <div class="top-right">
@@ -410,22 +478,20 @@
           <span style="color:rgba(255,255,255,0.16)">|</span>
           <span class="c-dim" style="font-size:10px;">↑</span><span id="top-up" class="c-cyan">0.0 B/s</span>
         </div>
-        <button onclick="act('selfcheck')" class="btn btn-pill">🩺 自检</button>
-        <button onclick="act('backup')" class="btn btn-pill">💾 备份</button>
-        <button onclick="toggleGuide()" class="btn btn-mint btn-pill" title="查看使用教程与排错指南">📖 教程</button>
+        <button onclick="act('selfcheck')" class="btn btn-pill" title="端口、配置与引擎一键体检">🩺</button>
+        <button onclick="act('backup')" class="btn btn-pill" title="备份全套配置">💾</button>
+        <button onclick="toggleGuide()" class="btn btn-mint btn-pill">📖 教程</button>
         <button onclick="toggleDrawer()" class="btn btn-cyan btn-pill">⚙ 设置</button>
         <button onclick="askConfirm('确认一键停止全部服务？','按 Aria2 → qBittorrent → YT 壳顺序安全停机，仅停止本面板记录的 PID。',()=>act('stop_all'))" class="btn btn-rose btn-pill">■ 全停</button>
       </div>
     </header>
 
-    <!-- ==================== VIEW 1: CURVED 3D CONSOLE ==================== -->
+    <!-- ==================== VIEW 1: 3D SPATIAL COMMAND CONSOLE ==================== -->
     <section id="view-cockpit" class="view">
       <div id="cockpitRig">
-
-        <!-- UPPER 3-WING CURVED CONSOLE DECK -->
         <div class="upper-wings">
 
-          <!-- LEFT WING (+8.5deg Curved Inward): Fluid Dual-Channel Telemetry -->
+          <!-- LEFT WING: Fluid Dual-Channel Telemetry -->
           <div class="panel-box console-glass wing-left" data-aura="mint">
             <div class="box-head">
               <div class="box-title"><span class="led bg-mint led-on"></span>双通道液态吞吐</div>
@@ -435,67 +501,110 @@
             <div class="kpi-grid">
               <div class="kpi-tile">
                 <div class="kpi-lbl mono">ARIA2 ↓ / ↑</div>
-                <div class="kpi-val mono c-mint"><span id="k-adn">0.0 B/s</span> <span id="k-aup" style="font-size:10px;opacity:0.65"></span></div>
+                <div class="kpi-val mono c-mint"><span id="k-adn">0.0 B/s</span> <span id="k-aup" style="font-size:9.5px;opacity:0.65"></span></div>
               </div>
               <div class="kpi-tile">
                 <div class="kpi-lbl mono">qBIT ↓ / ↑</div>
-                <div class="kpi-val mono c-cyan"><span id="k-qdn">0.0 B/s</span> <span id="k-qup" style="font-size:10px;opacity:0.65"></span></div>
+                <div class="kpi-val mono c-cyan"><span id="k-qdn">0.0 B/s</span> <span id="k-qup" style="font-size:9.5px;opacity:0.65"></span></div>
               </div>
               <div class="kpi-tile">
                 <div class="kpi-lbl mono">直链任务 / 连接</div>
-                <div class="kpi-val mono"><span id="k-atk">0</span> <span class="c-dim" style="font-size:10px">·</span> <span id="k-acn" class="c-mint">0</span></div>
+                <div class="kpi-val mono"><span id="k-atk">0</span> <span class="c-dim">·</span> <span id="k-acn" class="c-mint">0</span></div>
               </div>
               <div class="kpi-tile">
                 <div class="kpi-lbl mono">BT 种子 / 做种</div>
-                <div class="kpi-val mono"><span id="k-qto">0</span> <span class="c-dim" style="font-size:10px">·</span> <span id="k-qse" class="c-amber">0</span></div>
+                <div class="kpi-val mono"><span id="k-qto">0</span> <span class="c-dim">·</span> <span id="k-qse" class="c-amber">0</span></div>
               </div>
             </div>
           </div>
 
-          <!-- CENTER MAIN BRIDGE: 3D AURORA TERRAIN WAVE DECK + OMNI-DROP -->
+          <!-- CENTER MAIN BRIDGE: COMPACT 3D HORIZON + DUAL OMNI/SONG BAR + RECENT FILES DOCK -->
           <div class="center-deck console-glass wing-center" data-aura="cyan">
-            <div class="terrain-stage">
+            <!-- 1) Compact Luminous 3D Telemetry Strip -->
+            <div class="terrain-strip">
               <canvas id="c-terrain"></canvas>
               <div class="deck-overlay">
                 <div class="deck-top">
                   <div>
-                    <div class="mono c-cyan" style="font-size:10px;letter-spacing:0.12em;">AGGREGATE THROUGHPUT // 实时聚合速率</div>
-                    <div id="hero-dn" class="deck-big-speed mono">0.0 B/s</div>
+                    <div class="mono c-cyan" style="font-size:9.5px;letter-spacing:0.12em;">AGGREGATE THROUGHPUT // 实时聚合带宽</div>
+                    <div style="display:flex;align-items:baseline;gap:10px;margin-top:2px;">
+                      <div id="hero-dn" class="deck-big-speed mono">0.0 B/s</div>
+                      <span class="mono c-dim" style="font-size:10px;">峰值 <b id="hero-peak" class="c-mint">0.0 B/s</b></span>
+                    </div>
                   </div>
                   <div class="deck-pills">
-                    <span class="status-chip mono"><span id="chip-a" class="led bg-off" style="width:7px;height:7px;"></span>A2</span>
-                    <span class="status-chip mono"><span id="chip-q" class="led bg-off" style="width:7px;height:7px;"></span>qB</span>
-                    <span class="status-chip mono"><span id="chip-m" class="led bg-violet led-on" style="width:7px;height:7px;"></span><span id="chip-tr">TR</span></span>
-                    <span class="status-chip mono"><span id="chip-y" class="led bg-off" style="width:7px;height:7px;"></span>YT</span>
+                    <span class="status-chip mono" onclick="switchView('ariang')"><span id="chip-a" class="led bg-off" style="width:6px;height:6px;"></span>A2</span>
+                    <span class="status-chip mono" onclick="switchView('tasks')"><span id="chip-q" class="led bg-off" style="width:6px;height:6px;"></span>qB</span>
+                    <span class="status-chip mono" onclick="switchView('magnet')"><span id="chip-m" class="led bg-violet led-on" style="width:6px;height:6px;"></span><span id="chip-tr">TR</span></span>
+                    <span class="status-chip mono" onclick="switchView('yt')"><span id="chip-y" class="led bg-off" style="width:6px;height:6px;"></span>YT</span>
+                    <span class="status-chip mono" onclick="switchView('music')"><span class="led bg-rose led-on" style="width:6px;height:6px;"></span>音乐</span>
+                    <span class="status-chip mono" onclick="switchView('voice')"><span class="led bg-cyan led-on" style="width:6px;height:6px;"></span>AI克隆</span>
                   </div>
                 </div>
-                <div style="display:flex;align-items:center;justify-content:space-between;font-size:10.5px;" class="mono">
-                  <span id="focus-hint" class="c-cyan" style="opacity:0.9;">3D 空间极光拓扑台 · 随带宽实时涌动</span>
-                  <span class="c-dim">悬停下方操控台触发局部加速</span>
+                <div style="display:flex;align-items:center;justify-content:space-between;font-size:10px;" class="mono">
+                  <span id="focus-hint" class="c-cyan">全栈直投 · 任意搜歌 · 开源零样本声音克隆一体中枢</span>
+                  <span class="c-dim">点击右上标签直达工坊</span>
                 </div>
               </div>
             </div>
 
-            <!-- Quantum Omni-Drop Bar -->
-            <div class="omni-bar">
-              <div class="omni-inner">
-                <span id="omni-tag" class="omni-tag mono">智能识别</span>
-                <input id="omni-url" class="omni-inp mono" placeholder="粘贴直链 / magnet:? 磁力 / 40位 Hash / 视频链接，回车立即开下…" oninput="detectOmni()" onkeydown="if(event.key==='Enter')submitOmni()" />
-                <button onclick="pickFolder('omni')" id="omni-dir-btn" class="btn" style="padding:5px 9px;font-size:11px;" title="选择本次下载保存目录（留空则按各引擎默认目录）">📁 选目录</button>
-                <button onclick="submitOmni()" class="btn btn-mint" style="padding:6px 14px;">⚡ 极速投递</button>
+            <!-- 2) Dual-Mode Omni-Drop / Instant Song Search Bar -->
+            <div class="cmd-bar" id="omni-bar-wrap">
+              <div class="cmd-inner">
+                <div class="mode-switch">
+                  <button id="omni-mode-dl" class="mode-btn active" onclick="setOmniMode('dl')">⚡ 万能直投</button>
+                  <button id="omni-mode-song" class="mode-btn" onclick="setOmniMode('song')">🎵 搜歌直下</button>
+                </div>
+                <span id="omni-tag" class="tag-pill mono" style="background:rgba(0,245,184,0.16);color:#a7f3d0;border:1px solid rgba(0,245,184,0.36);">智能识别</span>
+                <input id="omni-url" class="cmd-inp mono" placeholder="粘贴直链 / magnet:? / InfoHash / 抖音B站YouTube链接，回车立即开下…" oninput="detectOmni()" onkeydown="if(event.key==='Enter')submitOmni()" />
+                <button onclick="pickFolder('omni')" id="omni-dir-btn" class="btn" style="padding:5px 9px;" title="选择本次保存目录">📁 选目录</button>
+                <button onclick="submitOmni()" id="omni-go-btn" class="btn btn-mint" style="padding:5.5px 12px;">⚡ 投递</button>
+              </div>
+            </div>
+
+            <!-- 3) 4-Studio Quick-Launch Strip -->
+            <div class="quick-strip">
+              <button class="q-chip" style="--qc:#ffb347;" onclick="switchView('yt')">🎬 抖音/B站/YT视频</button>
+              <button class="q-chip" style="--qc:#ff3d71;" onclick="switchView('music')">🎵 全网搜歌无损下</button>
+              <button class="q-chip" style="--qc:#c084fc;" onclick="switchView('voice')">🎙️ 3秒AI声音克隆</button>
+              <button class="q-chip" style="--qc:#00d4ff;" onclick="switchView('magnet')">🧲 磁力秒解/修DHT</button>
+            </div>
+
+            <!-- 4) Practical Recent Completed Downloads Dock -->
+            <div class="recent-dock">
+              <div class="box-head">
+                <div class="box-title" style="font-size:11.5px;"><span class="led bg-cyan led-on" style="width:7px;height:7px;"></span>最近下载成品秒开舱 <span id="recent-cnt" class="badge-cnt mono">0</span></div>
+                <button onclick="act('open_path',{key:'downloads'})" class="btn" style="padding:2px 8px;font-size:10px;">📂 总下载目录</button>
+              </div>
+              <div id="recent-list" class="recent-list">
+                <div style="margin:auto;text-align:center;color:#64748b;font-size:11.5px;">扫描本地下载成品中…（支持站内直播音乐/克隆语音、一键打开视频与目录）</div>
               </div>
             </div>
           </div>
 
-          <!-- RIGHT WING (-8.5deg Curved Inward): Live Task Radar -->
+          <!-- RIGHT WING: Live Task Radar + AI Media Quick Cards -->
           <div class="panel-box console-glass wing-right" data-aura="violet">
             <div class="box-head">
               <div class="box-title"><span class="led bg-violet led-on"></span>实时任务雷达</div>
-              <button onclick="switchView('tasks', document.querySelector('[data-view=tasks]'))" class="btn" style="padding:3px 9px;font-size:10.5px;">全部管理 →</button>
+              <button onclick="switchView('tasks')" class="btn" style="padding:2.5px 8px;font-size:10px;">全部管理 →</button>
             </div>
             <div id="radar-list" class="radar-list">
-              <div style="margin:auto;text-align:center;color:#64748b;font-size:12px;line-height:1.8;">
-                暂无活跃下载任务<br/><span style="font-size:10.5px;color:#475569;">在中间投递舱粘贴链接即刻开下</span>
+              <div style="margin:auto;text-align:center;color:#64748b;font-size:11.5px;line-height:1.7;">暂无活跃下载任务<br/><span style="font-size:10px;color:#475569;">在中间投递舱粘贴链接即刻开下</span></div>
+            </div>
+            <div class="studio-mini-grid">
+              <div class="studio-mini" style="--sb:rgba(255,61,113,0.38);--sg:rgba(255,61,113,0.45);" onclick="switchView('music')">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                  <span style="font-size:11.5px;font-weight:800;color:#fda4af;">🎵 音乐工坊</span>
+                  <span class="led bg-rose led-on" style="width:6px;height:6px;"></span>
+                </div>
+                <div id="qs-music-st" class="mono c-dim" style="font-size:10px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">网易云/B站/YTM</div>
+              </div>
+              <div class="studio-mini" style="--sb:rgba(192,132,252,0.4);--sg:rgba(168,85,247,0.48);" onclick="switchView('voice')">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                  <span style="font-size:11.5px;font-weight:800;color:#e9d5ff;">🎙️ 声音克隆</span>
+                  <span class="led bg-violet led-on" style="width:6px;height:6px;"></span>
+                </div>
+                <div id="qs-voice-st" class="mono c-cyan" style="font-size:10px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">F5-TTS / 神经配音</div>
               </div>
             </div>
           </div>
@@ -504,8 +613,7 @@
 
         <!-- LOWER 4 EXTRUDED 3D HARDWARE CONSOLE MODULES -->
         <div class="modules-deck">
-
-          <!-- MODULE 1: ARIA2 (3D Warp Speed Tunnel) -->
+          <!-- MODULE 1: ARIA2 -->
           <div class="mod-wrap" data-aura="mint" onmouseenter="focusEng(0)" onmouseleave="focusEng(-1)">
             <div class="mod-card" style="--c1:#00f5b8;--c2:#00d4ff;--edge:rgba(0,245,184,0.38);--glow:rgba(0,245,184,0.45);--glare:rgba(0,245,184,0.24);">
               <div class="mod-surface">
@@ -515,28 +623,25 @@
                   <div class="mod-id">
                     <span id="led-a" class="led bg-off"></span>
                     <div>
-                      <div class="mod-name">ARIA2 <span id="port-a" class="mono c-mint" style="font-size:10.5px;font-weight:500;">:6800</span></div>
+                      <div class="mod-name">ARIA2 <span id="port-a" class="mono c-mint" style="font-size:10px;font-weight:500;">:6800</span></div>
                       <div class="mod-desc mono" id="desc-a">直链多线程引擎</div>
                     </div>
                   </div>
-                  <div class="mod-stat">
-                    <div id="spd-a" class="mod-val mono c-mint">0.0 B/s</div>
-                    <div id="st-a" class="mod-st mono c-dim">OFFLINE</div>
-                  </div>
+                  <div class="mod-stat"><div id="spd-a" class="mod-val mono c-mint">0.0 B/s</div><div id="st-a" class="mod-st mono c-dim">OFFLINE</div></div>
                 </div>
                 <div class="mod-actions mod-z">
                   <button onclick="act(S.a.on?'stop_a':'start_a')" id="btn-a" class="btn btn-mint flex-1">▶ 启动</button>
-                  <button onclick="jumpAriaNg()" class="btn btn-cyan flex-1">↗ 跳转 AriaNg</button>
-                  <button onclick="switchView('ariang', document.querySelector('[data-view=ariang]'))" class="btn" title="在控制台内直接打开 AriaNg">内置</button>
+                  <button onclick="jumpAriaNg()" class="btn btn-cyan flex-1">↗ AriaNg</button>
+                  <button onclick="switchView('ariang')" class="btn" title="在控制台内直接打开 AriaNg">内置</button>
                   <button onclick="act('restart_a')" class="btn" title="重启">↻</button>
                   <button onclick="act('test_a')" class="btn" title="RPC 测试">⚡</button>
-                  <button onclick="act('open_path',{key:'aria2_dl'})" class="btn" title="打开成品目录">📂</button>
+                  <button onclick="act('open_path',{key:'aria2_dl'})" class="btn" title="打开目录">📂</button>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- MODULE 2: qBITTORRENT (3D P2P Mesh Globe) -->
+          <!-- MODULE 2: qBITTORRENT -->
           <div class="mod-wrap" data-aura="cyan" onmouseenter="focusEng(1)" onmouseleave="focusEng(-1)">
             <div class="mod-card" style="--c1:#00d4ff;--c2:#6366f1;--edge:rgba(0,212,255,0.38);--glow:rgba(0,212,255,0.45);--glare:rgba(0,212,255,0.24);">
               <div class="mod-surface">
@@ -546,26 +651,23 @@
                   <div class="mod-id">
                     <span id="led-q" class="led bg-off"></span>
                     <div>
-                      <div class="mod-name">qBITTORRENT <span id="port-q" class="mono c-cyan" style="font-size:10.5px;font-weight:500;">:8080</span></div>
+                      <div class="mod-name">qBITTORRENT <span id="port-q" class="mono c-cyan" style="font-size:10px;font-weight:500;">:8080</span></div>
                       <div class="mod-desc mono" id="desc-q">BT / PT 分布式节点</div>
                     </div>
                   </div>
-                  <div class="mod-stat">
-                    <div id="spd-q" class="mod-val mono c-cyan">0.0 B/s</div>
-                    <div id="st-q" class="mod-st mono c-dim">OFFLINE</div>
-                  </div>
+                  <div class="mod-stat"><div id="spd-q" class="mod-val mono c-cyan">0.0 B/s</div><div id="st-q" class="mod-st mono c-dim">OFFLINE</div></div>
                 </div>
                 <div class="mod-actions mod-z">
                   <button onclick="act(S.q.on?'stop_q':'start_q')" id="btn-q" class="btn btn-mint flex-1">▶ 启动</button>
-                  <button onclick="jumpQbit()" class="btn btn-cyan flex-1">↗ 跳转 WebUI</button>
+                  <button onclick="jumpQbit()" class="btn btn-cyan flex-1">↗ WebUI</button>
                   <button onclick="act('test_q')" class="btn" title="测试连通">⚡</button>
-                  <button onclick="act('open_path',{key:'qbit_dl'})" class="btn" title="打开 BT 目录">📂</button>
+                  <button onclick="act('open_path',{key:'qbit_dl'})" class="btn" title="打开目录">📂</button>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- MODULE 3: MAGNET / DHT (3D Magnetic Dipole Field) -->
+          <!-- MODULE 3: MAGNET / DHT -->
           <div class="mod-wrap" data-aura="violet" onmouseenter="focusEng(2)" onmouseleave="focusEng(-1)">
             <div class="mod-card" style="--c1:#a855f7;--c2:#ec4899;--edge:rgba(168,85,247,0.42);--glow:rgba(168,85,247,0.48);--glare:rgba(192,132,252,0.24);">
               <div class="mod-surface">
@@ -579,22 +681,19 @@
                       <div class="mod-desc mono">磁力增强 · 种子秒解</div>
                     </div>
                   </div>
-                  <div class="mod-stat">
-                    <div id="val-m" class="mod-val mono c-violet">-- TR</div>
-                    <div id="st-m" class="mod-st mono c-violet">READY</div>
-                  </div>
+                  <div class="mod-stat"><div id="val-m" class="mod-val mono c-violet">-- TR</div><div id="st-m" class="mod-st mono c-violet">READY</div></div>
                 </div>
                 <div class="mod-actions mod-z">
-                  <button onclick="switchView('magnet', document.querySelector('[data-view=magnet]'))" class="btn btn-violet flex-1">🧲 磁力工坊</button>
+                  <button onclick="switchView('magnet')" class="btn btn-violet flex-1">🧲 磁力工坊</button>
                   <button onclick="act('magnet_update_trackers')" class="btn flex-1">🌐 更 Tracker</button>
-                  <button onclick="act('magnet_repair')" class="btn" title="一键修复 DHT">🔧 修 DHT</button>
-                  <button onclick="act('magnet_probe_dht')" class="btn" title="探测 DHT 节点">📡</button>
+                  <button onclick="act('magnet_repair')" class="btn" title="一键修复 DHT">🔧</button>
+                  <button onclick="act('magnet_probe_dht')" class="btn" title="探测 DHT">📡</button>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- MODULE 4: YT-DLP & 2x AI UPSCALE (3D Spectrum Deck) -->
+          <!-- MODULE 4: YT-DLP & 2x AI UPSCALE -->
           <div class="mod-wrap" data-aura="amber" onmouseenter="focusEng(3)" onmouseleave="focusEng(-1)">
             <div class="mod-card" style="--c1:#ffb347;--c2:#ff3d71;--edge:rgba(255,179,71,0.4);--glow:rgba(255,179,71,0.46);--glare:rgba(255,179,71,0.24);">
               <div class="mod-surface">
@@ -605,46 +704,68 @@
                     <span id="led-y" class="led bg-off"></span>
                     <div>
                       <div class="mod-name">YT-DLP 视频壳</div>
-                      <div class="mod-desc mono">代理透传 · 进程树隔离</div>
+                      <div class="mod-desc mono">全平台直下 · 2x超分</div>
                     </div>
                   </div>
-                  <div style="display:flex;align-items:center;gap:6px;background:rgba(255,179,71,0.14);border:1px solid rgba(255,179,71,0.34);border-radius:999px;padding:3px 8px;">
-                    <span class="mono c-amber" style="font-size:10px;font-weight:700;">2x超分</span>
+                  <div style="display:flex;align-items:center;gap:5px;background:rgba(255,179,71,0.14);border:1px solid rgba(255,179,71,0.34);border-radius:999px;padding:2.5px 7px;">
+                    <span class="mono c-amber" style="font-size:9.5px;font-weight:700;">2x超分</span>
                     <div id="sw-up" class="sw" onclick="act('toggle_upscale')"><i></i></div>
                   </div>
                 </div>
                 <div class="mod-actions mod-z">
-                  <button onclick="switchView('yt', document.querySelector('[data-view=yt]'))" class="btn btn-amber flex-1">🎬 视频工坊</button>
+                  <button onclick="switchView('yt')" class="btn btn-amber flex-1">🎬 视频工坊</button>
                   <button onclick="act(S.y.on?'stop_y':'start_y')" id="btn-y" class="btn flex-1">▶ 外部壳</button>
-                  <button onclick="act('open_path',{key:'yt_out'})" class="btn" title="打开视频成品目录">📂</button>
+                  <button onclick="act('open_path',{key:'yt_out'})" class="btn" title="打开目录">📂</button>
                 </div>
               </div>
             </div>
           </div>
-
         </div>
       </div>
     </section>
 
-    <!-- ==================== VIEW 2: FULL LIVE TASK QUEUE ==================== -->
-    <section id="view-tasks" class="view hidden">
+    <!-- ==================== VIEW 2: FULL TASK QUEUE (3D ORBITAL RADAR + INPUT) ==================== -->
+    <section id="view-tasks" class="view hidden" data-aura="cyan">
       <div class="sub-card console-glass">
-        <div class="box-head">
-          <div>
-            <div class="box-title" style="font-size:14px;">⚡ 全栈实时下载任务队列（Aria2 + qBittorrent）</div>
-            <div class="box-sub">支持单任务实时暂停、继续、移除，与本地引擎双向同步</div>
-          </div>
-          <div style="display:flex;gap:8px;">
-            <button onclick="jumpAriaNg()" class="btn btn-cyan">↗ 独立打开 AriaNg</button>
-            <button onclick="jumpQbit()" class="btn btn-cyan">↗ 独立打开 qB WebUI</button>
+        <div class="hero-stage" style="--hero-glow:rgba(0,212,255,0.26);border-color:rgba(0,212,255,0.34);">
+          <canvas id="c-tasks-hero" class="hero-canvas"></canvas>
+          <div class="hero-overlay">
+            <div>
+              <div class="hero-title"><span class="led bg-cyan led-on"></span>⚡ 全栈实时轨道任务中心</div>
+              <div class="hero-sub">Aria2 多线程直链 + qBittorrent BT/PT 种子双向同步 · 暂停 / 继续 / 移除 / 即时投递入队</div>
+            </div>
+            <div class="hero-metrics mono">
+              <div class="metric-pill"><small>AGGREGATE</small><b id="t-hero-spd" class="c-cyan">0.0 B/s</b></div>
+              <div class="metric-pill"><small>TASKS</small><b id="t-hero-cnt" class="c-mint">0</b></div>
+              <div class="metric-pill"><small>PEERS / CONN</small><b id="t-hero-conn" class="c-violet">0</b></div>
+              <button onclick="jumpAriaNg()" class="btn btn-cyan">↗ AriaNg</button>
+              <button onclick="jumpQbit()" class="btn btn-mint">↗ qB WebUI</button>
+            </div>
           </div>
         </div>
+
+        <!-- Dedicated Task Queue Input Bar -->
+        <div class="cmd-bar" style="--b1:#00d4ff;--b2:#6366f1;--b3:#00f5b8;--bglow:rgba(0,212,255,0.45);">
+          <div class="cmd-inner">
+            <select id="t-quick-eng" class="inp mono" style="width:128px;padding:4.5px 8px;">
+              <option value="auto">⚡ 自动分流</option>
+              <option value="aria2">Aria2 直链</option>
+              <option value="qbit">qBittorrent</option>
+              <option value="magnet">🧲 磁力增强</option>
+            </select>
+            <input id="t-quick-url" class="cmd-inp mono" placeholder="粘贴 HTTP 直链 / magnet:? / .torrent 地址，直接入队下载…" onkeydown="if(event.key==='Enter')submitTaskQuick()" />
+            <input id="t-quick-dir" class="inp mono" style="width:210px;padding:4.5px 8px;" placeholder="保存目录（留空=默认）" />
+            <button onclick="pickFolder('tasks')" class="btn">📁 选目录</button>
+            <button onclick="submitTaskQuick()" class="btn btn-cyan">＋ 投递入队</button>
+          </div>
+        </div>
+
         <div class="split-2">
-          <div style="display:flex;flex-direction:column;gap:8px;min-height:0;">
+          <div class="panel-box" style="background:rgba(3,8,20,0.74);border:1px solid rgba(0,245,184,0.22);">
             <div class="box-title c-mint mono">◤ ARIA2 直链任务 (<span id="cnt-a-tasks">0</span>)</div>
             <div id="full-a-tasks" class="scroll-col"></div>
           </div>
-          <div style="display:flex;flex-direction:column;gap:8px;min-height:0;">
+          <div class="panel-box" style="background:rgba(3,8,20,0.74);border:1px solid rgba(0,212,255,0.22);">
             <div class="box-title c-cyan mono">◤ qBITTORRENT 种子任务 (<span id="cnt-q-tasks">0</span>)</div>
             <div id="full-q-tasks" class="scroll-col"></div>
           </div>
@@ -652,114 +773,145 @@
       </div>
     </section>
 
-    <!-- ==================== VIEW 3: EMBEDDED ARIANG ==================== -->
-    <section id="view-ariang" class="view hidden">
+    <!-- ==================== VIEW 3: EMBEDDED ARIANG (OPTICAL FIBER MATRIX + INPUT) ==================== -->
+    <section id="view-ariang" class="view hidden" data-aura="mint">
       <div class="sub-card console-glass" style="padding:12px;">
-        <div class="box-head">
-          <div class="box-title">🌐 内置 AriaNg 管理台 <span class="box-sub mono" style="margin-left:6px;">同源免端口冲突 · 自动注入 RPC Token</span></div>
-          <div style="display:flex;gap:8px;">
-            <button onclick="reloadAriaNgFrame()" class="btn">↻ 刷新</button>
-            <button onclick="jumpAriaNg()" class="btn btn-cyan">↗ 独立窗口弹出</button>
+        <div class="hero-stage" style="height:82px;--hero-glow:rgba(0,245,184,0.25);border-color:rgba(0,245,184,0.34);">
+          <canvas id="c-ariang-hero" class="hero-canvas"></canvas>
+          <div class="hero-overlay">
+            <div>
+              <div class="hero-title"><span class="led bg-mint led-on"></span>🌐 同源光速 AriaNg 管理舱</div>
+              <div class="hero-sub">本地同源直出 /ariang/ · 自动 Base64 注入 RPC Token · 零端口冲突</div>
+            </div>
+            <div class="hero-metrics mono">
+              <div class="metric-pill"><small>ENGINE</small><b id="ag-hero-ver" class="c-mint">Aria2</b></div>
+              <div class="metric-pill"><small>SPEED</small><b id="ag-hero-spd" class="c-cyan">0.0 B/s</b></div>
+              <button onclick="reloadAriaNgFrame()" class="btn">↻ 刷新</button>
+              <button onclick="jumpAriaNg()" class="btn btn-mint">↗ 独立窗口</button>
+            </div>
           </div>
         </div>
+
+        <!-- Dedicated AriaNg Direct Hyper-Link Input Bar -->
+        <div class="cmd-bar" style="--b1:#00f5b8;--b2:#10b981;--b3:#00d4ff;--bglow:rgba(0,245,184,0.45);">
+          <div class="cmd-inner">
+            <span class="tag-pill mono" style="background:rgba(0,245,184,0.18);color:#a7f3d0;border:1px solid rgba(0,245,184,0.4);">ARIA2 RPC</span>
+            <input id="ag-quick-url" class="cmd-inp mono" placeholder="粘贴任意直链 / FTP / 镜像地址，秒级直投 Aria2 多线程通道…" onkeydown="if(event.key==='Enter')submitAriaNgQuick()" />
+            <input id="ag-quick-dir" class="inp mono" style="width:210px;padding:4.5px 8px;" placeholder="保存目录（留空=默认）" />
+            <button onclick="pickFolder('ariang')" class="btn">📁 选目录</button>
+            <button onclick="submitAriaNgQuick()" class="btn btn-mint">⚡ 直投 Aria2</button>
+          </div>
+        </div>
+
         <iframe id="ariangFrame" class="ariang-frame" src="about:blank"></iframe>
       </div>
     </section>
 
-    <!-- ==================== VIEW 4: MAGNET / DHT WORKSHOP ==================== -->
-    <section id="view-magnet" class="view hidden">
+    <!-- ==================== VIEW 4: MAGNET / DHT WORKSHOP (3D MAGNETIC TORUS + INPUT) ==================== -->
+    <section id="view-magnet" class="view hidden" data-aura="violet">
       <div class="sub-card console-glass">
-        <div class="box-head">
-          <div>
-            <div class="box-title" style="font-size:14px;">🧲 磁力增强工坊 &amp; DHT 修复中心</div>
-            <div class="box-sub">支持 magnet:? 与 40 位 InfoHash · 自动补全公共 Tracker · SHA1 校验预取 .torrent 跳过元数据卡顿</div>
-          </div>
-          <div style="display:flex;gap:8px;">
-            <button onclick="act('magnet_update_trackers')" class="btn btn-violet">🌐 更新并热载 Tracker</button>
-            <button onclick="act('magnet_repair')" class="btn btn-mint">🔧 一键修复 DHT/磁力</button>
-            <button onclick="act('magnet_probe_dht')" class="btn btn-cyan">📡 探测 DHT 节点</button>
+        <div class="hero-stage" style="--hero-glow:rgba(168,85,247,0.28);border-color:rgba(192,132,252,0.38);">
+          <canvas id="c-magnet-hero" class="hero-canvas"></canvas>
+          <div class="hero-overlay">
+            <div>
+              <div class="hero-title"><span class="led bg-violet led-on"></span>🧲 磁力极速解析 &amp; DHT 力场修复中心</div>
+              <div class="hero-sub">支持 magnet:? 与 40 位 InfoHash · SHA1 校验预取 .torrent 跳过元数据卡顿 · 一键热更新公共 Tracker</div>
+            </div>
+            <div class="hero-metrics mono">
+              <div class="metric-pill"><small>TRACKERS</small><b id="mh-tr" class="c-violet">--</b></div>
+              <div class="metric-pill"><small>DHT NODES</small><b id="mh-dht" class="c-cyan">--</b></div>
+              <button onclick="act('magnet_update_trackers')" class="btn btn-violet">🌐 热更 Tracker</button>
+              <button onclick="act('magnet_repair')" class="btn btn-mint">🔧 修 DHT</button>
+              <button onclick="act('magnet_probe_dht')" class="btn btn-cyan">📡 探节点</button>
+            </div>
           </div>
         </div>
+
         <div class="split-2">
-          <div class="panel-box" style="background:rgba(3,8,20,0.72);border:1px solid rgba(168,85,247,0.3);">
-            <div class="box-title c-violet mono">◤ 磁力 / InfoHash 解析与直投</div>
-            <textarea id="mag-input" class="inp mono" style="height:96px;resize:none;line-height:1.5;" placeholder="粘贴 magnet:?xt=urn:btih:... 或纯 40 位 InfoHash…"></textarea>
+          <div class="panel-box" style="background:rgba(3,8,20,0.76);border:1px solid rgba(168,85,247,0.32);">
+            <div class="box-title c-violet mono">◤ 磁力 / InfoHash 解析与增强直投</div>
+            <textarea id="mag-input" class="inp mono" style="height:92px;resize:none;line-height:1.5;" placeholder="粘贴 magnet:?xt=urn:btih:... 或纯 40 位 Hex / 32 位 Base32 InfoHash…"></textarea>
             <div style="display:flex;gap:6px;align-items:center;">
               <input id="mag-dir" class="inp mono flex-1" placeholder="保存目录（留空=使用默认 BT/Aria2 目录）" />
-              <button onclick="pickFolder('magnet')" class="btn" style="padding:6px 11px;">📁 选目录</button>
+              <button onclick="pickFolder('magnet')" class="btn">📁 选目录</button>
             </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <div style="display:flex;gap:7px;flex-wrap:wrap;">
               <button onclick="parseMagnetUI()" class="btn">🔍 校验解析</button>
               <button onclick="submitMagnet('qbit')" class="btn btn-cyan flex-1">🧲 增强投递至 qBittorrent</button>
               <button onclick="submitMagnet('aria2')" class="btn btn-mint flex-1">⚡ 增强投递至 Aria2</button>
             </div>
-            <div id="mag-result" class="mono" style="flex:1;border-radius:12px;padding:12px;background:rgba(2,5,14,0.88);border:1px solid rgba(255,255,255,0.08);font-size:11.5px;color:#cbd5e1;line-height:1.7;overflow-y:auto;">
+            <div id="mag-result" class="mono" style="flex:1;border-radius:12px;padding:11px;background:rgba(2,5,14,0.9);border:1px solid rgba(255,255,255,0.08);font-size:11.5px;color:#cbd5e1;line-height:1.7;overflow-y:auto;">
               等待粘贴磁力链接或 InfoHash…
             </div>
           </div>
-          <div class="panel-box" style="background:rgba(3,8,20,0.72);border:1px solid rgba(0,212,255,0.24);">
+
+          <div class="panel-box" style="background:rgba(3,8,20,0.76);border:1px solid rgba(0,212,255,0.24);">
             <div class="box-title c-cyan mono">◤ 磁力与 DHT 健康遥测</div>
             <div class="kpi-grid">
               <div class="kpi-tile"><div class="kpi-lbl">aria2.conf 状态</div><div id="m-conf-ok" class="kpi-val mono c-mint">--</div></div>
               <div class="kpi-tile"><div class="kpi-lbl">已配置 Tracker 数</div><div id="m-tr-cnt" class="kpi-val mono c-violet">--</div></div>
               <div class="kpi-tile"><div class="kpi-lbl">本地缓存 Tracker</div><div id="m-cache-cnt" class="kpi-val mono c-cyan">--</div></div>
-              <div class="kpi-tile"><div class="kpi-lbl">dht.dat 节点表</div><div id="m-dht-sz" class="kpi-val mono c-amber">--</div></div>
+              <div class="kpi-tile"><div class="kpi-lbl">DHT 节点状态</div><div id="m-dht-sz" class="kpi-val mono c-amber">--</div></div>
             </div>
-            <div style="border-radius:12px;padding:12px;background:rgba(168,85,247,0.10);border:1px solid rgba(168,85,247,0.28);font-size:11.5px;color:#e9d5ff;line-height:1.75;">
-              <b>内置磁力秒下引擎：</b><br/>
-              1. 自动识别 <code class="mono c-cyan">magnet:?</code> 与纯 40 位 Hex / 32 位 Base32 InfoHash。<br/>
-              2. 自动预取公共 <code class="mono c-mint">.torrent</code> 并做 SHA1 InfoHash 严格校验，跳过元数据卡顿。<br/>
-              3. 自动发现携带合法 <code class="mono">token</code> 的真实 DHT 节点，彻底解决 aria2 冷启动 0 节点。
+            <div style="border-radius:12px;padding:12px;background:rgba(168,85,247,0.10);border:1px solid rgba(168,85,247,0.3);font-size:11.5px;color:#e9d5ff;line-height:1.75;flex:1;overflow-y:auto;">
+              <b>为什么普通磁力经常卡在「获取元数据」？</b><br/>
+              1. 公共 Tracker 过期或未开启 DHT，客户端找不到任何初始节点。<br/>
+              2. 点击上方「🌐 热更 Tracker」会自动拉取全球高速公共 Tracker 并同时热写入运行中的 Aria2 与 qBittorrent。<br/>
+              3. 在左侧直投磁力时，后台会优先向公共缓存尝试预取经 <b>SHA1 InfoHash 严格校验</b> 的真实 <code class="mono">.torrent</code>，大幅缩短起速时间！
             </div>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- ==================== VIEW 5: YT VIDEO STUDIO ==================== -->
-    <section id="view-yt" class="view hidden">
+    <!-- ==================== VIEW 5: YT VIDEO STUDIO (3D CINEMA GRID + INPUT) ==================== -->
+    <section id="view-yt" class="view hidden" data-aura="amber">
       <div class="sub-card console-glass">
-        <div class="box-head">
-          <div>
-            <div class="box-title" style="font-size:14px;">🎬 YT-DLP 视频下载工坊 &amp; 2x AI 超分</div>
-            <div class="box-sub">支持 YouTube / B站 / 抖音 / 小红书 / X 等千余站点 · 分享口令自动提取链接 · 代理自动透传</div>
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button onclick="act('start_y')" class="btn btn-amber">↗ 打开独立 YT 壳</button>
-            <button onclick="act('open_path',{key:'yt_out'})" class="btn btn-cyan">📂 视频输出目录</button>
+        <div class="hero-stage" style="--hero-glow:rgba(255,179,71,0.28);border-color:rgba(255,179,71,0.4);">
+          <canvas id="c-yt-hero" class="hero-canvas"></canvas>
+          <div class="hero-overlay">
+            <div>
+              <div class="hero-title"><span class="led bg-amber led-on"></span>🎬 全平台视频直下 &amp; 2x AI 超分工坊</div>
+              <div class="hero-sub">YouTube / B站 / 抖音双引擎 / 小红书 / X / TikTok · 国内站自动免代理直连 · 海外站自动透传代理</div>
+            </div>
+            <div class="hero-metrics mono">
+              <div class="metric-pill"><small>BINS</small><b id="yt-env-bins" class="c-mint">检测中…</b></div>
+              <div class="metric-pill"><small>PROXY</small><b id="yt-env-proxy" class="c-cyan">检测中…</b></div>
+              <button onclick="act('open_path',{key:'yt_out'})" class="btn btn-amber">📂 视频目录</button>
+              <button onclick="act('start_y')" class="btn">↗ 外部壳</button>
+            </div>
           </div>
         </div>
 
         <div class="split-2">
-          <!-- Left: Controls -->
-          <div class="panel-box" style="background:rgba(3,8,20,0.74);border:1px solid rgba(255,179,71,0.32);gap:12px;">
-            <div class="box-title c-amber mono">◤ 视频链接与画质配置</div>
-            <textarea id="yt-url" class="inp mono" style="height:82px;resize:none;line-height:1.5;" placeholder="粘贴视频链接或抖音/小红书分享口令（自动提取 URL）…"></textarea>
+          <div class="panel-box" style="background:rgba(3,8,20,0.78);border:1px solid rgba(255,179,71,0.32);">
+            <div class="box-title c-amber mono">◤ 视频链接 / 分享口令与参数</div>
+            <textarea id="yt-url" class="inp mono" style="height:76px;resize:none;line-height:1.5;" placeholder="粘贴 YouTube / B站 / 抖音 / 小红书 / X / TikTok 视频链接或完整分享口令…"></textarea>
 
             <div>
-              <label class="lbl">清晰度 / 格式</label>
-              <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;" id="yt-q-group">
-                <button type="button" onclick="pickYtQ('best',this)" data-q="best" class="btn btn-amber">最佳 MP4</button>
-                <button type="button" onclick="pickYtQ('1080',this)" data-q="1080" class="btn">≤ 1080P</button>
-                <button type="button" onclick="pickYtQ('720',this)" data-q="720" class="btn">≤ 720P</button>
-                <button type="button" onclick="pickYtQ('audio',this)" data-q="audio" class="btn">仅音频 MP3</button>
+              <label class="lbl">清晰度 / 封装格式</label>
+              <div id="yt-q-group" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;">
+                <button data-q="best" onclick="pickYtQ('best',this)" class="btn btn-amber">最佳 MP4</button>
+                <button data-q="1080" onclick="pickYtQ('1080',this)" class="btn">≤ 1080P</button>
+                <button data-q="720" onclick="pickYtQ('720',this)" class="btn">≤ 720P</button>
+                <button data-q="audio" onclick="pickYtQ('audio',this)" class="btn">仅音频 MP3</button>
               </div>
             </div>
 
             <div class="g2">
               <div>
-                <label class="lbl">登录态 / Cookies（推荐自动智能，避免 Edge/Chrome 锁库）</label>
-                <select id="yt-cookies" class="inp mono" onchange="toggleYtCookieFile()">
-                  <option value="auto">自动智能（推荐 · 全平台自动适配）</option>
-                  <option value="none">不使用 Cookies</option>
+                <label class="lbl">登录态 / Cookies（智能免锁库）</label>
+                <select id="yt-cookies" class="inp" onchange="toggleYtCookieFile()">
+                  <option value="auto">智能免锁库（推荐 · 抖音/B站直连）</option>
                   <option value="firefox">Firefox 登录态（不锁库）</option>
-                  <option value="file">指定 cookies.txt（稳定不锁库）</option>
+                  <option value="file">指定 cookies.txt 文件</option>
                   <option value="chrome">Chrome 登录态（需关闭 Chrome）</option>
                   <option value="edge">Edge 登录态（需关闭 Edge）</option>
+                  <option value="none">强制不带 Cookies</option>
                 </select>
               </div>
-              <div style="display:flex;flex-direction:column;justify-content:flex-end;">
-                <div style="display:flex;align-items:center;justify-content:space-between;background:rgba(255,179,71,0.10);border:1px solid rgba(255,179,71,0.3);border-radius:10px;padding:6px 10px;">
+              <div style="display:flex;align-items:flex-end;">
+                <div style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-radius:10px;background:rgba(255,179,71,0.12);border:1px solid rgba(255,179,71,0.35);">
                   <span class="mono c-amber" style="font-size:11px;font-weight:700;">⚡ 下载后 2x AI 超分</span>
                   <div id="yt-sw-up" class="sw" onclick="act('toggle_upscale')"><i></i></div>
                 </div>
@@ -767,51 +919,41 @@
             </div>
 
             <div id="yt-cookie-path-wrap" class="hidden">
-              <label class="lbl">cookies.txt 路径</label>
-              <input id="yt-cookies-file" class="inp mono" placeholder="输入导出的 cookies.txt 完整路径" />
+              <label class="lbl">cookies.txt 绝对路径</label>
+              <input id="yt-cookies-file" class="inp mono" placeholder="填入导出的 Netscape 格式 cookies.txt 路径" />
             </div>
 
             <div>
-              <label class="lbl">视频保存目录（可自由更改，自动记住）</label>
+              <label class="lbl">保存到文件夹（可点击右侧选择任意目录）</label>
               <div style="display:flex;gap:6px;align-items:center;">
-                <input id="yt-out-dir" class="inp mono flex-1" placeholder="留空使用默认视频下载目录" />
-                <button type="button" onclick="pickFolder('yt')" class="btn btn-cyan" style="padding:6px 11px;">📁 选择文件夹</button>
+                <input id="yt-out-dir" class="inp mono flex-1" placeholder="默认保存至 Downloads/yt-dlp" />
+                <button onclick="pickFolder('yt')" class="btn btn-amber">📁 选目录</button>
               </div>
             </div>
 
-            <div style="display:flex;gap:8px;">
-              <button onclick="startYtStudio()" id="yt-go-btn" class="btn btn-amber flex-1" style="padding:9px 14px;font-size:12.5px;">▶ 开始下载视频</button>
-              <button onclick="act('yt_cancel')" class="btn btn-rose" style="padding:9px 14px;">■ 取消（杀进程树）</button>
-            </div>
-
-            <div class="kpi-grid" style="margin-top:auto;">
-              <div class="kpi-tile"><div class="kpi-lbl">引擎状态</div><div id="yt-env-bins" class="kpi-val mono c-mint" style="font-size:11.5px;">检测中…</div></div>
-              <div class="kpi-tile"><div class="kpi-lbl">网络代理</div><div id="yt-env-proxy" class="kpi-val mono c-cyan" style="font-size:11.5px;">--</div></div>
+            <div style="display:flex;gap:8px;margin-top:auto;">
+              <button id="yt-go-btn" onclick="startYtStudio()" class="btn btn-amber flex-1" style="padding:9px;">▶ 立即极速下载</button>
+              <button onclick="act('yt_cancel')" class="btn btn-rose" style="padding:9px 14px;">■ 取消</button>
             </div>
           </div>
 
-          <!-- Right: Live Progress & Output Log -->
-          <div class="panel-box" style="background:rgba(3,8,20,0.74);border:1px solid rgba(0,212,255,0.24);">
+          <div class="panel-box" style="background:rgba(3,8,20,0.78);border:1px solid rgba(0,212,255,0.24);">
             <div class="box-head">
-              <div class="box-title c-cyan mono">◤ 实时下载进度与终端</div>
-              <button onclick="act('yt_clear_log')" class="btn" style="padding:3px 9px;font-size:10.5px;">清空日志</button>
+              <div class="box-title c-cyan mono">◤ 实时进度与下载终端</div>
+              <button onclick="act('yt_clear_log')" class="btn" style="padding:2px 8px;font-size:10px;">清空</button>
             </div>
-
-            <div style="border-radius:14px;padding:12px 14px;background:rgba(2,5,14,0.88);border:1px solid rgba(255,179,71,0.25);display:flex;flex-direction:column;gap:8px;">
-              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;">
-                <div id="yt-status" class="mono c-amber" style="font-size:12.5px;font-weight:700;">就绪</div>
-                <div class="mono" style="font-size:18px;font-weight:800;color:#fff;"><span id="yt-pct">0.0</span>%</div>
+            <div class="kpi-tile" style="padding:10px 12px;display:flex;flex-direction:column;gap:6px;">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;">
+                <div id="yt-status" class="mono c-amber" style="font-size:12px;font-weight:800;">就绪</div>
+                <div class="mono" style="font-size:17px;font-weight:900;color:#fff;"><span id="yt-pct">0.0</span>%</div>
               </div>
-              <div class="prog-track" style="height:7px;">
-                <div id="yt-bar" class="prog-fill" style="width:0%;background:linear-gradient(90deg,#ffb347,#ff3d71);box-shadow:0 0 12px rgba(255,179,71,0.65);"></div>
-              </div>
-              <div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;" class="mono">
+              <div class="prog-track" style="height:6px;"><div id="yt-bar" class="prog-fill" style="width:0%;background:linear-gradient(90deg,#ffb347,#ff3d71);box-shadow:0 0 12px rgba(255,179,71,0.65);"></div></div>
+              <div style="display:flex;justify-content:space-between;font-size:10.5px;color:#94a3b8;" class="mono">
                 <span>速率：<b id="yt-spd" class="c-cyan">-</b></span>
-                <span>剩余时间：<b id="yt-eta" class="c-mint">-</b></span>
+                <span>剩余：<b id="yt-eta" class="c-mint">-</b></span>
               </div>
             </div>
-
-            <div id="yt-log-box" class="mono" style="flex:1;min-height:0;overflow-y:auto;border-radius:12px;padding:10px 12px;background:rgba(2,5,14,0.92);border:1px solid rgba(255,255,255,0.08);font-size:11px;line-height:1.55;color:#cbd5e1;user-select:text;">
+            <div id="yt-log-box" class="mono" style="flex:1;min-height:0;overflow-y:auto;border-radius:12px;padding:10px;background:rgba(2,5,14,0.92);border:1px solid rgba(255,255,255,0.08);font-size:11px;line-height:1.55;color:#cbd5e1;user-select:text;">
               等待投递视频链接…
             </div>
           </div>
@@ -819,45 +961,272 @@
       </div>
     </section>
 
+    <!-- ==================== VIEW 6: ANY-SONG SEARCH & DOWNLOAD STUDIO (3D HOLOGRAPHIC VINYL) ==================== -->
+    <section id="view-music" class="view hidden" data-aura="rose">
+      <div class="sub-card console-glass">
+        <div class="hero-stage" style="--hero-glow:rgba(255,61,113,0.28);border-color:rgba(255,61,113,0.42);">
+          <canvas id="c-music-hero" class="hero-canvas"></canvas>
+          <div class="hero-overlay">
+            <div>
+              <div class="hero-title"><span class="led bg-rose led-on"></span>🎵 全网任意歌曲检索 &amp; 无损下载工坊</div>
+              <div class="hero-sub">网易云 + B站高码率 + YouTube Music 多源聚合 · 支持 MP3 320K / FLAC 无损 / WAV / M4A · 内嵌封面与元信息</div>
+            </div>
+            <div class="hero-metrics mono">
+              <div class="metric-pill"><small>FORMAT</small><b id="mu-hero-fmt" class="c-rose">MP3 320K</b></div>
+              <div class="metric-pill"><small>RESULTS</small><b id="mu-hero-cnt" class="c-cyan">0 首</b></div>
+              <button onclick="act('open_path',{key:'music_dl'})" class="btn btn-rose">📂 音乐目录</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dedicated Music Search & Direct Download Command Bar -->
+        <div class="cmd-bar" style="--b1:#ff3d71;--b2:#a855f7;--b3:#00d4ff;--bglow:rgba(255,61,113,0.48);">
+          <div class="cmd-inner">
+            <div id="mu-src-group" class="mode-switch">
+              <button data-src="all" onclick="pickMuSrc('all')" class="mode-btn active-rose">全网聚合</button>
+              <button data-src="netease" onclick="pickMuSrc('netease')" class="mode-btn">网易云</button>
+              <button data-src="bilibili" onclick="pickMuSrc('bilibili')" class="mode-btn">B站音乐</button>
+              <button data-src="youtube" onclick="pickMuSrc('youtube')" class="mode-btn">YouTube</button>
+            </div>
+            <input id="mu-query" class="cmd-inp" placeholder="输入任意歌名、歌手、歌词，或粘贴歌曲链接，回车全网秒搜…" onkeydown="if(event.key==='Enter')searchMusicUI()" />
+            <div id="mu-fmt-group" class="mode-switch">
+              <button data-fmt="mp3" onclick="pickMuFmt('mp3')" class="mode-btn active">MP3</button>
+              <button data-fmt="flac" onclick="pickMuFmt('flac')" class="mode-btn">FLAC</button>
+              <button data-fmt="wav" onclick="pickMuFmt('wav')" class="mode-btn">WAV</button>
+              <button data-fmt="m4a" onclick="pickMuFmt('m4a')" class="mode-btn">M4A</button>
+            </div>
+            <button id="mu-search-btn" onclick="searchMusicUI()" class="btn btn-rose">🔍 搜全网</button>
+          </div>
+        </div>
+
+        <div class="split-64">
+          <!-- Left: Rich Search Results -->
+          <div class="panel-box" style="background:rgba(3,8,20,0.78);border:1px solid rgba(255,61,113,0.28);">
+            <div class="box-head">
+              <div class="box-title c-rose mono">◤ 歌曲检索结果</div>
+              <div style="display:flex;gap:5px;align-items:center;">
+                <input id="mu-out-dir" class="inp mono" style="width:220px;padding:4px 8px;font-size:10.5px;" placeholder="音乐保存目录" />
+                <button onclick="pickFolder('music')" class="btn" style="padding:4px 9px;">📁 选目录</button>
+              </div>
+            </div>
+            <div id="mu-results" class="scroll-col">
+              <div style="margin:auto;text-align:center;color:#64748b;font-size:12px;line-height:1.9;">
+                输入任意歌名或歌手（如 <b class="c-rose">周杰伦 晴天</b>、<b class="c-cyan">告五人 披星戴月的想你</b>、<b class="c-violet">YOASOBI Idol</b>）<br/>
+                <span style="font-size:11px;color:#475569;">多源智能匹配高码率音轨 · 自动写封面与歌手标签 · 下完即刻站内 Hi-Fi 试听</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Live Progress + Built-in Hi-Fi Audio Deck + Log -->
+          <div class="panel-box" style="background:rgba(3,8,20,0.78);border:1px solid rgba(168,85,247,0.28);">
+            <div class="box-head">
+              <div class="box-title c-violet mono">◤ 下载引擎 &amp; Hi-Fi 试听台</div>
+              <div style="display:flex;gap:5px;">
+                <button onclick="act('music_cancel')" class="btn btn-rose" style="padding:2px 8px;font-size:10px;">■ 取消</button>
+                <button onclick="act('music_clear_log')" class="btn" style="padding:2px 8px;font-size:10px;">清空</button>
+              </div>
+            </div>
+            <div class="kpi-tile" style="padding:10px 12px;display:flex;flex-direction:column;gap:6px;">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;">
+                <div id="mu-status" class="mono c-rose" style="font-size:12px;font-weight:800;">就绪</div>
+                <div class="mono" style="font-size:16px;font-weight:900;color:#fff;"><span id="mu-pct">0.0</span>%</div>
+              </div>
+              <div class="prog-track" style="height:6px;"><div id="mu-bar" class="prog-fill" style="width:0%;background:linear-gradient(90deg,#ff3d71,#a855f7,#00d4ff);"></div></div>
+              <div style="display:flex;justify-content:space-between;font-size:10.5px;color:#94a3b8;" class="mono">
+                <span>速率：<b id="mu-spd" class="c-cyan">-</b></span>
+                <span>剩余：<b id="mu-eta" class="c-mint">-</b></span>
+              </div>
+            </div>
+
+            <!-- Built-in Hi-Fi Player -->
+            <div class="kpi-tile" style="padding:10px 12px;border-color:rgba(255,61,113,0.34);background:rgba(22,10,32,0.75);display:flex;flex-direction:column;gap:6px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                <span class="mono c-rose" style="font-size:10.5px;font-weight:800;">🎧 站内 Hi-Fi 试听</span>
+                <span id="mu-now-title" class="mono c-cyan" style="font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">尚未播放歌曲</span>
+              </div>
+              <audio id="mu-audio" controls style="width:100%;"></audio>
+            </div>
+
+            <div id="mu-log-box" class="mono" style="flex:1;min-height:0;overflow-y:auto;border-radius:11px;padding:9px;background:rgba(2,5,14,0.92);border:1px solid rgba(255,255,255,0.08);font-size:10.5px;line-height:1.5;color:#cbd5e1;user-select:text;">
+              等待搜索并下载歌曲…
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== VIEW 7: OPEN-SOURCE AI VOICE CLONING STUDIO (3D NEURAL HELIX) ==================== -->
+    <section id="view-voice" class="view hidden" data-aura="magenta">
+      <div class="sub-card console-glass">
+        <div class="hero-stage" style="--hero-glow:rgba(192,132,252,0.30);border-color:rgba(192,132,252,0.44);">
+          <canvas id="c-voice-hero" class="hero-canvas"></canvas>
+          <div class="hero-overlay">
+            <div>
+              <div class="hero-title"><span class="led bg-violet led-on"></span>🎙️ 开源顶尖 AI 声音克隆工坊</div>
+              <div class="hero-sub">支持 F5-TTS (MIT 零样本 3 秒中英真克隆 · 本地 RTX GPU) · 兼容 CosyVoice / GPT-SoVITS API · 内置 12 声线即用神经配音</div>
+            </div>
+            <div class="hero-metrics mono">
+              <div class="metric-pill"><small>LOCAL GPU</small><b id="vc-hero-gpu" class="c-mint">探测中…</b></div>
+              <div class="metric-pill"><small>F5-TTS</small><b id="vc-hero-f5" class="c-amber">待部署</b></div>
+              <button onclick="act('open_path',{key:'voice_dl'})" class="btn btn-violet">📂 克隆目录</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="split-64">
+          <!-- Left: Engine Selector + Reference Voice Upload/Mic + Text Input -->
+          <div class="panel-box" style="background:rgba(3,8,20,0.8);border:1px solid rgba(192,132,252,0.34);overflow-y:auto;">
+            <!-- Engine Mode Selector -->
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+              <div id="vc-eng-group" class="mode-switch" style="padding:3px;">
+                <button data-eng="f5" onclick="pickVcEng('f5')" class="mode-btn">🏆 F5-TTS 本地真克隆</button>
+                <button data-eng="api" onclick="pickVcEng('api')" class="mode-btn">🌐 外部开源 API</button>
+                <button data-eng="edge" onclick="pickVcEng('edge')" class="mode-btn active">⚡ 神经配音即用</button>
+              </div>
+              <button id="vc-f5-install-btn" onclick="act('voice_install_f5')" class="btn btn-violet" style="padding:5px 10px;">⚡ 一键部署 F5-TTS (CUDA)</button>
+            </div>
+
+            <!-- F5-TTS / API Reference Audio Capsule -->
+            <div id="vc-ref-panel" class="kpi-tile hidden" style="padding:10px 12px;border-color:rgba(192,132,252,0.36);background:rgba(18,10,36,0.72);display:flex;flex-direction:column;gap:8px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+                <div class="mono c-violet" style="font-size:11px;font-weight:800;">① 参考原声样本（3~15 秒清晰无背景音人声）</div>
+                <div style="display:flex;gap:6px;">
+                  <input id="vc-ref-file" type="file" accept="audio/*,.wav,.mp3,.m4a,.flac,.ogg,.webm" class="hidden" onchange="uploadRefAudioFile(this)" />
+                  <button onclick="document.getElementById('vc-ref-file').click()" class="btn btn-cyan">📂 上传音频</button>
+                  <button id="vc-mic-btn" onclick="toggleMicRecord()" class="btn btn-rose">🎙️ 麦克风录制</button>
+                  <button id="vc-ref-play" onclick="playRefSample()" class="btn hidden" title="试听已加载的参考音色">▶ 试听原声</button>
+                </div>
+              </div>
+              <div id="vc-ref-name" class="mono c-dim" style="font-size:10.5px;">尚未载入参考音色（支持 MP3/WAV/M4A/FLAC 或直接麦克风说话 5 秒）</div>
+              <div>
+                <label class="lbl">参考音频里说的原话（F5-TTS 留空可自动识别，填准了克隆逼真度拉满）</label>
+                <input id="vc-ref-text" class="inp" placeholder="例如：大家好，这是一段用于测试声音克隆的清晰中文参考语音。" />
+              </div>
+            </div>
+
+            <!-- External Open-Source API Config -->
+            <div id="vc-api-panel" class="kpi-tile hidden" style="padding:9px 11px;border-color:rgba(0,212,255,0.34);">
+              <label class="lbl">本地开源声音克隆 API 地址（兼容 CosyVoice / GPT-SoVITS / Fish Speech / Chatterbox）</label>
+              <input id="vc-api-url" class="inp mono" value="http://127.0.0.1:9880" placeholder="http://127.0.0.1:9880 或 http://127.0.0.1:50000/inference_zero_shot" />
+            </div>
+
+            <!-- Instant Edge Neural Voice Controls -->
+            <div id="vc-edge-panel" class="kpi-tile" style="padding:9px 11px;border-color:rgba(0,245,184,0.32);display:flex;flex-direction:column;gap:7px;">
+              <div class="mono c-mint" style="font-size:10.5px;font-weight:800;">⚡ 零显卡免部署神经配音（1 秒出声；需克隆自己/他人音色请点上方「🏆 F5-TTS 本地真克隆」）</div>
+              <div style="display:grid;grid-template-columns:1.6fr 0.7fr 0.7fr;gap:7px;">
+                <div><label class="lbl">选择精品声线</label><select id="vc-edge-voice" class="inp"></select></div>
+                <div>
+                  <label class="lbl">语速</label>
+                  <select id="vc-edge-rate" class="inp mono">
+                    <option value="-20%">0.8x 慢</option><option value="-10%">0.9x</option>
+                    <option value="+0%" selected>1.0x 标准</option>
+                    <option value="+15%">1.15x 略快</option><option value="+30%">1.3x 快</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="lbl">音调</label>
+                  <select id="vc-edge-pitch" class="inp mono">
+                    <option value="-6Hz">低沉</option><option value="-3Hz">微低</option>
+                    <option value="+0Hz" selected>标准</option>
+                    <option value="+3Hz">微高</option><option value="+6Hz">清亮</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- Target Text to Speak -->
+            <div style="flex:1;display:flex;flex-direction:column;min-height:92px;">
+              <label class="lbl">② 输入要让该声音克隆朗读的文案（支持中英混排、标点停顿）</label>
+              <textarea id="vc-gen-text" class="inp" style="flex:1;min-height:80px;resize:none;line-height:1.6;" placeholder="在这里输入任何台词、解说词、播客文案或祝福语… 例如：欢迎来到 DownloadStack 三维空间控制台，这是由开源神经声学引擎生成的超拟真语音！"></textarea>
+            </div>
+
+            <div style="display:flex;gap:6px;align-items:center;">
+              <input id="vc-out-dir" class="inp mono flex-1" placeholder="成品音频保存目录" />
+              <button onclick="pickFolder('voice')" class="btn">📁 选目录</button>
+              <button id="vc-go-btn" onclick="startVoiceSynth()" class="btn btn-violet" style="padding:7px 16px;">✨ 立即生成语音</button>
+              <button onclick="act('voice_cancel')" class="btn btn-rose">■</button>
+            </div>
+          </div>
+
+          <!-- Right: Live Progress + Instant Cloned Voice Player + Install/Inference Terminal -->
+          <div class="panel-box" style="background:rgba(3,8,20,0.8);border:1px solid rgba(0,212,255,0.26);">
+            <div class="box-head">
+              <div class="box-title c-cyan mono">◤ 克隆成品试听 &amp; GPU 推理终端</div>
+              <button onclick="act('voice_clear_log')" class="btn" style="padding:2px 8px;font-size:10px;">清空</button>
+            </div>
+            <div class="kpi-tile" style="padding:10px 12px;display:flex;flex-direction:column;gap:6px;">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;">
+                <div id="vc-status" class="mono c-violet" style="font-size:12px;font-weight:800;">就绪</div>
+                <div class="mono" style="font-size:16px;font-weight:900;color:#fff;"><span id="vc-pct">0.0</span>%</div>
+              </div>
+              <div class="prog-track" style="height:6px;"><div id="vc-bar" class="prog-fill" style="width:0%;background:linear-gradient(90deg,#00d4ff,#c084fc,#ff3d71);"></div></div>
+            </div>
+
+            <div class="kpi-tile" style="padding:10px 12px;border-color:rgba(192,132,252,0.38);background:rgba(16,10,34,0.78);display:flex;flex-direction:column;gap:6px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                <span class="mono c-violet" style="font-size:10.5px;font-weight:800;">🔊 最新合成 / 克隆成品</span>
+                <span id="vc-out-name" class="mono c-mint" style="font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">尚未生成</span>
+              </div>
+              <audio id="vc-audio" controls style="width:100%;"></audio>
+            </div>
+
+            <div id="vc-log-box" class="mono" style="flex:1;min-height:0;overflow-y:auto;border-radius:11px;padding:9px;background:rgba(2,5,14,0.92);border:1px solid rgba(255,255,255,0.08);font-size:10.5px;line-height:1.52;color:#cbd5e1;user-select:text;">
+              提示：你的 RTX GPU 已就绪。点击「⚡ 一键部署 F5-TTS (CUDA)」会在独立 .venv-voice 中安装开源零样本声音克隆；现在也可直接用「⚡ 神经配音即用」秒级体验！
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== GLOBAL FLOATING MINI AUDIO DOCK ==================== -->
+    <div id="mini-player" class="console-glass hidden">
+      <span id="mp-tag" class="tag-pill mono" style="background:rgba(255,61,113,0.22);color:#fda4af;border:1px solid rgba(255,61,113,0.45);">NOW PLAYING</span>
+      <span id="mp-title" class="mono" style="font-size:11.5px;font-weight:700;max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">-</span>
+      <audio id="mp-audio" controls class="flex-1"></audio>
+      <button id="mp-dir-btn" onclick="openCurrentMediaDir()" class="btn" style="padding:3px 9px;">📂 目录</button>
+      <button onclick="closeMiniPlayer()" class="btn btn-rose" style="padding:3px 9px;">✕</button>
+    </div>
+
     <!-- ==================== BOTTOM SLIM TERMINAL ==================== -->
     <footer class="log-bar console-glass">
       <div class="log-row">
         <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;cursor:pointer;" onclick="toggleLogSheet()">
           <span class="led bg-mint led-on" style="width:7px;height:7px;"></span>
-          <div id="ticker" class="mono c-mint" style="font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">正在连接本地控制服务…</div>
+          <div id="ticker" class="mono c-mint" style="font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">正在连接本地控制服务…</div>
         </div>
-        <div style="display:flex;gap:6px;flex-shrink:0;">
-          <button onclick="toggleLogSheet()" id="log-btn" class="btn" style="padding:3px 9px;font-size:11px;">展开日志 ▲</button>
-          <button onclick="act('clear_log')" class="btn" style="padding:3px 9px;font-size:11px;">清空</button>
-          <button onclick="act('export_log')" class="btn btn-cyan" style="padding:3px 9px;font-size:11px;">导出</button>
+        <div style="display:flex;gap:5px;flex-shrink:0;">
+          <button onclick="toggleLogSheet()" id="log-btn" class="btn" style="padding:2.5px 9px;font-size:10.5px;">展开日志 ▲</button>
+          <button onclick="act('clear_log')" class="btn" style="padding:2.5px 8px;font-size:10.5px;">清空</button>
+          <button onclick="act('export_log')" class="btn btn-cyan" style="padding:2.5px 8px;font-size:10.5px;">导出</button>
         </div>
       </div>
       <div id="log-sheet" class="log-sheet"><div id="log-list" class="log-list mono"></div></div>
     </footer>
   </div>
 
-  <!-- RIGHT SLIDE-OVER SETTINGS & TOOLS DRAWER -->
+  <!-- RIGHT SLIDE-OVER SETTINGS DRAWER -->
   <div id="drawer-mask" class="mask hidden" onclick="toggleDrawer()"></div>
   <aside id="drawer" class="drawer console-glass">
-    <div style="display:flex;flex-direction:column;gap:14px;">
-      <div class="box-head" style="padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,0.10);">
-        <div style="font-size:14px;font-weight:700;">⚙ 工具与系统设置</div>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div class="box-head" style="padding-bottom:9px;border-bottom:1px solid rgba(255,255,255,0.10);">
+        <div style="font-size:14px;font-weight:800;">⚙ 工具与全栈目录设置</div>
         <button onclick="toggleDrawer()" class="btn btn-pill" style="padding:4px 10px;">✕</button>
       </div>
       <div>
-        <div class="mono c-cyan" style="font-size:11px;font-weight:700;margin-bottom:8px;">◤ 快捷维护与本地目录</div>
+        <div class="mono c-cyan" style="font-size:10.5px;font-weight:700;margin-bottom:7px;">◤ 快捷维护与成品目录</div>
         <div class="g2">
           <button onclick="act('ports')" class="btn">◎ 端口探测</button>
           <button onclick="act('open_path',{key:'downloads'})" class="btn">📂 总下载目录</button>
+          <button onclick="act('open_path',{key:'music_dl'})" class="btn">🎵 音乐目录</button>
+          <button onclick="act('open_path',{key:'voice_dl'})" class="btn">🎙️ 声音克隆目录</button>
           <button onclick="act('open_path',{key:'aria2_conf'})" class="btn">📝 aria2.conf</button>
-          <button onclick="act('open_path',{key:'aria2_logdir'})" class="btn">📄 Aria2 日志</button>
           <button onclick="act('open_path',{key:'qbit_cfg'})" class="btn">📁 qB 配置</button>
           <button onclick="askConfirm('清理 Aria2 日志？','仅删除日志目录文件，不动配置与任务。',()=>act('clean_logs'))" class="btn btn-amber">🧹 清理日志</button>
-          <button onclick="askConfirm('清理临时缓存？','仅清理面板 cache 目录。',()=>act('clean_cache'))" class="btn btn-amber" style="grid-column:span 2;">🧹 清理面板临时缓存</button>
+          <button onclick="askConfirm('清理临时缓存？','仅清理面板 cache 目录。',()=>act('clean_cache'))" class="btn btn-amber">🧹 清理缓存</button>
         </div>
       </div>
-      <div style="display:flex;flex-direction:column;gap:9px;">
-        <div class="mono c-mint" style="font-size:11px;font-weight:700;">◤ 连接参数（config.json）</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div class="mono c-mint" style="font-size:10.5px;font-weight:700;">◤ 引擎连接与保存目录（config.json）</div>
         <div class="g3">
           <div><label class="lbl">Aria2 主机</label><input id="f-a-host" class="inp mono" /></div>
           <div><label class="lbl">端口</label><input id="f-a-port" class="inp mono" /></div>
@@ -871,23 +1240,16 @@
           <div><label class="lbl">qB 账号</label><input id="f-q-user" class="inp mono" /></div>
           <div><label class="lbl">qB 密码（免密可留空）</label><input id="f-q-pass" type="password" class="inp mono" /></div>
         </div>
-        <div>
-          <label class="lbl">总下载目录</label>
-          <div style="display:flex;gap:6px;"><input id="f-dl-root" class="inp mono flex-1" /><button type="button" onclick="pickFolder('downloads')" class="btn" style="padding:5px 9px;">📁</button></div>
-        </div>
-        <div>
-          <label class="lbl">qB 保存目录</label>
-          <div style="display:flex;gap:6px;"><input id="f-q-save" class="inp mono flex-1" /><button type="button" onclick="pickFolder('qbit')" class="btn" style="padding:5px 9px;">📁</button></div>
-        </div>
-        <div>
-          <label class="lbl">YT 视频保存目录</label>
-          <div style="display:flex;gap:6px;"><input id="f-yt-out" class="inp mono flex-1" /><button type="button" onclick="pickFolder('yt')" class="btn" style="padding:5px 9px;">📁</button></div>
-        </div>
+        <div><label class="lbl">总下载目录</label><div style="display:flex;gap:5px;"><input id="f-dl-root" class="inp mono flex-1" /><button type="button" onclick="pickFolder('downloads')" class="btn">📁</button></div></div>
+        <div><label class="lbl">qB 保存目录</label><div style="display:flex;gap:5px;"><input id="f-q-save" class="inp mono flex-1" /><button type="button" onclick="pickFolder('qbit')" class="btn">📁</button></div></div>
+        <div><label class="lbl">YT 视频保存目录</label><div style="display:flex;gap:5px;"><input id="f-yt-out" class="inp mono flex-1" /><button type="button" onclick="pickFolder('yt')" class="btn">📁</button></div></div>
+        <div><label class="lbl">音乐保存目录</label><div style="display:flex;gap:5px;"><input id="f-music-dir" class="inp mono flex-1" /><button type="button" onclick="pickFolder('music')" class="btn">📁</button></div></div>
+        <div><label class="lbl">声音克隆目录</label><div style="display:flex;gap:5px;"><input id="f-voice-dir" class="inp mono flex-1" /><button type="button" onclick="pickFolder('voice')" class="btn">📁</button></div></div>
         <div><label class="lbl">外部视频脚本</label><input id="f-yt-bat" class="inp mono" /></div>
-        <div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#cbd5e1;padding-top:4px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;font-size:11.5px;color:#cbd5e1;padding-top:3px;">
           <span>开机自启本面板</span><div id="sw-auto-panel" class="sw" onclick="act('toggle_autostart_panel')"><i></i></div>
         </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#cbd5e1;">
+        <div style="display:flex;align-items:center;justify-content:space-between;font-size:11.5px;color:#cbd5e1;">
           <span>开机后台拉起 Aria2</span><div id="sw-auto-aria2" class="sw" onclick="act('toggle_autostart_aria2')"><i></i></div>
         </div>
       </div>
@@ -900,107 +1262,72 @@
 
   <!-- INTERACTIVE USAGE GUIDE MODAL -->
   <div id="guide-wrap" class="modal-wrap hidden" onclick="if(event.target===this)toggleGuide()">
-    <div class="console-glass" style="max-width:780px;width:94vw;max-height:86vh;border-radius:26px;padding:20px;display:flex;flex-direction:column;gap:14px;border-color:rgba(0,245,184,0.36);overflow:hidden;">
+    <div class="console-glass" style="max-width:800px;width:94vw;max-height:86vh;border-radius:26px;padding:20px;display:flex;flex-direction:column;gap:14px;border-color:rgba(0,245,184,0.38);overflow:hidden;">
       <div class="box-head" style="padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,0.10);">
         <div style="display:flex;align-items:center;gap:10px;">
           <span class="led bg-mint led-on"></span>
           <div>
-            <div style="font-size:15px;font-weight:800;color:#fff;">📖 DownloadStack 3D 控制台使用教程</div>
-            <div class="box-sub mono">全引擎上手 · 磁力/视频技巧 · 排错速查（按 Esc 可关闭）</div>
+            <div style="font-size:15px;font-weight:800;color:#fff;">📖 DownloadStack 3D OS 使用教程</div>
+            <div class="box-sub mono">7 大工坊全指南 · 全网搜歌 · 开源声音克隆 · 排错速查（按 Esc 关闭）</div>
           </div>
         </div>
-        <button onclick="toggleGuide()" class="btn btn-pill" style="padding:4px 11px;">✕ 关闭</button>
+        <button onclick="toggleGuide()" class="btn btn-pill">✕ 关闭</button>
       </div>
-
-      <!-- Guide Tabs -->
       <div style="display:flex;gap:6px;flex-wrap:wrap;" id="guide-tabs">
         <button onclick="pickGuide('start',this)" data-g="start" class="btn btn-mint btn-pill">🚀 1 分钟上手</button>
-        <button onclick="pickGuide('dl',this)" data-g="dl" class="btn btn-pill">⚡ 直链 &amp; BT</button>
+        <button onclick="pickGuide('media',this)" data-g="media" class="btn btn-pill">🎵 搜歌 &amp; 🎙️ 声音克隆</button>
         <button onclick="pickGuide('magyt',this)" data-g="magyt" class="btn btn-pill">🧲 磁力 &amp; 🎬 视频</button>
         <button onclick="pickGuide('fix',this)" data-g="fix" class="btn btn-pill">🩺 排错 &amp; 目录</button>
       </div>
-
-      <!-- Guide Body -->
       <div style="flex:1;overflow-y:auto;padding-right:4px;font-size:12.5px;line-height:1.75;color:#dbeafe;">
-        <!-- TAB 1: Quick Start -->
         <div id="g-start" style="display:flex;flex-direction:column;gap:10px;">
-          <div class="kpi-tile" style="padding:12px 14px;border-color:rgba(0,245,184,0.28);">
-            <div class="c-mint mono" style="font-weight:700;margin-bottom:4px;">0 · 先看状态灯（3 种状态一眼看懂）</div>
-            <div><b class="c-mint">● 绿 / 青 / 紫亮灯</b>：服务在线，可随时投递任务。</div>
-            <div><b class="c-dim">● 灰灯 OFFLINE</b>：服务未启动，点击对应卡片上的「▶ 启动」即可拉起。</div>
-            <div><b class="c-rose">● 红灯 ERROR</b>：端口已通但认证或接口异常，点该卡的「⚡ 测试」并展开底部日志查看原因。</div>
+          <div class="kpi-tile" style="padding:12px 14px;border-color:rgba(0,212,255,0.3);">
+            <div class="c-cyan mono" style="font-weight:700;margin-bottom:4px;">1 · 7 大专属工坊（每个面板都有独立 3D 动效与输入框）</div>
+            <div><b>✦ 控制台</b>（双模式直投/搜歌 + 最近成品秒开舱 + 四大 3D 硬件台）· <b>⚡ 队列</b>（轨道雷达 + 快速入队）· <b>🌐 AriaNg</b>（光速同源直投）· <b>🧲 磁力</b>（磁力秒解/修 DHT）· <b>🎬 视频</b>（全平台直下 + 2x 超分）· <b>🎵 音乐</b>（全网任意搜歌无损下）· <b>🎙️ 声音克隆</b>（F5-TTS 本地 GPU 克隆 + 神经配音）。</div>
           </div>
-          <div class="kpi-tile" style="padding:12px 14px;border-color:rgba(0,212,255,0.28);">
-            <div class="c-cyan mono" style="font-weight:700;margin-bottom:4px;">1 · 最省事用法：中枢「万能极速直投舱」</div>
-            <div>在 3D 控制台正中间输入框粘贴任意链接，系统会自动识别并分流：</div>
-            <div>· <b>HTTP / HTTPS 直链</b> → 自动交给 <b class="c-mint">Aria2</b> 多线程高速下载</div>
-            <div>· <b>magnet:? 磁力 / 40 位 InfoHash</b> → 自动补全公共 Tracker 并预取 <code class="mono">.torrent</code>，秒下不卡元数据</div>
-            <div>· <b>YouTube / B站 / 抖音 / 小红书 链接</b> → 自动调用 <b class="c-amber">yt-dlp</b> 下载视频</div>
-          </div>
-          <div class="kpi-tile" style="padding:12px 14px;">
-            <div class="c-violet mono" style="font-weight:700;margin-bottom:4px;">2 · 顶部 5 大工作台</div>
-            <div><b>✦ 3D 控制台</b>（全局监控与一键启停） · <b>⚡ 任务队列</b>（暂停/继续/删除真实任务） · <b>🌐 内置 AriaNg</b>（同源免端口报错） · <b>🧲 磁力工坊</b>（磁力解析与 DHT 修复） · <b>🎬 YT 视频</b>（画质、Cookies 与 2x 超分）。</div>
+          <div class="kpi-tile" style="padding:12px 14px;border-color:rgba(0,245,184,0.3);">
+            <div class="c-mint mono" style="font-weight:700;margin-bottom:4px;">2 · 所有下载与合成均支持「📁 选目录」</div>
+            <div>每个工坊输入框旁都配有系统原生 <b>「📁 选目录」</b> 按钮，点击即可把视频、歌曲、种子或克隆语音保存到任意盘符与文件夹。</div>
           </div>
         </div>
-
-        <!-- TAB 2: Aria2 & qBittorrent -->
-        <div id="g-dl" class="hidden" style="display:flex;flex-direction:column;gap:10px;">
-          <div class="kpi-tile" style="padding:12px 14px;border-color:rgba(0,245,184,0.28);">
-            <div class="c-mint mono" style="font-weight:700;margin-bottom:4px;">⚡ 普通文件 / 直链下载（Aria2 + AriaNg）</div>
-            <div>1. 底部 <b>ARIA2</b> 卡片点「▶ 启动」让状态灯变绿。</div>
-            <div>2. 直接在中间直投舱粘链接回车，或点顶部「🌐 内置 AriaNg」/ 卡片「↗ 跳转 AriaNg」（已同源挂载并自动注入 RPC Token，无需手动填密钥）。</div>
-            <div>3. 支持断点续传，所有任务都可在「⚡ 任务队列」里暂停、继续或移除。</div>
+        <div id="g-media" class="hidden" style="display:flex;flex-direction:column;gap:10px;">
+          <div class="kpi-tile" style="padding:12px 14px;border-color:rgba(255,61,113,0.36);">
+            <div class="c-rose mono" style="font-weight:700;margin-bottom:4px;">🎵 全网任意歌曲检索 &amp; 无损下载</div>
+            <div>1. 进入顶部 <b>「🎵 音乐」</b>（或在主页切换「🎵 搜歌直下」），输入任意歌名、歌手或歌词片段回车。</div>
+            <div>2. 支持 <b>全网聚合 / 网易云 / B站 / YouTube Music</b>，可选 <b>MP3 320K / FLAC 无损 / WAV / M4A</b>，自动内嵌封面和歌手元信息。</div>
+            <div>3. 点击每首歌右侧「⬇ 下载」，完成后自动载入右侧与底部 <b>Hi-Fi 试听台</b>，随时播放。</div>
           </div>
-          <div class="kpi-tile" style="padding:12px 14px;border-color:rgba(0,212,255,0.28);">
-            <div class="c-cyan mono" style="font-weight:700;margin-bottom:4px;">🌐 BT / PT 种子下载（qBittorrent）</div>
-            <div>1. 底部 <b>qBITTORRENT</b> 卡片点「▶ 启动」→ 点「↗ 跳转 WebUI」打开管理页。</div>
-            <div>2. 支持直接拖入 <code class="mono">.torrent</code> 文件，或在「🧲 磁力工坊」中一键增强投递至 qBittorrent。</div>
-            <div>3. 若你在 qBittorrent 开启了本机免密（<code class="mono">LocalHostAuth=false</code>），本面板会自动免密探测；否则在右上角「⚙ 设置」填入 WebUI 账号密码即可。</div>
-            <div class="c-amber" style="font-size:11.5px;margin-top:4px;">提示：PT 站下载完成后请保持做种，不要随意删除种子任务。</div>
+          <div class="kpi-tile" style="padding:12px 14px;border-color:rgba(192,132,252,0.36);">
+            <div class="c-violet mono" style="font-weight:700;margin-bottom:4px;">🎙️ 开源 AI 声音克隆（F5-TTS + 外部 API + 神经配音）</div>
+            <div>1. <b>本地零样本真克隆（F5-TTS · MIT 开源）</b>：点右上「⚡ 一键部署 F5-TTS (CUDA)」，会在独立 <code class="mono">.venv-voice</code> 中自动装好 PyTorch CUDA + F5-TTS（绝不污染主环境）。部署完上传 3~15 秒人声或点「🎙️ 麦克风录制」，输入任何台词即可克隆任意人的音色！</div>
+            <div>2. <b>外部开源 API 模式</b>：如果你本机已启动 CosyVoice 3 / GPT-SoVITS / Fish Speech / Chatterbox API，填入地址即可直连调用。</div>
+            <div>3. <b>⚡ 神经配音即用</b>：无需等模型部署，内置 12 款高拟真中文/方言/英/日声线，1 秒立即可出片。</div>
           </div>
         </div>
-
-        <!-- TAB 3: Magnet & YT Video -->
         <div id="g-magyt" class="hidden" style="display:flex;flex-direction:column;gap:10px;">
           <div class="kpi-tile" style="padding:12px 14px;border-color:rgba(168,85,247,0.34);">
-            <div class="c-violet mono" style="font-weight:700;margin-bottom:4px;">🧲 磁力链接 / DHT 加速（磁力工坊）</div>
-            <div>1. 切换到顶部 <b>「🧲 磁力工坊」</b>，粘贴 <code class="mono">magnet:?</code> 或纯 40 位 InfoHash，点「🔍 校验解析」可预览 Hash 与 Tracker。</div>
-            <div>2. 点击「🧲 增强投递至 qBittorrent」或「⚡ 增强投递至 Aria2」，后台会自动补全公共高速 Tracker，并优先预取经 SHA1 校验的 <code class="mono">.torrent</code>，跳过漫长的元数据等待。</div>
-            <div>3. 若发现 DHT 节点为 0 或磁力没速度，点击「🔧 一键修复 DHT/磁力」与「🌐 更新并热载 Tracker」即可即时生效。</div>
+            <div class="c-violet mono" style="font-weight:700;margin-bottom:4px;">🧲 磁力工坊</div>
+            <div>支持 <code class="mono">magnet:?</code> 与 40 位 InfoHash，自动补全公共 Tracker 并预取经 SHA1 校验的 <code class="mono">.torrent</code>，跳过漫长元数据卡顿。</div>
           </div>
           <div class="kpi-tile" style="padding:12px 14px;border-color:rgba(255,179,71,0.34);">
-            <div class="c-amber mono" style="font-weight:700;margin-bottom:4px;">🎬 平台视频下载 &amp; 2x AI 超分（YT 视频工坊）</div>
-            <div>1. 切换到顶部 <b>「🎬 YT 视频」</b>，粘贴视频链接或抖音/小红书分享口令（会自动提取其中的链接）。</div>
-            <div>2. 选择清晰度（<b>最佳 MP4 / ≤1080P / ≤720P / 仅音频 MP3</b>），系统会自动透传当前系统代理。</div>
-            <div>3. <b>遇抖音 / 小红书 403 或提示登录？</b> 在「登录态 / Cookies」下拉框选择你已登录该站的 Firefox / Chrome / Edge，或指定导出的 <code class="mono">cookies.txt</code>（会自动记住）。</div>
-            <div>4. 打开 <b>「⚡ 2x AI 超分」</b> 开关后，若本机检测到 Video2X 将在下载完成后自动超分（未安装会自动跳过，不影响视频保存）。</div>
+            <div class="c-amber mono" style="font-weight:700;margin-bottom:4px;">🎬 YT 视频工坊</div>
+            <div>国内站点（抖音 / B站 / 小红书）自动直连免 403；海外站点（YouTube / X / TikTok）自动透传系统代理，遇 Edge/Chrome Cookie 锁库自动免锁库救援。</div>
           </div>
         </div>
-
-        <!-- TAB 4: Troubleshoot & Paths -->
         <div id="g-fix" class="hidden" style="display:flex;flex-direction:column;gap:10px;">
-          <div class="kpi-tile" style="padding:12px 14px;border-color:rgba(255,61,113,0.3);">
-            <div class="c-rose mono" style="font-weight:700;margin-bottom:4px;">🩺 三步快速排错</div>
-            <div>1. 点击顶部 <b>「🩺 自检」</b>，一次性体检全部端口（18550 / 6800 / 8080）、核心文件与 RPC/WebUI 连通性。</div>
-            <div>2. 展开底部日志条，红色 <code class="mono">[ERROR]</code> 行会直接标明失败原因（如密码错、端口占用、缺组件）。</div>
-            <div>3. 面板只操作自己记录的 PID 或通过官方 API 优雅关闭，点击「■ 全停」绝不会误杀你其他程序。</div>
-          </div>
           <div class="kpi-tile mono" style="padding:12px 14px;font-size:11.5px;">
-            <div class="c-cyan" style="font-weight:700;margin-bottom:6px;">📂 当前本机成品与配置路径</div>
-            <div><span class="c-dim">总下载目录：</span><span id="gp-dl" class="c-mint">-</span></div>
-            <div><span class="c-dim">qB 种子目录：</span><span id="gp-qb" class="c-cyan">-</span></div>
-            <div><span class="c-dim">YT 视频目录：</span><span id="gp-yt" class="c-amber">-</span></div>
-            <div><span class="c-dim">Aria2 配置：</span><span id="gp-a2" class="c-dim">-</span></div>
+            <div class="c-cyan" style="font-weight:700;margin-bottom:6px;">📂 当前本机目录</div>
+            <div><span class="c-dim">总下载：</span><span id="gp-dl" class="c-mint">-</span></div>
+            <div><span class="c-dim">qB 种子：</span><span id="gp-qb" class="c-cyan">-</span></div>
+            <div><span class="c-dim">YT 视频：</span><span id="gp-yt" class="c-amber">-</span></div>
+            <div><span class="c-dim">音乐成品：</span><span id="gp-mu" class="c-rose">-</span></div>
+            <div><span class="c-dim">声音克隆：</span><span id="gp-vc" class="c-violet">-</span></div>
           </div>
         </div>
       </div>
-
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.10);flex-wrap:wrap;">
-        <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          <button onclick="toggleGuide();switchView('magnet',document.querySelector('[data-view=magnet]'))" class="btn btn-violet">去磁力工坊</button>
-          <button onclick="toggleGuide();switchView('yt',document.querySelector('[data-view=yt]'))" class="btn btn-amber">去 YT 视频</button>
-          <button onclick="toggleGuide();act('selfcheck')" class="btn btn-cyan">🩺 一键自检</button>
-        </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.10);">
+        <button onclick="toggleGuide();switchView('music')" class="btn btn-rose">去音乐工坊</button>
+        <button onclick="toggleGuide();switchView('voice')" class="btn btn-violet">去声音克隆</button>
         <button onclick="toggleGuide()" class="btn btn-mint btn-pill">我知道了</button>
       </div>
     </div>
@@ -1020,17 +1347,21 @@
 
   <script>
     const S = {
-      a: { on:false, err:'', dn:0, up:0, task:0, conn:0 },
-      q: { on:false, err:'', dn:0, up:0, tor:0, seed:0 },
+      a: { on:false, err:'', ver:'', dn:0, up:0, task:0, conn:0 },
+      q: { on:false, err:'', dn:0, up:0, tor:0, seed:0, dht:0 },
       y: { on:false, upscale:false },
       m: { ok:false, tracker_count:0, cached_trackers:0, dht_dat_size:0 },
       tasks: { aria2:[], qbit:[] },
       urls: { ariang:'/ariang/index.html', qbit:'http://127.0.0.1:8080/' },
       waveA: Array(40).fill(0), waveQ: Array(40).fill(0),
-      cfgLoaded: false, ariangLoaded: false, focus: -1, boost: 0, curView: 'cockpit'
+      peakDn: 0, cfgLoaded: false, ariangLoaded: false, focus: -1, boost: 0, curView: 'cockpit',
+      omniMode: 'dl', omniDir: '', muSrc: 'all', muFmt: 'mp3', vcEng: 'edge',
+      lastMusicFile: '', lastVoiceFile: '', curMediaPath: '', refWavPath: '',
+      voicesPopulated: false, musicRunning: false, voiceRunning: false, recording: false
     };
 
-    const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    const escJs = s => String(s || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
     function fmt(bps) {
       let n = Number(bps) || 0; const u = ['B/s','KiB/s','MiB/s','GiB/s']; let i = 0;
       while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
@@ -1047,38 +1378,33 @@
       const [bd, cl] = map[tone] || map.cyan;
       const el = document.createElement('div');
       el.className = 'toast console-glass'; el.style.borderColor = bd; el.style.color = cl; el.textContent = msg;
-      box.appendChild(el); S.boost = Math.min(2.8, S.boost + 0.95);
-      setTimeout(() => { el.style.opacity='0'; el.style.transform='translateY(-10px)'; setTimeout(()=>el.remove(), 280); }, 2300);
+      box.appendChild(el); S.boost = Math.min(2.8, S.boost + 0.9);
+      setTimeout(() => { el.style.opacity='0'; el.style.transform='translateY(-10px)'; setTimeout(()=>el.remove(), 260); }, 2500);
     }
 
-    // ==================== NAVIGATION & REAL FOREGROUND JUMPS ====================
+    // ==================== NAVIGATION ====================
+    const VIEWS = ['cockpit','tasks','ariang','magnet','yt','music','voice'];
     function moveNavPill(btn) {
       const p = document.getElementById('navPill'); if (!btn || !p) return;
       p.style.left = btn.offsetLeft + 'px'; p.style.width = btn.offsetWidth + 'px';
     }
     function switchView(v, btn) {
       S.curView = v;
-      ['cockpit','tasks','ariang','magnet','yt'].forEach(k => document.getElementById('view-' + k).classList.toggle('hidden', k !== v));
+      VIEWS.forEach(k => document.getElementById('view-' + k).classList.toggle('hidden', k !== v));
       document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === v));
       moveNavPill(btn || document.querySelector(`.nav-btn[data-view="${v}"]`));
       if (v === 'ariang' && !S.ariangLoaded) { document.getElementById('ariangFrame').src = S.urls.ariang; S.ariangLoaded = true; }
-      if (v === 'cockpit') setTimeout(resizeAllCanvases, 30);
+      setTimeout(resizeAllCanvases, 30);
     }
     function reloadAriaNgFrame() {
       const f = document.getElementById('ariangFrame'); f.src = 'about:blank';
       setTimeout(() => { f.src = S.urls.ariang; }, 40); toast('已刷新内置 AriaNg', 'cyan');
     }
-    function jumpAriaNg() {
-      window.open(S.urls.ariang || '/ariang/index.html', '_blank');
-      act('ariang', {}, true); toast('已在新窗口打开 AriaNg（同源零延迟）', 'mint');
-    }
-    function jumpQbit() {
-      window.open(S.urls.qbit || 'http://127.0.0.1:8080/', '_blank');
-      act('webui', {}, true); toast('已在新窗口打开 qBittorrent WebUI', 'cyan');
-    }
+    function jumpAriaNg() { window.open(S.urls.ariang || '/ariang/index.html', '_blank'); act('ariang', {}, true); toast('已在新窗口打开 AriaNg', 'mint'); }
+    function jumpQbit() { window.open(S.urls.qbit || 'http://127.0.0.1:8080/', '_blank'); act('webui', {}, true); toast('已在新窗口打开 qB WebUI', 'cyan'); }
 
     async function act(action, payload = {}, silentOpen = false) {
-      S.boost = Math.min(2.8, S.boost + 0.8);
+      S.boost = Math.min(2.8, S.boost + 0.75);
       try {
         const res = await fetch('/api/action', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1091,7 +1417,52 @@
       } catch (e) { toast('通信异常，请确认面板服务运行中', 'rose'); return null; }
     }
 
+    // ==================== GLOBAL & STUDIO AUDIO PLAYER ====================
+    function playLocalAudio(filePath, title, tag='NOW PLAYING', targetAudioId='') {
+      if (!filePath) return;
+      S.curMediaPath = filePath;
+      const src = '/api/media?path=' + encodeURIComponent(filePath) + '&t=' + Date.now();
+      const mp = document.getElementById('mini-player');
+      const mpa = document.getElementById('mp-audio');
+      document.getElementById('mp-tag').textContent = tag;
+      document.getElementById('mp-title').textContent = title || filePath.split(/[\\/]/).pop();
+      mp.classList.remove('hidden');
+      mpa.src = src; mpa.play().catch(()=>{});
+      if (targetAudioId) {
+        const ta = document.getElementById(targetAudioId);
+        if (ta) { ta.src = src; }
+      }
+      toast('▶ 正在站内播放：' + (title || '音频'), 'rose');
+    }
+    function closeMiniPlayer() {
+      const mpa = document.getElementById('mp-audio'); mpa.pause(); mpa.src = '';
+      document.getElementById('mini-player').classList.add('hidden');
+    }
+    function openCurrentMediaDir() {
+      if (S.curMediaPath) act('open_path', { key:'custom', path: S.curMediaPath, reveal: true });
+    }
+
+    // ==================== OMNI-DROP / SONG DUAL MODE + FOLDER PICKERS ====================
+    function setOmniMode(m) {
+      S.omniMode = m;
+      document.getElementById('omni-mode-dl').className = 'mode-btn' + (m==='dl' ? ' active' : '');
+      document.getElementById('omni-mode-song').className = 'mode-btn' + (m==='song' ? ' active-rose' : '');
+      const inp = document.getElementById('omni-url'), tag = document.getElementById('omni-tag'), go = document.getElementById('omni-go-btn');
+      const wrap = document.getElementById('omni-bar-wrap');
+      if (m === 'song') {
+        tag.textContent = '🎵 全网搜歌'; tag.style.color = '#fda4af';
+        inp.placeholder = '输入任意歌名、歌手或歌词片段，回车立即跳转到音乐工坊搜索下载…';
+        go.textContent = '🔍 搜歌'; go.className = 'btn btn-rose';
+        wrap.style.setProperty('--b1', '#ff3d71'); wrap.style.setProperty('--b2', '#a855f7');
+      } else {
+        inp.placeholder = '粘贴直链 / magnet:? / InfoHash / 抖音B站YouTube链接，回车立即开下…';
+        go.textContent = '⚡ 投递'; go.className = 'btn btn-mint';
+        wrap.style.setProperty('--b1', '#00f5b8'); wrap.style.setProperty('--b2', '#00d4ff');
+        detectOmni();
+      }
+    }
     function detectOmni() {
+      if (S.omniMode === 'song') return;
       const v = (document.getElementById('omni-url').value || '').trim();
       const tag = document.getElementById('omni-tag');
       if (!v) { tag.textContent = '智能识别'; tag.style.color='#a7f3d0'; return; }
@@ -1102,42 +1473,62 @@
         tag.textContent = '🎬 YT 视频'; tag.style.color = '#fde68a';
       } else { tag.textContent = '⚡ Aria2 直链'; tag.style.color = '#a7f3d0'; }
     }
-    let omniSaveDir = '';
     async function pickFolder(target) {
       const initMap = {
         yt: document.getElementById('yt-out-dir')?.value || '',
         magnet: document.getElementById('mag-dir')?.value || '',
+        music: document.getElementById('mu-out-dir')?.value || '',
+        voice: document.getElementById('vc-out-dir')?.value || '',
+        tasks: document.getElementById('t-quick-dir')?.value || '',
+        ariang: document.getElementById('ag-quick-dir')?.value || '',
         qbit: document.getElementById('f-q-save')?.value || '',
         downloads: document.getElementById('f-dl-root')?.value || '',
-        omni: omniSaveDir || ''
+        omni: S.omniDir || ''
       };
       const j = await act('pick_folder', { target, initial: initMap[target] || '' }, true);
       if (!j || !j.ok || !j.path) return;
       const p = j.path;
-      if (target === 'yt') {
-        document.getElementById('yt-out-dir').value = p;
-        document.getElementById('f-yt-out').value = p;
-      } else if (target === 'magnet') {
-        document.getElementById('mag-dir').value = p;
-      } else if (target === 'qbit') {
-        document.getElementById('f-q-save').value = p;
-      } else if (target === 'downloads') {
-        document.getElementById('f-dl-root').value = p;
-      } else if (target === 'omni') {
-        omniSaveDir = p;
+      const bind = { yt:['yt-out-dir','f-yt-out'], magnet:['mag-dir'], music:['mu-out-dir','f-music-dir'],
+                     voice:['vc-out-dir','f-voice-dir'], tasks:['t-quick-dir'], ariang:['ag-quick-dir'],
+                     qbit:['f-q-save'], downloads:['f-dl-root'] };
+      if (bind[target]) bind[target].forEach(id => { const el = document.getElementById(id); if (el) el.value = p; });
+      if (target === 'omni') {
+        S.omniDir = p;
         const b = document.getElementById('omni-dir-btn');
-        const shortName = p.split(/[\\/]/).filter(Boolean).pop() || p;
-        b.textContent = '📁 ' + shortName.slice(0, 10);
-        b.title = '当前保存目录：' + p + '（点击更改）';
-        b.className = 'btn btn-cyan';
+        const sn = p.split(/[\\/]/).filter(Boolean).pop() || p;
+        b.textContent = '📁 ' + sn.slice(0, 9); b.title = '保存目录：' + p; b.className = 'btn btn-cyan';
       }
       toast('已选定保存目录：' + p, 'mint');
     }
     async function submitOmni() {
-      const inp = document.getElementById('omni-url'), url = (inp.value || '').trim();
-      if (!url) { toast('请先粘贴链接或磁力 Hash', 'amber'); inp.focus(); return; }
-      const j = await act('add_download', { url, engine: 'auto', save_dir: omniSaveDir });
+      const inp = document.getElementById('omni-url'), v = (inp.value || '').trim();
+      if (!v) { toast(S.omniMode==='song' ? '请先输入歌名或歌手' : '请先粘贴链接或磁力 Hash', 'amber'); inp.focus(); return; }
+      if (S.omniMode === 'song') {
+        document.getElementById('mu-query').value = v;
+        inp.value = '';
+        switchView('music');
+        searchMusicUI();
+        return;
+      }
+      const j = await act('add_download', { url: v, engine: 'auto', save_dir: S.omniDir });
       if (j && j.ok) { inp.value = ''; detectOmni(); }
+    }
+
+    // ==================== TASKS / ARIANG / MAGNET / YT ACTIONS ====================
+    async function submitTaskQuick() {
+      const inp = document.getElementById('t-quick-url'), url = (inp.value || '').trim();
+      if (!url) { toast('请先粘贴链接或磁力', 'amber'); inp.focus(); return; }
+      const engine = document.getElementById('t-quick-eng').value;
+      const save_dir = (document.getElementById('t-quick-dir').value || '').trim();
+      const j = await act('add_download', { url, engine, save_dir });
+      if (j && j.ok) inp.value = '';
+    }
+    async function submitAriaNgQuick() {
+      const inp = document.getElementById('ag-quick-url'), url = (inp.value || '').trim();
+      if (!url) { toast('请先粘贴要交给 Aria2 的链接', 'amber'); inp.focus(); return; }
+      const save_dir = (document.getElementById('ag-quick-dir').value || '').trim();
+      const j = await act('add_download', { url, engine: 'aria2', save_dir });
+      if (j && j.ok) inp.value = '';
     }
     async function parseMagnetUI() {
       const raw = (document.getElementById('mag-input').value || '').trim();
@@ -1145,11 +1536,10 @@
       const box = document.getElementById('mag-result');
       if (!j || !j.ok) { box.innerHTML = `<span class="c-rose">✘ 解析失败：${esc(j?.msg || '无效磁力或 InfoHash')}</span>`; return; }
       const info = j.info || {};
-      box.innerHTML = `
-        <div class="c-mint">✔ 磁力校验通过（投递时将自动补全高可用 Tracker 并尝试秒级预取种子）</div>
+      box.innerHTML = `<div class="c-mint">✔ 磁力校验通过（将自动补全高速 Tracker 并预取 .torrent）</div>
         <div><span class="c-dim">InfoHash：</span><span class="c-cyan">${esc(info.infohash)}</span></div>
         <div><span class="c-dim">资源名称：</span>${esc(info.name || '（待获取元数据）')}</div>
-        <div><span class="c-dim">原链 Tracker：</span>${(info.trackers || []).length} 个 · <span class="c-violet">自动补全公共高速 Tracker</span></div>`;
+        <div><span class="c-dim">原链 Tracker：</span>${(info.trackers || []).length} 个</div>`;
     }
     async function submitMagnet(engine) {
       const inp = document.getElementById('mag-input'), url = (inp.value || '').trim();
@@ -1158,25 +1548,150 @@
       const j = await act('add_download', { url, engine, save_dir });
       if (j && j.ok) inp.value = '';
     }
+
     let ytQuality = 'best', ytPrefsLoaded = false, pollFail = 0;
-    function pickYtQ(q, btn) {
+    function pickYtQ(q) {
       ytQuality = q;
-      document.querySelectorAll('#yt-q-group button').forEach(b => {
-        b.className = (b.dataset.q === q) ? 'btn btn-amber' : 'btn';
-      });
+      document.querySelectorAll('#yt-q-group button').forEach(b => { b.className = (b.dataset.q === q) ? 'btn btn-amber' : 'btn'; });
     }
     function toggleYtCookieFile() {
-      const v = document.getElementById('yt-cookies').value;
-      document.getElementById('yt-cookie-path-wrap').classList.toggle('hidden', v !== 'file');
+      document.getElementById('yt-cookie-path-wrap').classList.toggle('hidden', document.getElementById('yt-cookies').value !== 'file');
     }
     async function startYtStudio() {
       const url = (document.getElementById('yt-url').value || '').trim();
       if (!url) { toast('请先粘贴视频链接或分享口令', 'amber'); document.getElementById('yt-url').focus(); return; }
-      const cookies = document.getElementById('yt-cookies').value;
-      const cookies_file = (document.getElementById('yt-cookies-file').value || '').trim();
-      const save_dir = (document.getElementById('yt-out-dir')?.value || '').trim();
-      await act('yt_download', { url, quality: ytQuality, cookies, cookies_file, save_dir, upscale: !!S.y.upscale });
+      await act('yt_download', {
+        url, quality: ytQuality,
+        cookies: document.getElementById('yt-cookies').value,
+        cookies_file: (document.getElementById('yt-cookies-file').value || '').trim(),
+        save_dir: (document.getElementById('yt-out-dir').value || '').trim(),
+        upscale: !!S.y.upscale
+      });
     }
+
+    // ==================== MUSIC STUDIO ACTIONS ====================
+    function pickMuSrc(src) {
+      S.muSrc = src;
+      document.querySelectorAll('#mu-src-group button').forEach(b => { b.className = 'mode-btn' + (b.dataset.src === src ? ' active-rose' : ''); });
+    }
+    function pickMuFmt(fmt) {
+      S.muFmt = fmt;
+      document.querySelectorAll('#mu-fmt-group button').forEach(b => { b.className = 'mode-btn' + (b.dataset.fmt === fmt ? ' active' : ''); });
+      const labels = { mp3:'MP3 320K', flac:'FLAC 无损', wav:'WAV 原音', m4a:'M4A AAC' };
+      document.getElementById('mu-hero-fmt').textContent = labels[fmt] || fmt.toUpperCase();
+    }
+    async function searchMusicUI() {
+      const q = (document.getElementById('mu-query').value || '').trim();
+      if (!q) { toast('请输入歌名、歌手或歌词片段', 'amber'); document.getElementById('mu-query').focus(); return; }
+      const btn = document.getElementById('mu-search-btn');
+      btn.disabled = true; btn.textContent = '⏳ 搜索中…';
+      try {
+        const j = await act('music_search', { query: q, source: S.muSrc }, true);
+        if (j && j.results) { renderMusicResults(j.results); toast(j.msg || ('找到 ' + j.results.length + ' 首歌曲'), j.results.length ? 'mint' : 'amber'); }
+      } finally { btn.disabled = false; btn.textContent = '🔍 搜全网'; }
+    }
+    function renderMusicResults(list) {
+      document.getElementById('mu-hero-cnt').textContent = (list?.length || 0) + ' 首';
+      const box = document.getElementById('mu-results');
+      if (!list || !list.length) {
+        box.innerHTML = '<div style="margin:auto;text-align:center;color:#64748b;font-size:12px;">未找到结果，试试更短的歌名或切换音源</div>';
+        return;
+      }
+      box.innerHTML = list.map((s, idx) => {
+        const sc = s.source === '网易云' ? 'rgba(255,61,113,0.22);color:#fda4af' : (s.source === 'B站' ? 'rgba(0,212,255,0.2);color:#67e8f9' : 'rgba(168,85,247,0.22);color:#d8b4fe');
+        return `<div class="song-row">
+          <span class="mono c-dim" style="font-size:10.5px;width:18px;text-align:center;">${String(idx+1).padStart(2,'0')}</span>
+          <span class="tag-pill mono" style="background:${sc};">${esc(s.source)}</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:12px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(s.title)}</div>
+            <div class="mono" style="font-size:10px;color:#8ea7c7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(s.artist)}${s.album ? ' · ' + esc(s.album) : ''}</div>
+          </div>
+          <span class="mono c-dim" style="font-size:10.5px;">${esc(s.duration || '--:--')}</span>
+          <button onclick="downloadSongItem(${idx})" class="btn btn-rose" style="padding:4.5px 11px;">⬇ ${S.muFmt.toUpperCase()}</button>
+        </div>`;
+      }).join('');
+      S._musicList = list;
+    }
+    async function downloadSongItem(idx) {
+      const s = (S._musicList || [])[idx]; if (!s) return;
+      const save_dir = (document.getElementById('mu-out-dir').value || '').trim();
+      await act('music_download', { url: s.url || '', query: s.query || s.title, title: s.title, artist: s.artist, fmt: S.muFmt, save_dir });
+    }
+
+    // ==================== VOICE CLONING STUDIO ACTIONS ====================
+    function pickVcEng(eng) {
+      S.vcEng = eng;
+      document.querySelectorAll('#vc-eng-group button').forEach(b => { b.className = 'mode-btn' + (b.dataset.eng === eng ? ' active' : ''); });
+      document.getElementById('vc-ref-panel').classList.toggle('hidden', eng === 'edge');
+      document.getElementById('vc-api-panel').classList.toggle('hidden', eng !== 'api');
+      document.getElementById('vc-edge-panel').classList.toggle('hidden', eng !== 'edge');
+      const go = document.getElementById('vc-go-btn');
+      go.textContent = eng === 'edge' ? '✨ 生成神经配音' : (eng === 'f5' ? '🧬 F5-TTS 开始克隆' : '🌐 API 克隆合成');
+    }
+    async function uploadRefAudioFile(input) {
+      const f = input.files?.[0]; if (!f) return;
+      await sendRefAudioBlob(f, f.name);
+      input.value = '';
+    }
+    async function sendRefAudioBlob(blob, filename) {
+      toast('正在上传并标准化参考音色…', 'cyan');
+      try {
+        const res = await fetch('/api/upload_ref?name=' + encodeURIComponent(filename), { method:'POST', body: blob });
+        const j = await res.json();
+        toast(j.msg || (j.ok ? '已载入参考音色' : '上传失败'), j.ok ? 'mint' : 'rose');
+        if (j.ok && j.ref_wav) {
+          S.refWavPath = j.ref_wav;
+          document.getElementById('vc-ref-name').textContent = '✔ 已载入：' + (j.ref_name || filename);
+          document.getElementById('vc-ref-name').className = 'mono c-mint';
+          document.getElementById('vc-ref-play').classList.remove('hidden');
+        }
+        await pollState();
+      } catch (e) { toast('上传参考音频失败', 'rose'); }
+    }
+    let mediaRec = null, recChunks = [], recTimer = null, recSec = 0;
+    async function toggleMicRecord() {
+      const btn = document.getElementById('vc-mic-btn');
+      if (S.recording && mediaRec) {
+        mediaRec.stop(); S.recording = false; clearInterval(recTimer);
+        btn.classList.remove('rec-pulse'); btn.textContent = '🎙️ 麦克风录制';
+        return;
+      }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        recChunks = []; recSec = 0;
+        mediaRec = new MediaRecorder(stream);
+        mediaRec.ondataavailable = e => { if (e.data.size > 0) recChunks.push(e.data); };
+        mediaRec.onstop = async () => {
+          stream.getTracks().forEach(t => t.stop());
+          const blob = new Blob(recChunks, { type: mediaRec.mimeType || 'audio/webm' });
+          await sendRefAudioBlob(blob, 'mic_record_' + Date.now() + '.webm');
+        };
+        mediaRec.start(); S.recording = true;
+        btn.classList.add('rec-pulse'); btn.textContent = '⏹ 停止录制 (0s)';
+        recTimer = setInterval(() => {
+          recSec++; btn.textContent = `⏹ 停止录制 (${recSec}s)`;
+          if (recSec >= 15 && S.recording) toggleMicRecord();
+        }, 1000);
+      } catch (e) { toast('无法访问麦克风，请允许浏览器麦克风权限或直接上传音频文件', 'rose'); }
+    }
+    function playRefSample() {
+      if (S.refWavPath) playLocalAudio(S.refWavPath, '参考原声样本 (24kHz WAV)', 'REF VOICE');
+    }
+    async function startVoiceSynth() {
+      const text = (document.getElementById('vc-gen-text').value || '').trim();
+      if (!text) { toast('请先输入想让声音朗读的文案', 'amber'); document.getElementById('vc-gen-text').focus(); return; }
+      await act('voice_synthesize', {
+        engine: S.vcEng, text,
+        ref_text: (document.getElementById('vc-ref-text').value || '').trim(),
+        voice_id: document.getElementById('vc-edge-voice').value || 'zh-CN-XiaoxiaoNeural',
+        rate: document.getElementById('vc-edge-rate').value || '+0%',
+        pitch: document.getElementById('vc-edge-pitch').value || '+0Hz',
+        api_url: (document.getElementById('vc-api-url').value || '').trim(),
+        save_dir: (document.getElementById('vc-out-dir').value || '').trim()
+      });
+    }
+
+    // ==================== SETTINGS / MODALS ====================
     function saveSettings() {
       act('save_cfg', {
         a_host: document.getElementById('f-a-host').value, a_port: document.getElementById('f-a-port').value,
@@ -1184,36 +1699,29 @@
         q_port: document.getElementById('f-q-port').value, q_user: document.getElementById('f-q-user').value,
         q_pass: document.getElementById('f-q-pass').value, q_save: document.getElementById('f-q-save').value,
         downloads: document.getElementById('f-dl-root').value, yt_out: document.getElementById('f-yt-out').value,
+        music_dir: document.getElementById('f-music-dir').value, voice_dir: document.getElementById('f-voice-dir').value,
         yt_bat: document.getElementById('f-yt-bat').value
       }); toggleDrawer();
     }
-
     let modalCb = null;
     function askConfirm(t, b, fn) { document.getElementById('modal-title').textContent=t; document.getElementById('modal-body').textContent=b; modalCb=fn; document.getElementById('modal-wrap').classList.remove('hidden'); }
     function closeConfirm() { document.getElementById('modal-wrap').classList.add('hidden'); modalCb=null; }
     document.getElementById('modal-ok').addEventListener('click', () => { if (modalCb) modalCb(); closeConfirm(); });
     function toggleDrawer() { document.getElementById('drawer').classList.toggle('open'); document.getElementById('drawer-mask').classList.toggle('hidden'); }
     function toggleGuide() { document.getElementById('guide-wrap').classList.toggle('hidden'); }
-    function pickGuide(id, btn) {
-      ['start','dl','magyt','fix'].forEach(k => document.getElementById('g-' + k).classList.toggle('hidden', k !== id));
-      document.querySelectorAll('#guide-tabs button').forEach(b => {
-        b.className = (b.dataset.g === id) ? 'btn btn-mint btn-pill' : 'btn btn-pill';
-      });
+    function pickGuide(id) {
+      ['start','media','magyt','fix'].forEach(k => document.getElementById('g-' + k).classList.toggle('hidden', k !== id));
+      document.querySelectorAll('#guide-tabs button').forEach(b => { b.className = (b.dataset.g === id) ? 'btn btn-mint btn-pill' : 'btn btn-pill'; });
     }
-    window.addEventListener('keydown', e => {
-      if (e.key === 'Escape') {
-        document.getElementById('guide-wrap').classList.add('hidden');
-        closeConfirm();
-      }
-    });
+    window.addEventListener('keydown', e => { if (e.key === 'Escape') { document.getElementById('guide-wrap').classList.add('hidden'); closeConfirm(); } });
     function toggleLogSheet() {
       const sh = document.getElementById('log-sheet'); sh.classList.toggle('open');
       document.getElementById('log-btn').textContent = sh.classList.contains('open') ? '收起日志 ▼' : '展开日志 ▲';
     }
     function focusEng(i) {
       S.focus = i;
-      const lbls = ['ARIA2 超光速信道已锁定 · 加速中', 'qBittorrent 分布式节点网络已锁定', 'MAGNET / DHT 磁感力场已锁定', 'YT-DLP 视频声光矩阵已锁定'];
-      document.getElementById('focus-hint').textContent = i >= 0 ? lbls[i] : '3D 空间极光拓扑台 · 随带宽实时涌动';
+      const lbls = ['ARIA2 超光速信道已锁定', 'qBittorrent 分布式球网已锁定', 'MAGNET / DHT 磁感力场已锁定', 'YT-DLP 全平台视频矩阵已锁定'];
+      document.getElementById('focus-hint').textContent = i >= 0 ? lbls[i] : '全栈直投 · 任意搜歌 · 开源零样本声音克隆一体中枢';
     }
 
     // ==================== STATE SYNC ====================
@@ -1225,15 +1733,17 @@
       S.waveQ.push(S.q.dn || 0); if (S.waveQ.length > 40) S.waveQ.shift();
 
       const totDn = (S.a.dn||0) + (S.q.dn||0), totUp = (S.a.up||0) + (S.q.up||0);
+      if (totDn > S.peakDn) S.peakDn = totDn;
       document.getElementById('uptime').textContent = d.uptime || '00:00:00';
       document.getElementById('top-dn').textContent = fmt(totDn);
       document.getElementById('hero-dn').textContent = fmt(totDn);
+      document.getElementById('hero-peak').textContent = fmt(S.peakDn);
       document.getElementById('top-up').textContent = fmt(totUp);
 
       document.getElementById('k-adn').textContent = fmt(S.a.dn);
-      document.getElementById('k-aup').textContent = S.a.up > 0 ? ('↑ ' + fmt(S.a.up)) : '';
+      document.getElementById('k-aup').textContent = S.a.up > 0 ? ('↑' + fmt(S.a.up)) : '';
       document.getElementById('k-qdn').textContent = fmt(S.q.dn);
-      document.getElementById('k-qup').textContent = S.q.up > 0 ? ('↑ ' + fmt(S.q.up)) : '';
+      document.getElementById('k-qup').textContent = S.q.up > 0 ? ('↑' + fmt(S.q.up)) : '';
       document.getElementById('k-atk').textContent = S.a.task || 0;
       document.getElementById('k-acn').textContent = S.a.conn || 0;
       document.getElementById('k-qto').textContent = S.q.tor || 0;
@@ -1244,6 +1754,7 @@
       document.getElementById('chip-q').className = 'led ' + (S.q.on ? 'bg-cyan led-on' : (S.q.err ? 'bg-rose led-on' : 'bg-off'));
       document.getElementById('chip-y').className = 'led ' + (S.y.on ? 'bg-amber led-on' : 'bg-off');
       const trCnt = S.m.tracker_count || S.m.cached_trackers || 0;
+      const dhtN = S.q.dht || 0;
       document.getElementById('chip-tr').textContent = trCnt + ' TR';
 
       document.getElementById('spd-a').textContent = fmt(S.a.dn);
@@ -1261,9 +1772,9 @@
       const bq = document.getElementById('btn-q'); bq.textContent = S.q.on ? '■ 停止' : '▶ 启动'; bq.className = 'btn flex-1 ' + (S.q.on ? 'btn-rose' : 'btn-mint');
 
       document.getElementById('val-m').textContent = trCnt + ' TR';
-      const dhtN = S.q.dht || 0;
       document.getElementById('st-m').textContent = dhtN > 0 ? (`DHT ${dhtN}`) : (S.m.ok ? 'DHT OK' : 'NEEDS FIX');
-      document.getElementById('st-m').className = 'mod-st mono ' + ((dhtN > 0 || S.m.ok) ? 'c-violet' : 'c-amber');
+      document.getElementById('mh-tr').textContent = trCnt + ' 个';
+      document.getElementById('mh-dht').textContent = dhtN > 0 ? (dhtN + ' 节点') : (S.m.ok ? '就绪' : '需修复');
       document.getElementById('m-conf-ok').textContent = S.m.ok ? '健康 ✔' : ('缺 ' + (S.m.missing||[]).length + ' 项');
       document.getElementById('m-tr-cnt').textContent = (S.m.tracker_count || 0) + ' 个';
       document.getElementById('m-cache-cnt').textContent = (S.m.cached_trackers || 0) + ' 个';
@@ -1274,7 +1785,31 @@
       document.getElementById('sw-up').classList.toggle('on', !!S.y.upscale);
       document.getElementById('yt-sw-up').classList.toggle('on', !!S.y.upscale);
 
-      // YT Video Studio sync
+      // Sub-view Hero Readouts
+      document.getElementById('t-hero-spd').textContent = fmt(totDn);
+      document.getElementById('t-hero-conn').textContent = (S.a.conn || 0) + (dhtN || 0);
+      document.getElementById('ag-hero-ver').textContent = S.a.ver ? ('v' + S.a.ver) : (S.a.on ? 'ONLINE' : 'OFFLINE');
+      document.getElementById('ag-hero-spd').textContent = fmt(S.a.dn);
+
+      // Recent Completed Files Dock (Center Hub)
+      const rf = d.recent_files || [];
+      document.getElementById('recent-cnt').textContent = rf.length;
+      const rbox = document.getElementById('recent-list');
+      const tagCol = { '视频':'rgba(255,179,71,0.22);color:#fcd34d', '音乐':'rgba(255,61,113,0.22);color:#fda4af', '克隆':'rgba(192,132,252,0.22);color:#e9d5ff', '直链':'rgba(0,245,184,0.2);color:#6ee7b7', 'BT':'rgba(0,212,255,0.2);color:#67e8f9' };
+      rbox.innerHTML = rf.length ? rf.map(f => {
+        const playBtn = f.kind === 'audio'
+          ? `<button onclick="playLocalAudio('${escJs(f.path)}','${escJs(f.name)}','${escJs(f.tag)}')" class="btn btn-rose" style="padding:2px 7px;font-size:10px;">▶ 听</button>`
+          : `<button onclick="act('open_path',{key:'custom',path:'${escJs(f.path)}'})" class="btn btn-cyan" style="padding:2px 7px;font-size:10px;">▶ 开</button>`;
+        return `<div class="recent-row">
+          <span class="tag-pill mono" style="background:${tagCol[f.tag]||'rgba(255,255,255,0.1)'};">${esc(f.tag)}</span>
+          <span class="recent-name" title="${esc(f.path)}">${esc(f.name)}</span>
+          <span class="recent-meta mono">${fmtBytes(f.size)} · ${esc(f.time)}</span>
+          ${playBtn}
+          <button onclick="act('open_path',{key:'custom',path:'${escJs(f.path)}',reveal:true})" class="btn" style="padding:2px 6px;font-size:10px;" title="打开所在文件夹">📂</button>
+        </div>`;
+      }).join('') : '<div style="margin:auto;text-align:center;color:#64748b;font-size:11.5px;">暂无最近成品，下载视频、歌曲或克隆语音后会秒级出现在这里</div>';
+
+      // YT Studio
       const ys = d.yt_studio;
       if (ys) {
         document.getElementById('yt-status').textContent = ys.status || '就绪';
@@ -1283,62 +1818,112 @@
         document.getElementById('yt-bar').style.width = Math.min(100, pct) + '%';
         document.getElementById('yt-spd').textContent = ys.speed || '-';
         document.getElementById('yt-eta').textContent = ys.eta || '-';
-        document.getElementById('yt-env-bins').textContent =
-          `yt-dlp:${ys.has_ytdlp?'✔':'✘'} · ffmpeg:${ys.has_ffmpeg?'✔':'✘'} · V2X:${ys.has_video2x?'✔':'无'}`;
+        document.getElementById('yt-env-bins').textContent = `yt:${ys.has_ytdlp?'✔':'✘'} ff:${ys.has_ffmpeg?'✔':'✘'} V2X:${ys.has_video2x?'✔':'无'}`;
         document.getElementById('yt-env-proxy').textContent = ys.proxy || '直连';
-        const goBtn = document.getElementById('yt-go-btn');
-        goBtn.disabled = !!ys.running;
-        goBtn.textContent = ys.running ? '⏳ 下载进行中…' : '▶ 开始下载视频';
+        const goBtn = document.getElementById('yt-go-btn'); goBtn.disabled = !!ys.running;
+        goBtn.textContent = ys.running ? '⏳ 下载进行中…' : '▶ 立即极速下载';
         if (!ytPrefsLoaded) {
           if (ys.cookies) { document.getElementById('yt-cookies').value = ys.cookies; toggleYtCookieFile(); }
           if (ys.cookies_file) document.getElementById('yt-cookies-file').value = ys.cookies_file;
           if (ys.out_dir) document.getElementById('yt-out-dir').value = ys.out_dir;
           ytPrefsLoaded = true;
         }
-        const ybox = document.getElementById('yt-log-box');
-        if (Array.isArray(ys.logs) && ys.logs.length) {
-          const atB = ybox.scrollHeight - ybox.scrollTop - ybox.clientHeight < 24;
-          ybox.innerHTML = ys.logs.map(l => {
-            const c = l.includes('[ERROR]') ? 'c-rose' : (l.includes('[WARN]') ? 'c-amber' : (l.includes('[OK]') ? 'c-mint' : 'c-cyan'));
-            return `<div class="${c}">${esc(l)}</div>`;
-          }).join('');
-          if (atB) ybox.scrollTop = ybox.scrollHeight;
+        renderLogBox('yt-log-box', ys.logs);
+      }
+
+      // Music Studio
+      const ms = d.music_studio;
+      if (ms) {
+        S.musicRunning = !!ms.running;
+        document.getElementById('mu-status').textContent = ms.status || '就绪';
+        document.getElementById('qs-music-st').textContent = ms.running ? (ms.status || '下载中…') : (ms.file ? ('✔ ' + ms.file.split(/[\\/]/).pop()) : '网易云/B站/YTM');
+        const pct = Number(ms.pct || 0);
+        document.getElementById('mu-pct').textContent = pct.toFixed(1);
+        document.getElementById('mu-bar').style.width = Math.min(100, pct) + '%';
+        document.getElementById('mu-spd').textContent = ms.speed || '-';
+        document.getElementById('mu-eta').textContent = ms.eta || '-';
+        if (ms.out_dir && !document.getElementById('mu-out-dir').value) document.getElementById('mu-out-dir').value = ms.out_dir;
+        if (ms.file && ms.file !== S.lastMusicFile) {
+          S.lastMusicFile = ms.file;
+          const fn = ms.file.split(/[\\/]/).pop();
+          document.getElementById('mu-now-title').textContent = fn;
+          document.getElementById('mu-audio').src = '/api/media?path=' + encodeURIComponent(ms.file) + '&t=' + Date.now();
         }
+        renderLogBox('mu-log-box', ms.logs);
+      }
+
+      // Voice Cloning Studio
+      const vs = d.voice_studio;
+      if (vs) {
+        S.voiceRunning = !!vs.running;
+        const env = vs.env || {};
+        document.getElementById('vc-hero-gpu').textContent = (env.gpu || 'CPU').split(',')[0].replace('NVIDIA GeForce ','');
+        const f5el = document.getElementById('vc-hero-f5');
+        f5el.textContent = env.f5_ready ? '已就绪 ✔' : (vs.installing ? '部署中…' : '可一键装');
+        f5el.className = env.f5_ready ? 'c-mint' : (vs.installing ? 'c-cyan' : 'c-amber');
+        const ibtn = document.getElementById('vc-f5-install-btn');
+        ibtn.textContent = env.f5_ready ? '✔ F5-TTS (CUDA) 已就绪' : (vs.installing ? '⏳ 正在部署 CUDA 环境…' : '⚡ 一键部署 F5-TTS (CUDA)');
+        ibtn.disabled = !!vs.installing;
+        document.getElementById('qs-voice-st').textContent = env.f5_ready ? 'F5-TTS GPU ✔' : (vs.running ? vs.status : '神经配音已就绪');
+        document.getElementById('vc-status').textContent = vs.status || '就绪';
+        const pct = Number(vs.pct || 0);
+        document.getElementById('vc-pct').textContent = pct.toFixed(1);
+        document.getElementById('vc-bar').style.width = Math.min(100, pct) + '%';
+        document.getElementById('vc-go-btn').disabled = !!vs.running;
+        if (vs.out_dir && !document.getElementById('vc-out-dir').value) document.getElementById('vc-out-dir').value = vs.out_dir;
+        if (vs.ref_wav && !S.refWavPath) {
+          S.refWavPath = vs.ref_wav;
+          document.getElementById('vc-ref-name').textContent = '✔ ' + (vs.ref_name || '已载入参考音色');
+          document.getElementById('vc-ref-name').className = 'mono c-mint';
+          document.getElementById('vc-ref-play').classList.remove('hidden');
+        }
+        if (!S.voicesPopulated && Array.isArray(env.voices) && env.voices.length) {
+          const sel = document.getElementById('vc-edge-voice');
+          sel.innerHTML = env.voices.map(v => `<option value="${esc(v.id)}">${esc(v.name)}</option>`).join('');
+          S.voicesPopulated = true;
+        }
+        if (vs.out_file && vs.out_file !== S.lastVoiceFile) {
+          S.lastVoiceFile = vs.out_file;
+          const fn = vs.out_file.split(/[\\/]/).pop();
+          document.getElementById('vc-out-name').textContent = fn;
+          document.getElementById('vc-audio').src = '/api/media?path=' + encodeURIComponent(vs.out_file) + '&t=' + Date.now();
+        }
+        renderLogBox('vc-log-box', vs.logs);
       }
 
       // Tasks
       const aT = S.tasks.aria2 || [], qT = S.tasks.qbit || [];
       document.getElementById('nav-task-cnt').textContent = aT.length + qT.length;
+      document.getElementById('t-hero-cnt').textContent = aT.length + qT.length;
       document.getElementById('cnt-a-tasks').textContent = aT.length;
       document.getElementById('cnt-q-tasks').textContent = qT.length;
       const all = [
         ...aT.map(t => ({ src:'A2', id:t.gid, name:t.name, pct:t.pct, speed:t.speed, st:t.status, col:'#00f5b8' })),
         ...qT.map(t => ({ src:'qB', id:t.hash, name:t.name, pct:t.pct, speed:t.speed, st:t.state, col:'#00d4ff' }))
       ];
-      const radar = document.getElementById('radar-list');
-      radar.innerHTML = all.length ? all.slice(0, 8).map(t => `
+      document.getElementById('radar-list').innerHTML = all.length ? all.slice(0, 6).map(t => `
         <div class="task-mini">
-          <div class="task-top"><span class="task-name"><b class="mono" style="color:${t.col};margin-right:5px;">[${t.src}]</b>${esc(t.name)}</span><span class="mono" style="font-size:10.5px;color:${t.col};">${t.pct}%</span></div>
+          <div class="task-top"><span class="task-name"><b class="mono" style="color:${t.col};margin-right:4px;">[${t.src}]</b>${esc(t.name)}</span><span class="mono" style="font-size:10px;color:${t.col};">${t.pct}%</span></div>
           <div class="prog-track"><div class="prog-fill" style="width:${Math.min(100,t.pct)}%;background:${t.col};box-shadow:0 0 8px ${t.col};"></div></div>
-          <div class="task-top mono" style="font-size:10px;color:#94a3b8;">
+          <div class="task-top mono" style="font-size:9.5px;color:#94a3b8;">
             <span>${fmt(t.speed)} · ${esc(t.st)}</span>
-            <span style="display:flex;gap:4px;">
-              <button onclick="act('${t.src==='A2'?'aria2_pause':'qbit_pause'}',{${t.src==='A2'?'gid':'hash'}:'${esc(t.id)}'})" class="btn" style="padding:1px 6px;font-size:10px;">⏸</button>
-              <button onclick="act('${t.src==='A2'?'aria2_resume':'qbit_resume'}',{${t.src==='A2'?'gid':'hash'}:'${esc(t.id)}'})" class="btn" style="padding:1px 6px;font-size:10px;">▶</button>
+            <span style="display:flex;gap:3px;">
+              <button onclick="act('${t.src==='A2'?'aria2_pause':'qbit_pause'}',{${t.src==='A2'?'gid':'hash'}:'${escJs(t.id)}'})" class="btn" style="padding:1px 5px;font-size:9.5px;">⏸</button>
+              <button onclick="act('${t.src==='A2'?'aria2_resume':'qbit_resume'}',{${t.src==='A2'?'gid':'hash'}:'${escJs(t.id)}'})" class="btn" style="padding:1px 5px;font-size:9.5px;">▶</button>
             </span>
           </div>
-        </div>`).join('') : `<div style="margin:auto;text-align:center;color:#64748b;font-size:12px;line-height:1.8;">暂无活跃下载任务<br/><span style="font-size:10.5px;color:#475569;">在中间投递舱粘贴链接 / 磁力即刻开下</span></div>`;
+        </div>`).join('') : '<div style="margin:auto;text-align:center;color:#64748b;font-size:11.5px;line-height:1.7;">暂无活跃下载任务<br/><span style="font-size:10px;color:#475569;">在中间投递舱粘贴链接即刻开下</span></div>';
 
       document.getElementById('full-a-tasks').innerHTML = aT.length ? aT.map(t => `
         <div class="task-row">
           <div class="task-top"><span class="task-name">${esc(t.name)}</span><span class="mono c-mint" style="font-size:11px;">${t.pct}% · ${fmt(t.speed)}</span></div>
           <div class="prog-track"><div class="prog-fill" style="width:${Math.min(100,t.pct)}%;background:#00f5b8;"></div></div>
-          <div class="task-top mono" style="font-size:10.5px;color:#94a3b8;">
+          <div class="task-top mono" style="font-size:10px;color:#94a3b8;">
             <span>${fmtBytes(t.done)} / ${fmtBytes(t.total)} · ${t.conn} 连接 · ${esc(t.status)}</span>
             <span style="display:flex;gap:5px;">
-              <button onclick="act('aria2_pause',{gid:'${esc(t.gid)}'})" class="btn" style="padding:2px 8px;font-size:10.5px;">暂停</button>
-              <button onclick="act('aria2_resume',{gid:'${esc(t.gid)}'})" class="btn btn-mint" style="padding:2px 8px;font-size:10.5px;">继续</button>
-              <button onclick="act('aria2_remove',{gid:'${esc(t.gid)}'})" class="btn btn-rose" style="padding:2px 8px;font-size:10.5px;">移除</button>
+              <button onclick="act('aria2_pause',{gid:'${escJs(t.gid)}'})" class="btn" style="padding:2px 7px;">暂停</button>
+              <button onclick="act('aria2_resume',{gid:'${escJs(t.gid)}'})" class="btn btn-mint" style="padding:2px 7px;">继续</button>
+              <button onclick="act('aria2_remove',{gid:'${escJs(t.gid)}'})" class="btn btn-rose" style="padding:2px 7px;">移除</button>
             </span>
           </div>
         </div>`).join('') : '<div style="color:#64748b;font-size:12px;padding:16px;">暂无 Aria2 任务</div>';
@@ -1347,12 +1932,12 @@
         <div class="task-row">
           <div class="task-top"><span class="task-name">${esc(t.name)}</span><span class="mono c-cyan" style="font-size:11px;">${t.pct}% · ↓${fmt(t.speed)}</span></div>
           <div class="prog-track"><div class="prog-fill" style="width:${Math.min(100,t.pct)}%;background:#00d4ff;"></div></div>
-          <div class="task-top mono" style="font-size:10.5px;color:#94a3b8;">
+          <div class="task-top mono" style="font-size:10px;color:#94a3b8;">
             <span>${fmtBytes(t.size)} · 分享率 ${t.ratio} · ${esc(t.state)}</span>
             <span style="display:flex;gap:5px;">
-              <button onclick="act('qbit_pause',{hash:'${esc(t.hash)}'})" class="btn" style="padding:2px 8px;font-size:10.5px;">暂停</button>
-              <button onclick="act('qbit_resume',{hash:'${esc(t.hash)}'})" class="btn btn-cyan" style="padding:2px 8px;font-size:10.5px;">继续</button>
-              <button onclick="act('qbit_delete',{hash:'${esc(t.hash)}'})" class="btn btn-rose" style="padding:2px 8px;font-size:10.5px;">删除</button>
+              <button onclick="act('qbit_pause',{hash:'${escJs(t.hash)}'})" class="btn" style="padding:2px 7px;">暂停</button>
+              <button onclick="act('qbit_resume',{hash:'${escJs(t.hash)}'})" class="btn btn-cyan" style="padding:2px 7px;">继续</button>
+              <button onclick="act('qbit_delete',{hash:'${escJs(t.hash)}'})" class="btn btn-rose" style="padding:2px 7px;">删除</button>
             </span>
           </div>
         </div>`).join('') : '<div style="color:#64748b;font-size:12px;padding:16px;">暂无 qBittorrent 种子任务</div>';
@@ -1362,7 +1947,8 @@
         document.getElementById('gp-dl').textContent = cfg.paths?.downloads || '-';
         document.getElementById('gp-qb').textContent = cfg.qbit?.save_dir || '-';
         document.getElementById('gp-yt').textContent = d.yt_studio?.out_dir || '-';
-        document.getElementById('gp-a2').textContent = cfg.aria2?.conf || '-';
+        document.getElementById('gp-mu').textContent = d.music_studio?.out_dir || '-';
+        document.getElementById('gp-vc').textContent = d.voice_studio?.out_dir || '-';
         document.getElementById('port-a').textContent = ':' + (cfg.aria2?.port || 6800);
         document.getElementById('port-q').textContent = ':' + (cfg.qbit?.port || 8080);
         document.getElementById('sw-auto-panel').classList.toggle('on', !!cfg.ui?.autostart_panel);
@@ -1378,6 +1964,8 @@
           document.getElementById('f-dl-root').value = cfg.paths?.downloads || '';
           document.getElementById('f-q-save').value = cfg.qbit?.save_dir || '';
           document.getElementById('f-yt-out').value = d.yt_studio?.out_dir || cfg.yt?.output || '';
+          document.getElementById('f-music-dir').value = d.music_studio?.out_dir || '';
+          document.getElementById('f-voice-dir').value = d.voice_studio?.out_dir || '';
           document.getElementById('f-yt-bat').value = cfg.yt?.bat || '';
           S.cfgLoaded = true;
         }
@@ -1392,7 +1980,17 @@
         const atBot = list.scrollHeight - list.scrollTop - list.clientHeight < 24;
         list.innerHTML = logs.map(l => `<div class="${cls(l)}">${esc(l)}</div>`).join('');
         if (atBot) list.scrollTop = list.scrollHeight;
-      } else { document.getElementById('log-list').innerHTML = ''; }
+      }
+    }
+    function renderLogBox(id, logs) {
+      if (!Array.isArray(logs) || !logs.length) return;
+      const box = document.getElementById(id); if (!box) return;
+      const atB = box.scrollHeight - box.scrollTop - box.clientHeight < 24;
+      box.innerHTML = logs.map(l => {
+        const c = l.includes('[ERROR]') ? 'c-rose' : (l.includes('[WARN]') ? 'c-amber' : (l.includes('[OK]') ? 'c-mint' : 'c-cyan'));
+        return `<div class="${c}">${esc(l)}</div>`;
+      }).join('');
+      if (atB) box.scrollTop = box.scrollHeight;
     }
 
     async function pollState() {
@@ -1403,28 +2001,22 @@
       pollFail++;
       if (pollFail === 2) {
         const tk = document.getElementById('ticker');
-        tk.textContent = '[WARN ] 后端服务已断开，请重新双击桌面「启动面板.bat」启动服务';
+        tk.textContent = '[WARN ] 后端服务已断开，请重新双击「启动面板.bat」启动服务';
         tk.className = 'mono c-rose';
-        toast('后端服务未连接，请重新双击启动面板.bat', 'rose');
       }
     }
 
-    // ==================== SILKY FLUID CURSOR + GLOBAL 3D COCKPIT PARALLAX ====================
-    const curGlow = document.getElementById('cursorGlow');
-    const curRing = document.getElementById('cursorRing');
-    const cockpitRig = document.getElementById('cockpitRig');
+    // ==================== CURSOR AURA & MODULE 3D SPRINGS ====================
+    const curGlow = document.getElementById('cursorGlow'), curRing = document.getElementById('cursorRing');
     let mX = window.innerWidth/2, mY = window.innerHeight/2, cX = mX, cY = mY, rX = mX, rY = mY;
-    let rigRX = 0, rigRY = 0;
-
     const auraPalette = {
-      mint: ['rgba(0,245,184,0.16)', 'rgba(0,245,184,0.68)'],
-      cyan: ['rgba(0,212,255,0.16)', 'rgba(0,212,255,0.68)'],
-      violet: ['rgba(168,85,247,0.18)', 'rgba(192,132,252,0.72)'],
-      amber: ['rgba(255,179,71,0.16)', 'rgba(255,179,71,0.70)']
+      mint:['rgba(0,245,184,0.16)','rgba(0,245,184,0.7)'], cyan:['rgba(0,212,255,0.16)','rgba(0,212,255,0.7)'],
+      violet:['rgba(168,85,247,0.18)','rgba(192,132,252,0.74)'], amber:['rgba(255,179,71,0.17)','rgba(255,179,71,0.72)'],
+      rose:['rgba(255,61,113,0.18)','rgba(255,61,113,0.74)'], magenta:['rgba(217,70,239,0.18)','rgba(232,121,249,0.74)']
     };
     window.addEventListener('mousemove', e => {
       mX = e.clientX; mY = e.clientY;
-      curRing.classList.toggle('hover', !!e.target.closest('button, .sw, .nav-btn, input, textarea'));
+      curRing.classList.toggle('hover', !!e.target.closest('button, .sw, .nav-btn, input, textarea, select, .studio-mini, .status-chip'));
       const zone = e.target.closest('[data-aura]');
       const [g, r] = auraPalette[zone?.dataset.aura] || auraPalette.cyan;
       document.documentElement.style.setProperty('--cur-glow', g);
@@ -1439,21 +2031,20 @@
       const sp = { el, gl, rx:0, ry:0, trx:0, try:0, ty:0, tty:0 };
       modSprings.push(sp);
       el.addEventListener('mousemove', e => {
-        const r = el.getBoundingClientRect();
-        const x = e.clientX - r.left, y = e.clientY - r.top;
-        sp.trx = ((y/r.height)-0.5) * -7;
-        sp.try = ((x/r.width)-0.5) * 7;
-        sp.tty = -4;
+        const r = el.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+        sp.trx = ((y/r.height)-0.5) * -6.5; sp.try = ((x/r.width)-0.5) * 6.5; sp.tty = -4;
         if (gl) { gl.style.setProperty('--gx', x+'px'); gl.style.setProperty('--gy', y+'px'); }
       });
       el.addEventListener('mouseleave', () => { sp.trx = 0; sp.try = 0; sp.tty = 0; });
     });
 
-    // ==================== MULTI-CANVAS 60FPS 3D CONSOLE RENDERER ====================
+    // ==================== MULTI-STUDIO 60FPS 3D CANVAS ENGINE (ALL 7 TABS!) ====================
+    const CANVAS_IDS = ['bgCanvas','c-wave','c-terrain','c-aria2','c-qbit','c-magnet','c-yt',
+                        'c-tasks-hero','c-ariang-hero','c-magnet-hero','c-yt-hero','c-music-hero','c-voice-hero'];
+    let cv = {};
     function fitCanvas(id) {
       const c = document.getElementById(id); if (!c) return null;
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
-      const r = c.getBoundingClientRect();
+      const dpr = Math.min(2, window.devicePixelRatio || 1), r = c.getBoundingClientRect();
       if (r.width === 0 || r.height === 0) return { c, ctx: c.getContext('2d'), w: 0, h: 0 };
       if (c.width !== Math.round(r.width*dpr) || c.height !== Math.round(r.height*dpr)) {
         c.width = Math.round(r.width*dpr); c.height = Math.round(r.height*dpr);
@@ -1461,21 +2052,18 @@
       const ctx = c.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       return { c, ctx, w: r.width, h: r.height };
     }
-    let cv = {};
-    function resizeAllCanvases() {
-      ['bgCanvas','c-wave','c-terrain','c-aria2','c-qbit','c-magnet','c-yt'].forEach(id => { cv[id] = fitCanvas(id); });
-    }
+    function resizeAllCanvases() { CANVAS_IDS.forEach(id => { cv[id] = fitCanvas(id); }); }
     window.addEventListener('resize', () => { resizeAllCanvases(); moveNavPill(document.querySelector('.nav-btn.active')); });
 
-    const bgStars = Array.from({ length: 100 }, () => ({ x:(Math.random()-0.5)*2.4, y:(Math.random()-0.5)*2.4, z:Math.random()*2+0.2, c:['#00f5b8','#00d4ff','#a855f7'][Math.floor(Math.random()*3)] }));
-    const warpLines = Array.from({ length: 38 }, () => ({ a: Math.random()*Math.PI*2, z: Math.random()*2+0.15, r: 0.25+Math.random()*0.95 }));
+    const bgStars = Array.from({ length: 95 }, () => ({ x:(Math.random()-0.5)*2.4, y:(Math.random()-0.5)*2.4, z:Math.random()*2+0.2, c:['#00f5b8','#00d4ff','#a855f7','#ff3d71'][Math.floor(Math.random()*4)] }));
+    const warpLines = Array.from({ length: 34 }, () => ({ a: Math.random()*Math.PI*2, z: Math.random()*2+0.15, r: 0.25+Math.random()*0.95 }));
     const globePts = Array.from({ length: 26 }, (_, i) => { const y=1-(i/25)*2, rad=Math.sqrt(1-y*y), th=i*2.39996; return [Math.cos(th)*rad, y, Math.sin(th)*rad]; });
-    const magPts = Array.from({ length: 42 }, (_, i) => ({ phi:(i/42)*Math.PI*2, t:Math.random()*Math.PI, r:0.68+(i%3)*0.34 }));
+    const magPts = Array.from({ length: 48 }, (_, i) => ({ phi:(i/48)*Math.PI*2, t:Math.random()*Math.PI, r:0.65+(i%3)*0.34 }));
+    const fiberLanes = Array.from({ length: 16 }, (_, i) => ({ y: (i+0.5)/16, x: Math.random(), len: 0.08+Math.random()*0.18, spd: 0.006+Math.random()*0.015 }));
 
     let T = 0;
     function tickFrame() {
       T += 0.02;
-      // 1. Silky Cursor & Global Curved Console Rig Parallax
       cX += (mX - cX) * 0.09; cY += (mY - cY) * 0.09;
       rX += (mX - rX) * 0.22; rY += (mY - rY) * 0.22;
       curGlow.style.left = cX + 'px'; curGlow.style.top = cY + 'px';
@@ -1492,196 +2080,263 @@
       const totalMbps = ((S.a.dn||0) + (S.q.dn||0)) / (1024*1024);
       S.boost *= 0.93;
 
-      // 2. Fullscreen Deep Space + 3D Floor Horizon
+      // Global Deep Space Horizon
       const bg = cv['bgCanvas'];
       if (bg && bg.w > 0) {
         const { ctx, w, h } = bg;
-        const g = ctx.createRadialGradient(w*0.5, h*0.35, 30, w*0.5, h*0.48, Math.max(w,h)*0.78);
+        const g = ctx.createRadialGradient(w*0.5, h*0.32, 30, w*0.5, h*0.5, Math.max(w,h)*0.78);
         g.addColorStop(0, '#0a162d'); g.addColorStop(0.5, '#040814'); g.addColorStop(1, '#020308');
         ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
-
-        // Perspective Deck Floor Grid at Bottom
-        const hy = h * 0.62, shift = (T * 0.35) % 1;
+        const hy = h * 0.64, shift = (T * 0.35) % 1;
         ctx.lineWidth = 1;
         for (let i = -10; i <= 10; i++) {
-          const xTop = w*0.5 + i*(w*0.045) - normMX*18;
-          const xBot = w*0.5 + i*(w*0.18) - normMX*48;
+          const xTop = w*0.5 + i*(w*0.045) - normMX*18, xBot = w*0.5 + i*(w*0.18) - normMX*46;
           const lg = ctx.createLinearGradient(xTop, hy, xBot, h);
-          lg.addColorStop(0, 'rgba(0,212,255,0)'); lg.addColorStop(0.55, 'rgba(0,212,255,0.09)'); lg.addColorStop(1, 'rgba(0,245,184,0.03)');
+          lg.addColorStop(0, 'rgba(0,212,255,0)'); lg.addColorStop(0.55, 'rgba(0,212,255,0.085)'); lg.addColorStop(1, 'rgba(0,245,184,0.03)');
           ctx.strokeStyle = lg; ctx.beginPath(); ctx.moveTo(xTop, hy); ctx.lineTo(xBot, h); ctx.stroke();
         }
         for (let r = 0; r < 8; r++) {
-          const t = ((r + shift) / 8); const y = hy + t * t * (h - hy);
-          ctx.strokeStyle = `rgba(0,212,255,${t * 0.10})`;
+          const t = (r + shift) / 8, y = hy + t * t * (h - hy);
+          ctx.strokeStyle = `rgba(0,212,255,${t * 0.095})`;
           ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
         }
-
-        // Stars
         const sp = 0.002 + Math.min(0.01, totalMbps*0.0005);
         for (const st of bgStars) {
           st.z -= sp; if (st.z <= 0.15) { st.z = 2.2; st.x = (Math.random()-0.5)*2.4; st.y = (Math.random()-0.5)*2.4; }
-          const px = w/2 + (st.x/st.z)*w*0.42 - normMX*24/st.z;
-          const py = h/2 + (st.y/st.z)*h*0.42 - normMY*18/st.z;
-          ctx.fillStyle = st.c; ctx.globalAlpha = Math.max(0.04, (1-st.z/2.2)*0.5);
+          const px = w/2 + (st.x/st.z)*w*0.42 - normMX*24/st.z, py = h/2 + (st.y/st.z)*h*0.42 - normMY*18/st.z;
+          ctx.fillStyle = st.c; ctx.globalAlpha = Math.max(0.04, (1-st.z/2.2)*0.48);
           ctx.beginPath(); ctx.arc(px, py, Math.max(0.6, (1-st.z/2.2)*2), 0, Math.PI*2); ctx.fill();
         }
         ctx.globalAlpha = 1;
       }
 
+      // === TAB 1: COCKPIT ===
       if (S.curView === 'cockpit') {
-        // 3. Left Wing Liquid Waveform
         const wv = cv['c-wave'];
         if (wv && wv.w > 0) {
           const { ctx, w, h } = wv; ctx.clearRect(0,0,w,h);
           ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 1;
           for (let i=1;i<=3;i++){ const y=(h/4)*i; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
           const peak = Math.max(2*1024*1024, ...S.waveA, ...S.waveQ);
-          function curve(arr, col, fill) {
+          const curve = (arr, col, fill) => {
             const pts = arr.map((v,i)=>({ x:(i/(arr.length-1))*(w-6), y:h-Math.min(0.88,(v||0)/peak)*(h-14)-5 }));
             ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
             for (let i=0;i<pts.length-1;i++){ const xc=(pts[i].x+pts[i+1].x)/2, yc=(pts[i].y+pts[i+1].y)/2; ctx.quadraticCurveTo(pts[i].x,pts[i].y,xc,yc); }
             const last = pts[pts.length-1]; ctx.lineTo(last.x, last.y);
-            ctx.strokeStyle=col; ctx.lineWidth=2.1; ctx.stroke();
+            ctx.strokeStyle=col; ctx.lineWidth=2; ctx.stroke();
             ctx.lineTo(last.x,h); ctx.lineTo(0,h); ctx.closePath();
             const gr=ctx.createLinearGradient(0,0,0,h); gr.addColorStop(0,fill); gr.addColorStop(1,'rgba(0,0,0,0)');
             ctx.fillStyle=gr; ctx.fill();
-            ctx.beginPath(); ctx.arc(last.x,last.y,3.2,0,Math.PI*2); ctx.fillStyle='#fff'; ctx.fill();
-          }
+          };
           curve(S.waveQ, '#00d4ff', 'rgba(0,212,255,0.22)');
           curve(S.waveA, '#00f5b8', 'rgba(0,245,184,0.26)');
         }
 
-        // 4. CENTER BRIDGE: 3D FLOWING AURORA ENERGY TERRAIN (NOT A CUBE!)
+        // Compact 3D Aurora Ribbon Horizon
         const ct = cv['c-terrain'];
         if (ct && ct.w > 0) {
-          const { ctx, w, h } = ct; ctx.clearRect(0, 0, w, h);
-          const rows = 15, cols = 26;
-          const amp = 0.24 + Math.min(0.42, totalMbps * 0.03) + S.boost * 0.14;
-          const palette = [
-            ['rgba(0,245,184,', 'rgba(0,212,255,'],
-            ['rgba(0,212,255,', 'rgba(99,102,241,'],
-            ['rgba(192,132,252,', 'rgba(236,72,153,'],
-            ['rgba(255,179,71,', 'rgba(255,61,113,']
-          ][S.focus >= 0 ? S.focus : 0];
-
-          const grid = [];
-          for (let r = 0; r < rows; r++) {
-            const rowPts = [];
-            const depth = r / (rows - 1); // 0=far, 1=near
-            const z = 1.15 + (1 - depth) * 2.9;
-            for (let c = 0; c < cols; c++) {
-              const nx = (c / (cols - 1) - 0.5) * 2;
-              const wave =
-                Math.sin(nx * 3.8 + T * 1.4 + r * 0.42) * Math.cos(r * 0.35 - T * 0.9) * amp
-                + Math.sin(nx * 7.2 - T * 2.2) * amp * 0.28;
-              const sx = w * 0.5 + (nx * w * 0.72) / z - normMX * 22 * depth;
-              const sy = h * 0.34 + ((0.95 - wave) * h * 0.62) / z + (depth * h * 0.18);
-              rowPts.push([sx, sy, wave, depth]);
-            }
-            grid.push(rowPts);
-          }
-
-          // Longitudinal glowing ribs
-          ctx.lineWidth = 0.85;
-          for (let c = 0; c < cols; c += 2) {
+          const { ctx, w, h } = ct; ctx.clearRect(0,0,w,h);
+          const cols = 38, ribbons = 5;
+          const amp = 10 + Math.min(20, totalMbps*1.8) + S.boost*6;
+          for (let r = 0; r < ribbons; r++) {
             ctx.beginPath();
-            for (let r = 0; r < rows; r++) {
-              const p = grid[r][c];
-              if (r === 0) ctx.moveTo(p[0], p[1]); else ctx.lineTo(p[0], p[1]);
+            for (let c = 0; c <= cols; c++) {
+              const x = (c/cols)*w, nx = c/cols*Math.PI*3;
+              const y = h*0.64 + (r-2)*6 + Math.sin(nx + T*(1.3+r*0.25) + r)*amp*(0.55+r*0.1);
+              if (c===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
             }
-            ctx.strokeStyle = palette[1] + '0.18)'; ctx.stroke();
-          }
-
-          // Latitudinal flowing 3D aurora ribbons + glowing crest nodes
-          for (let r = 0; r < rows; r++) {
-            const pts = grid[r], d = r / (rows - 1);
-            ctx.beginPath();
-            for (let c = 0; c < cols; c++) {
-              const p = pts[c]; if (c === 0) ctx.moveTo(p[0], p[1]); else ctx.lineTo(p[0], p[1]);
-            }
-            ctx.strokeStyle = (r % 2 === 0 ? palette[0] : palette[1]) + (0.14 + d * 0.56).toFixed(2) + ')';
-            ctx.lineWidth = 0.9 + d * 1.3;
-            ctx.stroke();
-
-            // Glowing energy peaks on near rows
-            if (r > 4 && r % 2 === 1) {
-              for (let c = 1; c < cols - 1; c += 3) {
-                const p = pts[c];
-                if (p[2] > amp * 0.25) {
-                  ctx.beginPath(); ctx.arc(p[0], p[1], 1.5 + d * 1.6, 0, Math.PI * 2);
-                  ctx.fillStyle = palette[0] + (0.4 + d * 0.55).toFixed(2) + ')'; ctx.fill();
-                }
-              }
-            }
+            const colsArr = ['rgba(0,245,184,','rgba(0,212,255,','rgba(192,132,252,','rgba(255,61,113,','rgba(255,179,71,'];
+            ctx.strokeStyle = colsArr[r] + (0.22 + r*0.1).toFixed(2) + ')';
+            ctx.lineWidth = 1.4; ctx.stroke();
           }
         }
 
-        // 5. MODULE 1: ARIA2 3D WARP-SPEED LIGHT TUNNEL
+        // 4 Module 3D Canvases
         const ca = cv['c-aria2'];
         if (ca && ca.w > 0) {
           const { ctx, w, h } = ca; ctx.clearRect(0,0,w,h);
-          const cx = w*0.55, cy = h*0.48, spd = (S.a.on ? 0.038 : 0.012) + (S.focus===0 ? 0.04 : 0);
+          const cx = w*0.56, cy = h*0.48, spd = (S.a.on ? 0.036 : 0.012) + (S.focus===0 ? 0.04 : 0);
           for (const l of warpLines) {
             l.z -= spd; if (l.z <= 0.12) { l.z = 2.1; l.a = Math.random()*Math.PI*2; }
-            const zp = l.z + spd * 3.6;
-            const x1 = cx + (Math.cos(l.a)*l.r/l.z)*w*0.36, y1 = cy + (Math.sin(l.a)*l.r/l.z)*h*0.46;
-            const x0 = cx + (Math.cos(l.a)*l.r/zp)*w*0.36, y0 = cy + (Math.sin(l.a)*l.r/zp)*h*0.46;
+            const zp = l.z + spd*3.5;
             ctx.strokeStyle = S.a.on ? `rgba(0,245,184,${Math.max(0.08,(1-l.z/2.1)*0.6)})` : 'rgba(100,116,139,0.2)';
-            ctx.lineWidth = Math.max(0.8, (1-l.z/2.1)*2.2);
-            ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke();
+            ctx.lineWidth = Math.max(0.8, (1-l.z/2.1)*2.1);
+            ctx.beginPath(); ctx.moveTo(cx+(Math.cos(l.a)*l.r/zp)*w*0.36, cy+(Math.sin(l.a)*l.r/zp)*h*0.46);
+            ctx.lineTo(cx+(Math.cos(l.a)*l.r/l.z)*w*0.36, cy+(Math.sin(l.a)*l.r/l.z)*h*0.46); ctx.stroke();
           }
         }
-
-        // 6. MODULE 2: qBITTORRENT 3D P2P SWARM GLOBE
         const cq = cv['c-qbit'];
         if (cq && cq.w > 0) {
           const { ctx, w, h } = cq; ctx.clearRect(0,0,w,h);
-          const cx = w*0.74, cy = h*0.5, rad = Math.min(w,h)*0.43;
-          const ang = T * (S.q.on ? 0.65 : 0.25) + (S.focus===1 ? 0.5 : 0);
+          const cx = w*0.74, cy = h*0.5, rad = Math.min(w,h)*0.43, ang = T*(S.q.on?0.65:0.25);
           const cA = Math.cos(ang), sA = Math.sin(ang);
           const pts = globePts.map(([x,y,z]) => { const x1=x*cA-z*sA, z1=x*sA+z*cA, sc=2.8/(2.8+z1); return [cx+x1*rad*sc, cy+y*rad*sc, z1]; });
-          ctx.lineWidth = 0.85;
+          ctx.lineWidth = 0.8;
           for (let i=0;i<pts.length;i++) for (let j=i+1;j<pts.length;j++) {
             const d = Math.hypot(pts[i][0]-pts[j][0], pts[i][1]-pts[j][1]);
-            if (d < rad * 0.92) {
-              ctx.strokeStyle = S.q.on ? `rgba(0,212,255,${0.26*(1-d/(rad*0.92))})` : 'rgba(100,116,139,0.14)';
-              ctx.beginPath(); ctx.moveTo(pts[i][0],pts[i][1]); ctx.lineTo(pts[j][0],pts[j][1]); ctx.stroke();
-            }
+            if (d < rad*0.92) { ctx.strokeStyle = S.q.on ? `rgba(0,212,255,${0.26*(1-d/(rad*0.92))})` : 'rgba(100,116,139,0.14)'; ctx.beginPath(); ctx.moveTo(pts[i][0],pts[i][1]); ctx.lineTo(pts[j][0],pts[j][1]); ctx.stroke(); }
           }
-          pts.forEach(p => { ctx.beginPath(); ctx.arc(p[0],p[1], p[2]<0?2.3:1.3, 0, Math.PI*2); ctx.fillStyle = S.q.on ? (p[2]<0?'#67e8f9':'rgba(0,212,255,0.45)') : 'rgba(100,116,139,0.35)'; ctx.fill(); });
+          pts.forEach(p => { ctx.beginPath(); ctx.arc(p[0],p[1], p[2]<0?2.2:1.2, 0, Math.PI*2); ctx.fillStyle = S.q.on ? '#67e8f9' : 'rgba(100,116,139,0.35)'; ctx.fill(); });
         }
-
-        // 7. MODULE 3: MAGNET 3D DIPOLE FIELD LINES
         const cm = cv['c-magnet'];
         if (cm && cm.w > 0) {
           const { ctx, w, h } = cm; ctx.clearRect(0,0,w,h);
-          const cx = w*0.72, cy = h*0.5, sc = Math.min(w,h)*0.45;
-          const rot = T * 0.55 + (S.focus===2 ? 0.6 : 0), cR = Math.cos(rot), sR = Math.sin(rot);
+          const cx = w*0.72, cy = h*0.5, sc = Math.min(w,h)*0.45, rot = T*0.55, cR = Math.cos(rot), sR = Math.sin(rot);
           for (const mp of magPts) {
-            mp.t += (S.focus===2 ? 0.048 : 0.026); if (mp.t > Math.PI) mp.t = 0;
-            const rad = mp.r * Math.pow(Math.sin(mp.t), 2);
-            const x = Math.cos(mp.phi)*rad, y = Math.cos(mp.t)*0.96, z = Math.sin(mp.phi)*rad;
-            const x1 = x*cR - z*sR, z1 = x*sR + z*cR, p = 3/(3+z1);
-            ctx.beginPath(); ctx.arc(cx+x1*sc*p, cy+y*sc*p, Math.max(1.2, 2.6*p), 0, Math.PI*2);
+            mp.t += (S.focus===2?0.048:0.025); if (mp.t > Math.PI) mp.t = 0;
+            const rad = mp.r*Math.pow(Math.sin(mp.t),2), x = Math.cos(mp.phi)*rad, y = Math.cos(mp.t)*0.96, z = Math.sin(mp.phi)*rad;
+            const x1 = x*cR-z*sR, z1 = x*sR+z*cR, p = 3/(3+z1);
+            ctx.beginPath(); ctx.arc(cx+x1*sc*p, cy+y*sc*p, Math.max(1.1, 2.5*p), 0, Math.PI*2);
             ctx.fillStyle = mp.t < Math.PI*0.5 ? 'rgba(192,132,252,0.8)' : 'rgba(244,114,182,0.75)'; ctx.fill();
           }
         }
-
-        // 8. MODULE 4: YT-DLP 3D HOLOGRAPHIC SPECTRUM DECK
         const cy = cv['c-yt'];
         if (cy && cy.w > 0) {
           const { ctx, w, h } = cy; ctx.clearRect(0,0,w,h);
-          const cols = S.y.upscale ? 22 : 13, gap = w / cols;
+          const cols = S.y.upscale ? 20 : 12, gap = w/cols;
           for (let i=0;i<cols;i++) {
-            const amp = (Math.sin(T*3.4 + i*0.52)*0.5+0.5) * (S.y.upscale ? 0.62 : 0.36) * (S.focus===3 ? 1.35 : 1);
-            const bh = Math.max(6, h * amp);
-            const gr = ctx.createLinearGradient(0, h, 0, h - bh);
-            gr.addColorStop(0, S.y.upscale ? 'rgba(255,61,113,0.06)' : 'rgba(255,179,71,0.05)');
-            gr.addColorStop(1, S.y.upscale ? 'rgba(255,179,71,0.54)' : 'rgba(255,179,71,0.32)');
-            ctx.fillStyle = gr; ctx.fillRect(i*gap + 3, h - bh, gap - 6, bh);
+            const amp = (Math.sin(T*3.4 + i*0.52)*0.5+0.5) * (S.y.upscale ? 0.62 : 0.36);
+            const bh = Math.max(6, h*amp), gr = ctx.createLinearGradient(0,h,0,h-bh);
+            gr.addColorStop(0,'rgba(255,61,113,0.05)'); gr.addColorStop(1,'rgba(255,179,71,0.48)');
+            ctx.fillStyle = gr; ctx.fillRect(i*gap+3, h-bh, gap-6, bh);
           }
         }
       }
+
+      // === TAB 2: TASKS — 3D ORBITAL THROUGHPUT RADAR ===
+      if (S.curView === 'tasks') {
+        const c = cv['c-tasks-hero'];
+        if (c && c.w > 0) {
+          const { ctx, w, h } = c; ctx.clearRect(0,0,w,h);
+          const cx = w*0.56, cy = h*0.5;
+          for (let r = 1; r <= 4; r++) {
+            ctx.beginPath(); ctx.ellipse(cx, cy, r*58, r*17, 0, 0, Math.PI*2);
+            ctx.strokeStyle = `rgba(0,212,255,${0.28 - r*0.05})`; ctx.lineWidth = 1.1; ctx.stroke();
+          }
+          const sweep = T * (1.2 + Math.min(2, totalMbps*0.2));
+          ctx.beginPath(); ctx.moveTo(cx, cy);
+          ctx.lineTo(cx + Math.cos(sweep)*220, cy + Math.sin(sweep)*64);
+          ctx.strokeStyle = 'rgba(0,245,184,0.65)'; ctx.lineWidth = 2; ctx.stroke();
+          for (let i = 0; i < 14; i++) {
+            const a = T*(0.7 + (i%4)*0.35) + i*0.8, rad = 52 + (i%4)*52;
+            const px = cx + Math.cos(a)*rad, py = cy + Math.sin(a)*(rad*0.29);
+            ctx.beginPath(); ctx.arc(px, py, 2.6, 0, Math.PI*2);
+            ctx.fillStyle = i%2 ? '#00f5b8' : '#00d4ff'; ctx.fill();
+          }
+        }
+      }
+
+      // === TAB 3: ARIANG — OPTICAL FIBER LASER STREAMS ===
+      if (S.curView === 'ariang') {
+        const c = cv['c-ariang-hero'];
+        if (c && c.w > 0) {
+          const { ctx, w, h } = c; ctx.clearRect(0,0,w,h);
+          for (const fl of fiberLanes) {
+            fl.x = (fl.x + fl.spd * (S.a.on ? 1.8 : 0.7)) % 1.3;
+            const x0 = (fl.x - fl.len)*w, x1 = fl.x*w, y = fl.y*h;
+            const lg = ctx.createLinearGradient(x0, y, x1, y);
+            lg.addColorStop(0,'rgba(0,245,184,0)'); lg.addColorStop(0.8,'rgba(0,245,184,0.55)'); lg.addColorStop(1,'#ffffff');
+            ctx.strokeStyle = lg; ctx.lineWidth = 1.8;
+            ctx.beginPath(); ctx.moveTo(x0,y); ctx.lineTo(x1,y); ctx.stroke();
+          }
+        }
+      }
+
+      // === TAB 4: MAGNET — 3D MAGNETIC DIPOLE TORUS FIELD ===
+      if (S.curView === 'magnet') {
+        const c = cv['c-magnet-hero'];
+        if (c && c.w > 0) {
+          const { ctx, w, h } = c; ctx.clearRect(0,0,w,h);
+          const cx = w*0.54, cy = h*0.5, rot = T*0.7, cR = Math.cos(rot), sR = Math.sin(rot);
+          for (let ring = 0; ring < 12; ring++) {
+            const phi = (ring/12)*Math.PI*2 + rot*0.4;
+            ctx.beginPath();
+            for (let k = 0; k <= 28; k++) {
+              const t = (k/28)*Math.PI, rad = 1.15*Math.pow(Math.sin(t),2);
+              const x = Math.cos(phi)*rad, y = Math.cos(t)*0.9, z = Math.sin(phi)*rad;
+              const x1 = x*cR-z*sR, z1 = x*sR+z*cR, p = 3/(3+z1);
+              const sx = cx + x1*135*p, sy = cy + y*42*p;
+              if (k===0) ctx.moveTo(sx,sy); else ctx.lineTo(sx,sy);
+            }
+            ctx.strokeStyle = ring%2 ? 'rgba(192,132,252,0.34)' : 'rgba(236,72,153,0.28)'; ctx.lineWidth = 1.2; ctx.stroke();
+          }
+        }
+      }
+
+      // === TAB 5: YT VIDEO — 3D CINEMA SCAN GRID & SPECTRUM ===
+      if (S.curView === 'yt') {
+        const c = cv['c-yt-hero'];
+        if (c && c.w > 0) {
+          const { ctx, w, h } = c; ctx.clearRect(0,0,w,h);
+          const bars = 46, gap = w/bars;
+          for (let i = 0; i < bars; i++) {
+            const amp = (Math.sin(T*3.2 + i*0.35)*0.5+0.5) * (S.y.upscale ? 0.82 : 0.5);
+            const bh = Math.max(8, h*amp);
+            const gr = ctx.createLinearGradient(0,h,0,h-bh);
+            gr.addColorStop(0,'rgba(255,61,113,0.06)'); gr.addColorStop(1,'rgba(255,179,71,0.52)');
+            ctx.fillStyle = gr; ctx.fillRect(i*gap+2, h-bh, gap-4, bh);
+          }
+          const scanX = ((T*140) % (w+120)) - 60;
+          const sg = ctx.createLinearGradient(scanX-50,0,scanX+50,0);
+          sg.addColorStop(0,'rgba(255,179,71,0)'); sg.addColorStop(0.5,'rgba(255,230,150,0.35)'); sg.addColorStop(1,'rgba(255,179,71,0)');
+          ctx.fillStyle = sg; ctx.fillRect(scanX-50,0,100,h);
+        }
+      }
+
+      // === TAB 6: MUSIC — 3D HOLOGRAPHIC SPINNING VINYL + CIRCULAR SPECTRUM ===
+      if (S.curView === 'music') {
+        const c = cv['c-music-hero'];
+        if (c && c.w > 0) {
+          const { ctx, w, h } = c; ctx.clearRect(0,0,w,h);
+          const playing = !document.getElementById('mu-audio').paused || !document.getElementById('mp-audio').paused || S.musicRunning;
+          const cx = w*0.58, cy = h*0.52, spd = playing ? 2.4 : 0.7;
+          // Circular holographic vinyl grooves
+          for (let r = 12; r <= 44; r += 6) {
+            ctx.beginPath(); ctx.ellipse(cx, cy, r*1.75, r*0.72, 0, 0, Math.PI*2);
+            ctx.strokeStyle = r === 12 ? 'rgba(255,61,113,0.85)' : `rgba(192,132,252,${0.32 - (r-12)*0.005})`;
+            ctx.lineWidth = r === 12 ? 2.2 : 1; ctx.stroke();
+          }
+          // Rotating vinyl laser sheen
+          const ang = T * spd;
+          ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(ang)*76, cy + Math.sin(ang)*31);
+          ctx.strokeStyle = 'rgba(255,255,255,0.65)'; ctx.lineWidth = 2; ctx.stroke();
+          // Ambient frequency bars around vinyl
+          const n = 48;
+          for (let i = 0; i < n; i++) {
+            const x = (i/n)*w;
+            const amp = (Math.sin(T*(playing?5.5:2.2) + i*0.42)*0.5+0.5) * (playing ? 0.72 : 0.28);
+            const bh = Math.max(4, h*amp*0.65);
+            ctx.fillStyle = i%2 ? 'rgba(255,61,113,0.28)' : 'rgba(0,212,255,0.24)';
+            ctx.fillRect(x+2, h-bh, (w/n)-4, bh);
+          }
+        }
+      }
+
+      // === TAB 7: VOICE CLONING — 3D NEURAL VOICEPRINT DOUBLE-HELIX ===
+      if (S.curView === 'voice') {
+        const c = cv['c-voice-hero'];
+        if (c && c.w > 0) {
+          const { ctx, w, h } = c; ctx.clearRect(0,0,w,h);
+          const active = S.voiceRunning || S.recording || !document.getElementById('vc-audio').paused;
+          const pts = 44, amp = (active ? 30 : 18);
+          for (let i = 0; i < pts; i++) {
+            const u = i / (pts - 1), x = u * w;
+            const ph = u * Math.PI * 5 - T * (active ? 3.8 : 1.7);
+            const y1 = h*0.5 + Math.sin(ph) * amp;
+            const y2 = h*0.5 - Math.sin(ph) * amp;
+            const depth = Math.cos(ph);
+            // Cross acoustic rung
+            ctx.strokeStyle = 'rgba(192,132,252,0.22)'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(x, y1); ctx.lineTo(x, y2); ctx.stroke();
+            // Twin helix glowing nodes
+            ctx.beginPath(); ctx.arc(x, y1, depth > 0 ? 3.1 : 1.7, 0, Math.PI*2);
+            ctx.fillStyle = active ? '#ff3d71' : '#00d4ff'; ctx.fill();
+            ctx.beginPath(); ctx.arc(x, y2, depth < 0 ? 3.1 : 1.7, 0, Math.PI*2);
+            ctx.fillStyle = '#c084fc'; ctx.fill();
+          }
+        }
+      }
+
       requestAnimationFrame(tickFrame);
     }
 
@@ -1689,7 +2344,7 @@
       moveNavPill(document.querySelector('.nav-btn.active'));
       resizeAllCanvases(); pollState(); tickFrame();
     });
-    setTimeout(() => { moveNavPill(document.querySelector('.nav-btn.active')); resizeAllCanvases(); }, 80);
+    setTimeout(() => { moveNavPill(document.querySelector('.nav-btn.active')); resizeAllCanvases(); }, 90);
     setInterval(pollState, 1500);
   </script>
 </body>

@@ -4,6 +4,6 @@ Set-Location (Split-Path -Parent $PSScriptRoot)
 python -m pip install -r requirements.txt
 python -m pip install pyinstaller
 python -m PyInstaller --noconfirm --clean --windowed --onefile `
-  --name DownloadStackControl --add-data "panel_ui.html;." --add-data "magnet_tools.py;." --distpath $Out panel.py
+  --name DownloadStackControl --add-data "panel_ui.html;." --add-data "magnet_tools.py;." --add-data "media_studio.py;." --distpath $Out panel.py
 Write-Host "built: $Out\DownloadStackControl.exe" -ForegroundColor Green
 Get-FileHash "$Out\DownloadStackControl.exe" -Algorithm SHA256 | Format-List
