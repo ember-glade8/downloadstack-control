@@ -3272,7 +3272,7 @@ class ControlBackend:
 
         if act == "purge_all":
             rm_files = bool(body.get("remove_files"))
-            cleared = {"aria2": 0, "qbit": 0, "cache": 0}
+            cleared = {"aria2": 0, "qbit": 0, "cache": 0, "ctrl": 0}
             errs = []
             try:
                 tasks = (self.pr.a_call("aria2.tellActive") or [])
@@ -3314,9 +3314,23 @@ class ControlBackend:
                         cleared["cache"] += 1
             except Exception:
                 pass
+            if rm_files:
+                try:
+                    droot = Path(str((self.cfg.get("misc") or {}).get("downloads_root")
+                                     or (self.cfg.get("paths") or {}).get("downloads") or ""))
+                    if droot and droot.is_dir():
+                        for f in droot.rglob("*"):
+                            try:
+                                if f.is_file() and f.suffix.lower() in (".aria2", ".torrent", ".!qb", ".parts"):
+                                    f.unlink()
+                                    cleared["ctrl"] += 1
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
             self.poll_once()
-            msg = "已清空 Aria2 %d 个任务、qB 全部任务（%s）、缓存 %d 个文件" % (
-                cleared["aria2"], "含文件" if rm_files else "保留文件", cleared["cache"])
+            msg = "已清空 Aria2 %d 个任务、qB 全部任务（%s）、缓存 %d 个、控制文件残骸 %d 个" % (
+                cleared["aria2"], "含文件" if rm_files else "保留文件", cleared["cache"], cleared["ctrl"])
             if errs:
                 msg += "；" + "；".join(errs)
             self.log(msg, "WARN" if errs else "OK")

@@ -5966,15 +5966,19 @@ function togglePw(id, btn) {
   try { el.focus(); } catch (e) {}
 }
 
-// 一键清空：Aria2 活动任务 + qB 全部种子 + 面板缓存
+// 一键清空（无残留）：Aria2 任务 + qB 种子 + 磁盘文件 + 控制文件残骸 + 面板缓存
 function purgeAll() {
-  if (!confirm('确定清空全部下载任务？（Aria2 + qBittorrent）')) return;
-  const rm = confirm(
-    '要连磁盘上的已下载文件一起删掉吗？\n\n' +
-    '点【确定】= 连文件一起删（不可恢复）\n' +
-    '点【取消】= 只清任务，文件保留'
-  );
-  window.act('purge_all', { remove_files: !!rm });
+  if (!confirm(
+    '一键清空（无残留）\n\n' +
+    '将删除：\n' +
+    '· Aria2 全部任务\n' +
+    '· qBittorrent 全部种子\n' +
+    '· 种子对应的磁盘文件\n' +
+    '· .aria2 / .torrent 控制文件残骸\n' +
+    '· 面板缓存\n\n' +
+    '此操作不可恢复，确定执行？'
+  )) return;
+  window.act('purge_all', { remove_files: true });
 }
 </script>
 </body>
