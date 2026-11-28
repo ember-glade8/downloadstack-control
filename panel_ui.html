@@ -2736,6 +2736,8 @@
           <div class="card-hd" style="flex-wrap:wrap;gap:6px;">
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
               <div class="card-title c-cyan">🌐 全球影视 · KatelyaTV</div>
+              <span class="tag-pill mono" style="background:rgba(0,229,255,0.10);color:#9fd8ff;" title="登录影视站用，点按钮直接复制">👤 admin / 🔑 MediaStack@2026</span>
+              <button class="btn btn-xs btn-cyan" onclick="gtvCopyCred()" title="复制账号密码到剪贴板">📋 复制账号</button>
               <span id="gtv-stream-badge" class="tag-pill mono" style="background:rgba(0,229,255,0.14);color:#67e8f9;">点开任意影片播放后，可一键送入 4K 影院开启 GPU 画质修复</span>
             </div>
             <div style="display:flex;gap:5px;flex-wrap:wrap;">
@@ -4963,6 +4965,24 @@
   function gtvBoot() {
     toast('Docker Desktop 已设为开机自启；若容器没起，在 D:\\MediaStack 跑 docker compose up -d', 'amber', 5200);
   }
+  function gtvCopyCred() {
+    const txt = 'admin / MediaStack@2026';
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText('MediaStack@2026').then(
+          () => toast('已复制密码 MediaStack@2026', 'mint'),
+          () => toast('复制失败，请手动抄 ' + txt, 'amber')
+        );
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = 'MediaStack@2026';
+        document.body.appendChild(ta); ta.select();
+        document.execCommand('copy'); document.body.removeChild(ta);
+        toast('已复制密码 MediaStack@2026', 'mint');
+      }
+    } catch (e) { toast('请手动抄：' + txt, 'amber'); }
+  }
+  window.gtvCopyCred = gtvCopyCred;
   window.gtvReload = gtvReload;
   window.gtvFull = gtvFull;
   window.gtvBoot = gtvBoot;
