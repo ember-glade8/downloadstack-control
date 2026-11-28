@@ -4974,6 +4974,83 @@ def run_3d_server(open_browser=True):
                 except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                     return
 
+        def _proxy_tv(self, method="GET"):
+            # KatelyaTV 同源反代：把 3030 的页面/资源搬到 /tv/ 下，绕开 iframe 第三方 cookie 拦截
+            host, port = "127.0.0.1", 3030
+            if not port_open(host, port):
+                msg = (
+                    "<html><body style='margin:0;height:100vh;display:flex;flex-direction:column;"
+                    "align-items:center;justify-content:center;background:#040814;color:#93c5fd;"
+                    "font-family:sans-serif;gap:12px;'>"
+                    "<div style='font-size:18px;font-weight:800;'>影视站未启动</div>"
+                    "<div style='font-size:13px;color:#64748b;'>请确认 Docker Desktop 已运行，容器 katelyatv 会自动就绪</div>"
+                    "</body></html>"
+                ).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(msg)))
+                self.end_headers()
+                self.wfile.write(msg)
+                return
+            sub = self.path[len("/tv"):] if self.path.startswith("/tv") else "/"
+            if not sub.startswith("/"):
+                sub = "/" + sub
+            target_url = "http://%s:%d%s" % (host, port, sub)
+            hdrs = {"Host": "%s:%d" % (host, port)}
+            for h in ("Cookie", "Content-Type", "Accept", "Accept-Language", "User-Agent"):
+                v = self.headers.get(h)
+                if v:
+                    hdrs[h] = v
+            body_bytes = None
+            if method in ("POST", "PUT", "PATCH", "DELETE"):
+                length = int(self.headers.get("Content-Length") or 0)
+                body_bytes = self.rfile.read(length) if length > 0 else b""
+            try:
+                _ps = requests.Session()
+                _ps.trust_env = False
+                r = _ps.request(method, target_url, headers=hdrs, data=body_bytes,
+                                timeout=25, allow_redirects=False)
+                content = r.content
+                ctype = r.headers.get("Content-Type") or "application/octet-stream"
+                low = ctype.lower()
+                # Next.js 用绝对路径 /_next/ 与 /api/，必须改写到 /tv 前缀下才不会被面板根路径吞掉
+                if ("text/html" in low) or ("javascript" in low) or ("text/css" in low):
+                    try:
+                        txt = content.decode("utf-8", errors="replace")
+                        txt = txt.replace("/_next/", "/tv/_next/")
+                        txt = txt.replace('"/api/', '"/tv/api/')
+                        txt = txt.replace("'/api/", "'/tv/api/")
+                        txt = txt.replace("(/api/", "(/tv/api/")
+                        content = txt.encode("utf-8")
+                    except Exception:
+                        pass
+                self.send_response(r.status_code)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Cache-Control", "no-store")
+                sc = r.headers.get("Set-Cookie")
+                if sc:
+                    self.send_header("Set-Cookie", sc)
+                loc = r.headers.get("Location")
+                if loc:
+                    if loc.startswith("/") and not loc.startswith("/tv"):
+                        loc = "/tv" + loc
+                    self.send_header("Location", loc)
+                self.send_header("Content-Length", str(len(content)))
+                self.end_headers()
+                self.wfile.write(content)
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                return
+            except Exception as ex:
+                try:
+                    err = ("影视站反代失败：%s" % ex).encode("utf-8")
+                    self.send_response(502)
+                    self.send_header("Content-Type", "text/plain; charset=utf-8")
+                    self.send_header("Content-Length", str(len(err)))
+                    self.end_headers()
+                    self.wfile.write(err)
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                    return
+
         def do_GET(self):
             req_path = self.path.split("?", 1)[0]
             if req_path == "/qbit" or req_path.startswith("/qbit/"):
@@ -4983,6 +5060,14 @@ def run_3d_server(open_browser=True):
                     self.end_headers()
                     return
                 self._proxy_qbit("GET")
+                return
+            if req_path == "/tv" or req_path.startswith("/tv/"):
+                if req_path == "/tv":
+                    self.send_response(302)
+                    self.send_header("Location", "/tv/")
+                    self.end_headers()
+                    return
+                self._proxy_tv("GET")
                 return
             if req_path in ("/favicon.ico", "/api/app_icon.png"):
                 is_ico = (req_path == "/favicon.ico")
@@ -5346,6 +5431,9 @@ def run_3d_server(open_browser=True):
             req_path = self.path.split("?", 1)[0]
             if req_path == "/qbit" or req_path.startswith("/qbit/"):
                 self._proxy_qbit("POST")
+                return
+            if req_path == "/tv" or req_path.startswith("/tv/"):
+                self._proxy_tv("POST")
                 return
             if req_path == "/api/action":
                 length = int(self.headers.get("Content-Length") or 0)
