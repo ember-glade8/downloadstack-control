@@ -5073,6 +5073,55 @@ def run_3d_server(open_browser=True):
                 except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                     return
 
+        def _proxy_tv_raw(self):
+            # 兜底转发：KatelyaTV 的业务路由（/douban /play /search …）都是根绝对路径，
+            # 面板未占用的路径一律交给它，否则 iframe 里点一下就 404
+            if not port_open("127.0.0.1", 3030):
+                return False
+            try:
+                _hdr = {"Host": "127.0.0.1:3030",
+                        "Accept": self.headers.get("Accept") or "*/*"}
+                _ck = self.headers.get("Cookie")
+                if _ck:
+                    _hdr["Cookie"] = _ck
+                r = requests.get("http://127.0.0.1:3030" + str(self.path), timeout=12,
+                                 allow_redirects=False, proxies={"http": None, "https": None},
+                                 headers=_hdr)
+                if r.status_code >= 400:
+                    return False
+                content = r.content
+                ctype = r.headers.get("Content-Type") or "application/octet-stream"
+                low = ctype.lower()
+                if ("text/html" in low) or ("javascript" in low) or ("text/css" in low):
+                    try:
+                        txt = content.decode("utf-8", errors="replace")
+                        txt = txt.replace("/_next/", "/tv/_next/")
+                        txt = txt.replace('"/api/', '"/tv/api/')
+                        txt = txt.replace("'/api/", "'/tv/api/")
+                        txt = txt.replace("(/api/", "(/tv/api/")
+                        content = txt.encode("utf-8")
+                    except Exception:
+                        pass
+                self.send_response(r.status_code)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Cache-Control", "no-store")
+                sc = r.headers.get("Set-Cookie")
+                if sc:
+                    self.send_header("Set-Cookie", sc)
+                loc = r.headers.get("Location")
+                if loc:
+                    if loc.startswith("/") and not loc.startswith("/tv"):
+                        loc = "/tv" + loc
+                    self.send_header("Location", loc)
+                self.send_header("Content-Length", str(len(content)))
+                self.end_headers()
+                self.wfile.write(content)
+                return True
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                return True
+            except Exception:
+                return False
+
         def do_GET(self):
             req_path = self.path.split("?", 1)[0]
             if req_path == "/qbit" or req_path.startswith("/qbit/"):
@@ -5451,6 +5500,11 @@ def run_3d_server(open_browser=True):
                 backend.log("面板 404: %s" % str(self.path)[:120], "WARN")
             except Exception:
                 pass
+            # 兜底：面板没占用的路径交给 KatelyaTV（它有 /douban /play 这类根路由）
+            _p = str(self.path).split("?", 1)[0]
+            if not _p.startswith(("/api/", "/tv/", "/qbit/", "/ariang")):
+                if self._proxy_tv_raw():
+                    return
             self.send_error(404)
 
         def do_POST(self):
