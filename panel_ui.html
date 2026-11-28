@@ -4779,8 +4779,9 @@
     if (v === 'tutorial') renderTutorialHub();
     if (v === 'globaltv') {
       const gf = $('gtv-frame');
-      if (gf && (!gf.getAttribute('src') || gf.getAttribute('src') === 'about:blank' || String(gf.getAttribute('src')).indexOf('/tv/') < 0)) {
-        gf.setAttribute('src', '/tv/');
+      const cur = gf ? String(gf.getAttribute('src') || '') : '';
+      if (gf && (!cur || cur === 'about:blank' || cur.indexOf('/tv/') !== 0)) {
+        gf.setAttribute('src', '/tv/login');
       }
     }
     if (v === 'cinema') {
@@ -4798,7 +4799,7 @@
   /* ===================== GLOBAL TV (KatelyaTV) ===================== */
   function gtvReload() {
     const f = $('gtv-frame');
-    if (f) f.setAttribute('src', '/tv/?_t=' + Date.now());
+    if (f) f.setAttribute('src', '/tv/login?_t=' + Date.now());
     else toast('全球影视容器未就绪', 'amber');
   }
   function gtvFull() {
