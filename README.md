@@ -10,11 +10,12 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![WebGL](https://img.shields.io/badge/UI-Spatial%203D%20HUD%20%2B%20WebGL2%20CAS-a78bfa)](#-核心功能全景)
 [![Tutorial](https://img.shields.io/badge/Docs-全功能使用教程-FFB347)](TUTORIAL.md)
+[![Setup](https://img.shields.io/badge/Docs-从零配置手册-00F5B8)](SETUP.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-00F5B8)](#-快速开始)
 [![License](https://img.shields.io/badge/License-MIT-FFB020)](LICENSE)
 
 > 🎉 **v2.5 正式定版**：全新集成 **5 源并发站内搜磁力**、**站内原画 4K 影院（零压缩直出 + GPU WebGL2 FidelityFX CAS 4K画质修复 + RTX 重建纯 4K + 看完即删）**、**4K 原画截图/无损剪辑联动 AI 画室与声音克隆**、**磁盘空间实时卫士 + 通宵挂机自动睡眠/关机**、以及 **11 章交互式教程中心**。  
-> 📖 完整指南见 **[《DownloadStack Control v2.5 使用教程手册》](TUTORIAL.md)** ｜ 更新详情见 **[CHANGELOG.md](CHANGELOG.md)**。
+> 📖 完整指南见 **[《DownloadStack Control v2.5 使用教程手册》](TUTORIAL.md)** ｜ **第一次安装请照 [《从零配置手册 SETUP.md》](SETUP.md) 走**（含逐项配置、故障排查、风险清单） ｜ 更新详情见 **[CHANGELOG.md](CHANGELOG.md)**。
 
 </div>
 
@@ -46,7 +47,7 @@
 
 ---
 
-## ✨ 核心功能全景（11 大站内工坊 + 12 项首页传送门 + 常驻智能体）
+## ✨ 核心功能全景（12 大站内工坊 + 12 项首页传送门 + 常驻智能体）
 
 ### 1. ✦ 3D 空间控制台总览大屏（Cockpit）
 - **3D 全息轨道指挥核**：实时 3D 轨道雷达 + 6 颗引擎运行卫星 + 5 层实时吞吐量能量波面 + 5 项核心指标（总下行/峰值速率、活跃任务/连接、BT 种子/DHT 节点、本地 GPU 显存占用、AI 与智能体状态）。
@@ -113,13 +114,25 @@
 - 全站右下角常驻悬浮 **赛博小怪兽**（SVG 霓虹精灵 + 实时跟随鼠标转动的电子眼），在任意页面点击即弹出站内多轮问答框，自动感知当前页面与本机引擎状态（严格脱敏）。
 - 支持在 **👾 智能体** 页面配置任意 OpenAI / Codex 兼容中转地址、模型名与 API Key（支持一键拉取可用模型列表，代理/直连自动回退，密钥仅写本地 `config.json`）。
 
-### 10. 🛠️ 系统与运维中心 & 📖 内置交互式教程模块
+### 10. 📚 书城（漫画 / 电子书 / 朗读 · 全站内阅读）
+
+- **聚合搜索 8 类源**：MangaDex 公开漫画、维基文库中文古籍、Project Gutenberg、Internet Archive 扫描本、Standard Ebooks、Open Library（仅公开阅读条目）、小説家になろう、以及按题材直达的「风格馆」。
+- **本地书库**：把 `EPUB / TXT / PDF / CBZ / ZIP` 或漫画图片文件夹放进 `ControlPanel\library\`（或自选目录写入 `reader_roots`）→ 书城点「重新扫描」即可离线阅读；TXT 自动按「第 X 章」切章，CBZ 按序翻页。
+- **站内闭环**：所有远程图片走同源代理 `/api/reader/img` + 本地磁盘缓存，翻页秒开；书架 / 进度 / 偏好仅写 `cache/reader/shelf.json`。
+- **朗读**：系统 SAPI + Edge-TTS 音色 + 外部 TTS API（`voice.api_url`）。
+- 详见 **[SETUP.md §7](SETUP.md)**。
+
+### 11. 🛠️ 系统与运维中心 & 📖 内置交互式教程模块
 - **系统与运维中心**：全局端口/路径配置、开机自启开关、一键自检、端口扫描、一键备份配置、日志清空/导出、清理缓存与安全停止全部服务。
 - **📖 站内全功能教程模板**：顶部导航直达，内置 10 大功能完整步骤教程、避坑技巧、FAQ 与关键词实时筛选，每章提供「🚀 立即前往」按钮一键跳转对应工坊；离线文档同步维护于 [TUTORIAL.md](TUTORIAL.md)。
 
 ---
 
 ## 🚀 快速开始
+
+### 0. 第一次安装？先看 [SETUP.md](SETUP.md)
+
+安装 → 首次自检 → 逐项配置 → 可选组件 → 书城/音乐/短剧 → 自启/备份/迁移/卸载 → 故障排查 → **风险清单（R1–R14，务必读）**，一份文档全覆盖。
 
 ### 1. 首次一键配置
 
@@ -143,11 +156,17 @@
 
 ```text
 downloadstack-control/
-├─ panel.py              核心本地服务（HTTP /api/state、/api/action、/api/media、/api/stream_audio、/ariang/、/qbit/ 代理）
+├─ panel.py              核心本地服务（HTTP /api/state、/api/action、/api/media、/api/stream_audio、/ariang/、/qbit/、/api/reader* 代理）
 ├─ panel_ui.html         无构建链单文件 Spatial 3D Command OS 前端（含 WebGL GLSL 沉浸舞台）
-├─ media_studio.py       6 音源搜歌、6 大榜单、LRC 歌词、音频流解析、声音克隆、ComfyUI 与 Codex 客户端
+├─ media_studio.py       14 音源搜歌、6 大榜单、LRC 歌词、音频流解析、声音克隆、ComfyUI 与 Codex 客户端
+├─ reader_hub.py         书城后端（聚合搜索 / 远程图片代理 / 本地书库扫描 / 离线打包）
+├─ reader_catalog.py     书城书源目录与题材索引
+├─ drama_hub.py          短剧中心（官方频道展厅与可嵌入播放器）
+├─ lx_music_bridge.py    LX Music 音源桥（只读取 user_api.json，本机 Node 宿主解析）
+├─ lx_userapi_host.js    LX 音源本地宿主（仅监听 127.0.0.1）
 ├─ prompt_engine.py      Skill 驱动超级提示词引擎（自动挂载 20,000+ 社区 Skill 词库、云端同步、实拍样图、Skill Remix 与 Skill-RAG 优化）
 ├─ magnet_tools.py       5 源并发磁力搜索引擎、磁力 / InfoHash 解析、公共 Tracker 热更新、DHT 诊断与 aria2.conf 无损修复
+├─ library/              ★ 本地书库（自带样例，放入自己的书后重启面板扫描）
 ├─ ytdl_gui.py           独立视频下载 GUI 工具
 ├─ setup_wizard.py       图形 / 命令行跨平台引导向导
 ├─ install.bat / .sh     一键环境与组件安装器（盘符自选、端口避让、SHA256 校验）
@@ -160,6 +179,7 @@ downloadstack-control/
 │  └─ build.ps1          打包辅助脚本
 ├─ tests/test_core.py    核心单元测试
 ├─ TUTORIAL.md           全功能 11 章图文步骤使用教程手册
+├─ SETUP.md              从零配置手册（安装 / 逐项配置 / 故障排查 / 风险清单 R1–R14）
 ├─ CHANGELOG.md          版本发布说明（v2.5）
 ├─ DISCLAIMER.md         中英文免责声明与合法合规使用协议
 └─ LICENSE / NOTICE / SECURITY.md / CONTRIBUTING.md
@@ -185,3 +205,18 @@ MIT © DownloadStack Control contributors ｜ 第三方独立组件许可见 [NO
 > 2. **版权合法用途**：视频/音频/磁力协议检索功能仅限用于开源镜像（如 Linux ISO）、Creative Commons 公共领域素材、个人原创归档及已获合法授权的内容；请严格遵守所在地著作权法及各平台服务条款。
 > 3. **AI 声音权与深度合成合规**：使用 AI 声音克隆及内容生成功能时，**仅限使用本人声音或已获得明确书面授权的素材**，严禁冒充他人、深度伪造欺诈或侵害他人声音权/肖像权/隐私权；对外传播 AI 生成内容须依法显著标识。
 > 4. **按“现状”提供（AS IS）**：依据 [MIT License](LICENSE)，文件删除（看完即删 / 一键清空）及定时休眠/关机功能均由用户主动确认触发，作者不对误操作、数据丢失或任何违规使用行为承担法律责任。
+
+---
+
+## 🔐 安全边界（安装前请务必阅读）
+
+| 要点 | 说明 |
+| --- | --- |
+| **无鉴权** | 面板没有账号体系，本地即最高权限。**只监听 `127.0.0.1`**；远程访问请走虚拟局域网 + 反向代理鉴权，**不要**做路由器端口映射。 |
+| **明文凭据** | qBittorrent 密码、aria2 `rpc-secret`、AI Key 明文存于 `config.json` / `rpc-secret.txt`（已加入 `.gitignore`）。截图、共享目录、上传网盘前先脱敏。 |
+| **不可逆操作** | 「看完即删」会删除真实影片、关联种子、字幕与空目录；「下完关机 / 睡眠」会中断其它程序。首次使用请先在测试目录验证。 |
+| **浏览器登录态** | `yt.cookies=auto` 会读取本机浏览器 Cookies 用于下载，等于把站点登录权限交给该进程；共享机器建议设为 `none`。 |
+| **第三方脚本** | LX 音源桥会在本机 Node 中执行来自 `user_api.json` 的 JavaScript，只安装可信来源的音源。 |
+| **合规使用** | 仅用于公有领域、CC 授权、自有内容或已获授权的素材；AI 声音克隆须使用本人或已获书面授权的声音并依法标识。 |
+
+> 完整风险清单（R1–R14）、止损步骤与交付检查清单见 **[SETUP.md §12–§13](SETUP.md)**。

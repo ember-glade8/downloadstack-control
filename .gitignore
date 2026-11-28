@@ -51,3 +51,14 @@ desktop.ini
 
 # 本地推送脚本（含 token 用法，不入库）
 push-to-github.ps1
+
+# 本地书库：保留说明与官方样例，用户自己放的书不入库
+library/*
+!library/README.md
+!library/唐诗小品.txt
+!library/sample.pdf
+
+# 运行时杂项
+*.bak
+*.bak_*
+*_run_server.py

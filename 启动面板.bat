@@ -1,15 +1,34 @@
 @echo off
-chcp 936 >nul
+chcp 65001 >nul
 setlocal EnableExtensions
-title DownloadStack ¿ØÖÆÌ¨
+title DownloadStack æ§åˆ¶å°
 set "APP=%~dp0"
-set "LOG=%APP%logs\launcher.log"
-if not exist "%APP%logs" mkdir "%APP%logs" >nul 2>&1
+color 0B
+
+echo ============================================================
+echo    DownloadStack æ§åˆ¶å°
+echo ============================================================
+echo.
+echo [1/3] ç¯å¢ƒè‡ªæ£€
+
+rem ---------- 1. å®šä½å®‰è£…æ ¹ä¸é¢æ¿ç›®å½•ï¼ˆæ”¯æŒå°†æœ¬è„šæœ¬æ”¾åœ¨ä»»æ„å¿«æ·ç›®å½•ï¼‰ ----------
+set "FOUND_ROOT="
+if defined DOWNLOADSTACK_ROOT if exist "%DOWNLOADSTACK_ROOT%\aria2\aria2c.exe" set "FOUND_ROOT=%DOWNLOADSTACK_ROOT%"
+if not defined FOUND_ROOT if exist "%APP%..\aria2\aria2c.exe" for %%I in ("%APP%..") do set "FOUND_ROOT=%%~fI"
+if not defined FOUND_ROOT if exist "%APP%aria2\aria2c.exe" set "FOUND_ROOT=%APP:~0,-1%"
+if not defined FOUND_ROOT for %%D in (C D E F G H) do if not defined FOUND_ROOT if exist "%%D:\Tools\DownloadStack\aria2\aria2c.exe" set "FOUND_ROOT=%%D:\Tools\DownloadStack"
+if defined FOUND_ROOT set "DOWNLOADSTACK_ROOT=%FOUND_ROOT%"
+
+set "PANEL_DIR=%APP%"
+if not exist "%PANEL_DIR%panel.py" if defined FOUND_ROOT if exist "%FOUND_ROOT%\ControlPanel\panel.py" set "PANEL_DIR=%FOUND_ROOT%\ControlPanel\"
+
+set "LOG=%PANEL_DIR%logs\launcher.log"
+if not exist "%PANEL_DIR%logs" mkdir "%PANEL_DIR%logs" >nul 2>&1
 echo. >> "%LOG%"
 echo ===== %date% %time% ===== >> "%LOG%"
-set "TEMP=%APP%cache\temp"
-set "TMP=%APP%cache\temp"
-set "FLET_APP_STORAGE_DATA=%APP%cache\flet"
+set "TEMP=%PANEL_DIR%cache\temp"
+set "TMP=%PANEL_DIR%cache\temp"
+set "FLET_APP_STORAGE_DATA=%PANEL_DIR%cache\flet"
 set "HTTP_PROXY="
 set "HTTPS_PROXY="
 set "ALL_PROXY="
@@ -18,162 +37,170 @@ set "https_proxy="
 set "all_proxy="
 if not exist "%TEMP%" mkdir "%TEMP%" >nul 2>&1
 if not exist "%FLET_APP_STORAGE_DATA%" mkdir "%FLET_APP_STORAGE_DATA%" >nul 2>&1
-color 0B
 
-echo ============================================================
-echo    DownloadStack ¿ØÖÆÌ¨
-echo ============================================================
-echo.
-echo [1/3] »·¾³×Ô¼ì
+rem ---------- 2. å•å®ä¾‹ä¿æŠ¤ ----------
+set "RUNNING=0"
+for /f %%i in ('powershell -NoProfile -Command "(@(Get-CimInstance Win32_Process -Filter \"Name='python.exe' OR Name='pythonw.exe'\" -ErrorAction SilentlyContinue ^| Where-Object { $_.CommandLine -match 'panel\.py' }).Count)"') do set "RUNNING=%%i"
+if not "%RUNNING%"=="0" (
+  echo   [æç¤º] æ§åˆ¶å°å·²åœ¨è¿è¡Œä¸­ï¼Œæ— éœ€é‡å¤æ‰“å¼€ã€‚
+  timeout /t 2 >nul
+  endlocal
+  exit /b 0
+)
 
-rem ---------- °²×°¸ù ----------
-set "FOUND_ROOT="
-if defined DOWNLOADSTACK_ROOT if exist "%DOWNLOADSTACK_ROOT%\aria2\aria2c.exe" set "FOUND_ROOT=%DOWNLOADSTACK_ROOT%"
-if not defined FOUND_ROOT if exist "%APP%..\aria2\aria2c.exe" for %%I in ("%APP%..") do set "FOUND_ROOT=%%~fI"
-if not defined FOUND_ROOT if exist "%APP%aria2\aria2c.exe" set "FOUND_ROOT=%APP%"
-if not defined FOUND_ROOT for %%D in (C D E F G H) do if not defined FOUND_ROOT if exist "%%D:\Tools\DownloadStack\aria2\aria2c.exe" set "FOUND_ROOT=%%D:\Tools\DownloadStack"
-if defined FOUND_ROOT set "DOWNLOADSTACK_ROOT=%FOUND_ROOT%"
-
-rem ---------- Python ----------
+rem ---------- 3. æŸ¥æ‰¾å¸¦ flet ä¾èµ–çš„ Python ----------
 set "PYRUN="
 set "PYVER="
-if defined PYTHON_EXE if exist "%PYTHON_EXE%" set "PYRUN=%PYTHON_EXE%"
+if defined PYTHON_EXE if exist "%PYTHON_EXE%" call :try_py "%PYTHON_EXE%"
+if not defined PYRUN if defined FOUND_ROOT if exist "%FOUND_ROOT%\.venv\Scripts\python.exe" call :try_py "%FOUND_ROOT%\.venv\Scripts\python.exe"
+if not defined PYRUN if exist "%PANEL_DIR%.venv\Scripts\python.exe" call :try_py "%PANEL_DIR%.venv\Scripts\python.exe"
+if not defined PYRUN for %%D in (C D E F) do if not defined PYRUN for /d %%P in ("%%D:\python3*") do if not defined PYRUN if exist "%%~fP\python.exe" call :try_py "%%~fP\python.exe"
+if not defined PYRUN for /d %%P in ("%LOCALAPPDATA%\Programs\Python\Python3*") do if not defined PYRUN if exist "%%~fP\python.exe" call :try_py "%%~fP\python.exe"
+if not defined PYRUN (
+  for /f "delims=" %%P in ('where python 2^>nul') do if not defined PYRUN call :try_py "%%~fP"
+)
 if not defined PYRUN (
   where python >nul 2>&1
   if not errorlevel 1 set "PYRUN=python"
 )
-if not defined PYRUN (
-  where py >nul 2>&1
-  if not errorlevel 1 set "PYRUN=py -3"
-)
 
 set "MISS="
-set "NOTE="
 if defined PYRUN (
-  for /f "delims=" %%V in ('%PYRUN% -c "import sys;print(sys.version.split()[0])" 2^>nul') do set "PYVER=%%V"
+  for /f "delims=" %%V in ('"%PYRUN%" -c "import sys;print(sys.version.split()[0])" 2^>nul') do set "PYVER=%%V"
 )
 if not defined PYRUN (
   set "MISS=%MISS% Python"
-  echo   [È±] Python 3.10+
+  echo   [ç¼º] Python 3.10+
 ) else (
-  echo   [OK] Python %PYVER%
+  echo   [OK] Python %PYVER% ^(%PYRUN%^)
 )
 
-rem ---------- Ãæ°åÒÀÀµ ----------
+rem ---------- 4. é¢æ¿ä¾èµ– ----------
 if defined PYRUN (
-  %PYRUN% -c "import flet" >nul 2>&1
-  if errorlevel 1 (set "MISS=%MISS% flet"& echo   [È±] ÒÀÀµ flet) else (echo   [OK] ÒÀÀµ flet)
-  %PYRUN% -c "import requests" >nul 2>&1
-  if errorlevel 1 (set "MISS=%MISS% requests"& echo   [È±] ÒÀÀµ requests) else (echo   [OK] ÒÀÀµ requests)
+  "%PYRUN%" -c "import flet" >nul 2>&1
+  if errorlevel 1 (set "MISS=%MISS% flet"& echo   [ç¼º] ä¾èµ– flet) else (echo   [OK] ä¾èµ– flet)
+  "%PYRUN%" -c "import requests" >nul 2>&1
+  if errorlevel 1 (set "MISS=%MISS% requests"& echo   [ç¼º] ä¾èµ– requests) else (echo   [OK] ä¾èµ– requests)
 )
 
-rem ---------- ×é¼ş ----------
-if defined FOUND_ROOT (echo   [OK] °²×°¸ù %FOUND_ROOT%) else (echo   [È±] aria2 °²×°Ä¿Â¼)
+rem ---------- 5. ç»„ä»¶ ----------
+if defined FOUND_ROOT (echo   [OK] å®‰è£…æ ¹ %FOUND_ROOT%) else (echo   [ç¼º] aria2 å®‰è£…ç›®å½•)
 if defined FOUND_ROOT (
-  if exist "%FOUND_ROOT%\aria2\aria2c.exe" (echo   [OK] aria2c) else (set "MISS=%MISS% aria2c"& echo   [È±] aria2c)
+  if exist "%FOUND_ROOT%\aria2\aria2c.exe" (echo   [OK] aria2c) else (set "MISS=%MISS% aria2c"& echo   [ç¼º] aria2c)
 ) else (
   set "MISS=%MISS% aria2"
 )
 if defined FOUND_ROOT (
-  if exist "%FOUND_ROOT%\ariaNg\index.html" (echo   [OK] AriaNg) else (if exist "%FOUND_ROOT%\ariang\index.html" (echo   [OK] AriaNg) else (set "MISS=%MISS% AriaNg"& echo   [È±] AriaNg))
+  if exist "%FOUND_ROOT%\ariaNg\index.html" (echo   [OK] AriaNg) else (if exist "%FOUND_ROOT%\ariang\index.html" (echo   [OK] AriaNg) else (set "MISS=%MISS% AriaNg"& echo   [ç¼º] AriaNg))
 )
 set "HASYT="
-if exist "%APP%..\Downloads\ytdlp\yt-dlp.exe" set "HASYT=1"
+if exist "%PANEL_DIR%tools\yt-dlp.exe" set "HASYT=1"
+if exist "%PANEL_DIR%YT*.bat" set "HASYT=1"
+if defined FOUND_ROOT if exist "%FOUND_ROOT%\tools\yt-dlp.exe" set "HASYT=1"
 if defined FOUND_ROOT if exist "%FOUND_ROOT%\..\Downloads\ytdlp\yt-dlp.exe" set "HASYT=1"
 if defined FOUND_ROOT if exist "%FOUND_ROOT%\Downloads\ytdlp\yt-dlp.exe" set "HASYT=1"
 if defined DOWNLOADSTACK_DOWNLOADS if exist "%DOWNLOADSTACK_DOWNLOADS%\ytdlp\yt-dlp.exe" set "HASYT=1"
 if not defined HASYT (
   for /f "delims=" %%P in ('where yt-dlp 2^>nul') do set "HASYT=1"
 )
-if defined HASYT (echo   [OK] yt-dlp) else (set "MISS=%MISS% yt-dlp"& echo   [È±] yt-dlp)
+if defined HASYT (echo   [OK] yt-dlp) else (echo   [å¯é€‰] yt-dlp æœªåœ¨é»˜è®¤è·¯å¾„æ£€æµ‹åˆ°)
 
 where ffmpeg >nul 2>&1
 if errorlevel 1 (
-  if exist "%APP%..\tools\ffmpeg\bin\ffmpeg.exe" (echo   [OK] ffmpeg^(×Ô´ø^)) else (set "MISS=%MISS% ffmpeg"& echo   [È±] ffmpeg)
+  if exist "%PANEL_DIR%tools\ffmpeg\bin\ffmpeg.exe" (echo   [OK] ffmpeg^(è‡ªå¸¦^)) else (if defined FOUND_ROOT if exist "%FOUND_ROOT%\tools\ffmpeg\bin\ffmpeg.exe" (echo   [OK] ffmpeg^(è‡ªå¸¦^)) else (echo   [å¯é€‰] ffmpeg æœªæ£€æµ‹åˆ°))
 ) else (
   echo   [OK] ffmpeg
 )
 
 where qbittorrent >nul 2>&1
 if errorlevel 1 (
-  if exist "%FOUND_ROOT%\qBittorrent\qbittorrent.exe" (echo   [OK] qBittorrent) else (echo   [¿ÉÑ¡] Ã»×° qBittorrent^(BT/PT ĞèÒª^))
+  if defined FOUND_ROOT if exist "%FOUND_ROOT%\qBittorrent\qbittorrent.exe" (echo   [OK] qBittorrent) else (echo   [å¯é€‰] æ²¡è£… qBittorrent^(BT/PT éœ€è¦^))
 ) else (
   echo   [OK] qBittorrent
 )
 
-if exist "%APP%panel.py" (echo   [OK] panel.py) else (set "MISS=%MISS% panel.py"& echo   [È±] Ãæ°åÎÄ¼ş panel.py)
-if exist "%APP%panel_ui.html" (echo   [OK] panel_ui.html) else (set "MISS=%MISS% panel_ui.html"& echo   [È±] 3D ½çÃæÎÄ¼ş panel_ui.html)
+if exist "%PANEL_DIR%panel.py" (echo   [OK] é¢æ¿æ–‡ä»¶ %PANEL_DIR%panel.py) else (set "MISS=%MISS% panel.py"& echo   [ç¼º] é¢æ¿æ–‡ä»¶ panel.py)
 
 echo.
-echo [2/3] ½áÂÛ
+echo [2/3] ç»“è®º
 if "%MISS%"=="" goto :launch
 
 color 0E
-echo   È±ÉÙÕâĞ©£º%MISS%
+echo   ç¼ºå°‘æ ¸å¿ƒé¡¹ï¼š%MISS%
 color 0B
+if not exist "%PANEL_DIR%install.bat" if not exist "%APP%install.bat" goto :manual
 echo.
-echo   ¿ÉÒÔÖ±½ÓÈÃ°²×°Ïòµ¼×Ô¶¯²¹Æë£¨»áÖğ¸öÎÊÄãÒª²»Òª×°£©¡£
-choice /c YN /n /m "  ÏÖÔÚÔËĞĞ°²×°Ïòµ¼×Ô¶¯°²×°Âğ£¿(Y/N): "
+choice /c YN /n /m "  ç°åœ¨è¿è¡Œå®‰è£…å‘å¯¼è‡ªåŠ¨å®‰è£…å—ï¼Ÿ(Y/N): "
 if errorlevel 2 goto :manual
 
 echo.
-echo [3/3] µ÷ÓÃ°²×°Ïòµ¼£¨×Ô¶¯Ä£Ê½£©...
+echo [3/3] è°ƒç”¨å®‰è£…å‘å¯¼ï¼ˆè‡ªåŠ¨æ¨¡å¼ï¼‰...
 set "DS_AUTO=1"
 set "DS_NOMSGBOX=1"
 if defined FOUND_ROOT (
   set "DS_BASE=%FOUND_ROOT%"
   for %%d in ("%FOUND_ROOT%") do set "DS_DL=%%~dd\Downloads"
 )
-call "%APP%install.bat"
+if exist "%APP%install.bat" (call "%APP%install.bat") else (call "%PANEL_DIR%install.bat")
 if errorlevel 1 (
   color 0C
-  echo [Ê§°Ü] °²×°Ïòµ¼Òì³£ÍË³ö£¬ÈÕÖ¾: %LOG%
-  color 0B
-  pause
-  exit /b 1
-)
-
-rem ×°ÍêÖØÉ¨
-if not exist "%APP%panel.py" (
-  color 0C
-  echo [Ê§°Ü] ×°ÍêÈÔÕÒ²»µ½ panel.py£¬Çë°Ñ²Ö¿âÎÄ¼ş½âÑ¹µ½Í¬Ò»Ä¿Â¼ÔÙÊÔ
+  echo [å¤±è´¥] å®‰è£…å‘å¯¼å¼‚å¸¸é€€å‡ºï¼Œæ—¥å¿—: %LOG%
   color 0B
   pause
   exit /b 1
 )
 
 :launch
-if not exist "%APP%panel.py" (
+if not exist "%PANEL_DIR%panel.py" (
   color 0C
-  echo [Ê§°Ü] µ±Ç°Ä¿Â¼Ã»ÓĞ panel.py£¨%APP%£©
+  echo [å¤±è´¥] æ‰¾ä¸åˆ° panel.pyï¼ˆ%PANEL_DIR%ï¼‰
   color 0B
   pause
   exit /b 1
 )
 echo.
-echo [Æô¶¯] %PYRUN% -B "%APP%panel.py"
-echo [launcher] run %PYRUN% >> "%LOG%"
-%PYRUN% -B "%APP%panel.py" 2>> "%LOG%"
+set "PYW="
+for %%I in ("%PYRUN%") do if exist "%%~dpIpythonw.exe" set "PYW=%%~dpIpythonw.exe"
+if /I "%~1"=="--console" set "PYW="
+if defined PYW (
+  echo [å¯åŠ¨] æ­£åœ¨åå°æ‹‰èµ·æ§åˆ¶å°çª—å£ ...
+  echo [launcher] start "%PYW%" -B "%PANEL_DIR%panel.py" >> "%LOG%"
+  start "" /d "%PANEL_DIR%" "%PYW%" -B "%PANEL_DIR%panel.py"
+  timeout /t 1 >nul
+  endlocal
+  exit /b 0
+)
+echo [å¯åŠ¨] "%PYRUN%" -B "%PANEL_DIR%panel.py"
+echo [launcher] run "%PYRUN%" >> "%LOG%"
+pushd "%PANEL_DIR%"
+"%PYRUN%" -B "%PANEL_DIR%panel.py" 2>> "%LOG%"
 set "RC=%errorlevel%"
+popd
 if not "%RC%"=="0" (
   color 0C
   echo.
-  echo [Ê§°Ü] Ãæ°åÒì³£ÍË³ö£¬´íÎóÂë %RC%
-  echo ---- ÈÕÖ¾×îºó 20 ĞĞ ----
+  echo [å¤±è´¥] é¢æ¿å¼‚å¸¸é€€å‡ºï¼Œé”™è¯¯ç  %RC%
+  echo ---- æ—¥å¿—æœ€å 20 è¡Œ ----
   powershell -NoProfile -Command "Get-Content -LiteralPath '%LOG%' -Tail 20" 2>nul
-  echo ---- ÍêÕûÈÕÖ¾: %LOG%
+  echo ---- å®Œæ•´æ—¥å¿—: %LOG%
   color 0B
   pause
 )
 endlocal
 exit /b 0
 
+:try_py
+"%~1" -c "import flet, requests" >nul 2>&1
+if not errorlevel 1 set "PYRUN=%~1"
+goto :eof
+
 :manual
 echo.
-echo   Äã¿ÉÒÔÊÖ¶¯´¦Àí£º
-echo     - Python: https://www.python.org/downloads/ ^(¹´Ñ¡ Add to PATH^)
-echo     - ÒÀÀµ:   python -m pip install -r "%APP%requirements.txt"
-echo     - ×é¼ş:   ÔËĞĞÍ¬Ä¿Â¼ install.bat ×ßÒ»±éÏòµ¼
+echo   ä½ å¯ä»¥æ‰‹åŠ¨å¤„ç†ï¼š
+echo     - Python: https://www.python.org/downloads/ ^(å‹¾é€‰ Add to PATH^)
+echo     - ä¾èµ–:   python -m pip install -r "%PANEL_DIR%requirements.txt"
+echo     - ç»„ä»¶:   è¿è¡Œä»“åº“ç›®å½•ä¸­çš„ ä¸€é”®é…ç½®.bat æˆ– install.bat
 echo.
 pause
+endlocal
 exit /b 1

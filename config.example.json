@@ -1,5 +1,5 @@
 {
-  "_readme": "参考配置模板，不需要手动改名。面板首次启动会按自身位置自动生成本地 config.json（已加入 .gitignore，绝不入库）。<ROOT> 与 <DOWNLOADS> 会自动替换为本机实际目录。",
+  "_readme": "参考配置模板，不需要手动改名。面板首次启动会按自身位置自动生成本地 config.json（已加入 .gitignore，绝不入库）。<ROOT> 与 <DOWNLOADS> 会自动替换为本机实际目录。逐项说明见 SETUP.md §4。",
   "aria2": {
     "host": "127.0.0.1",
     "port": 6800,
@@ -45,8 +45,10 @@
     "downloads": "<DOWNLOADS>",
     "music": "<DOWNLOADS>/music",
     "voice": "<DOWNLOADS>/voice-clone",
-    "aigc": "<DOWNLOADS>/ai-studio"
+    "aigc": "<DOWNLOADS>/ai-studio",
+    "books": ""
   },
+  "reader_roots": [],
   "voice": {
     "api_url": "http://127.0.0.1:9880"
   },

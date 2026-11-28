@@ -175,9 +175,27 @@ class TestPromptEngine(unittest.TestCase):
 
 class TestSyntaxAll(unittest.TestCase):
     def test_all_python_files_parse(self):
-        for name in ("panel.py", "prompt_engine.py", "magnet_tools.py", "media_studio.py", "ytdl_gui.py", "setup_wizard.py", "scripts/scan_secrets.py"):
+        for name in ("panel.py", "prompt_engine.py", "magnet_tools.py", "media_studio.py", "ytdl_gui.py", "setup_wizard.py", "scripts/scan_secrets.py", "reader_hub.py"):
             src = (ROOT / name).read_text(encoding="utf-8")
             ast.parse(src, filename=name)
+
+
+
+class TestReaderHub(unittest.TestCase):
+    def test_urls_and_host_guard(self):
+        import reader_hub as RH
+        self.assertTrue(RH.img_url("https://uploads.mangadex.org/x.jpg").startswith("/api/reader/img?u="))
+        self.assertIn("e=", RH.local_url(r"D:\\library\\a.cbz", "001.jpg"))
+        self.assertTrue(RH.is_allowed_img_host("https://uploads.mangadex.org/foo.jpg"))
+        self.assertFalse(RH.is_allowed_img_host("https://evil.example/x.jpg"))
+        self.assertFalse(RH.is_allowed_img_host("file:///etc/passwd"))
+
+    def test_split_txt_chapters(self):
+        import reader_hub as RH
+        chs = RH.split_txt("第一章 静夜思\n床前明月光\n\n第二章 春晓\n春眠不觉晓\n")
+        self.assertGreaterEqual(len(chs), 2)
+        html = RH.text_to_html("床前明月光")
+        self.assertIn("<p>", html)
 
 
 if __name__ == "__main__":

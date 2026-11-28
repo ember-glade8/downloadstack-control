@@ -12,6 +12,7 @@
 """
 
 import base64
+import hashlib
 import json
 import os
 import random
@@ -25,6 +26,12 @@ from datetime import datetime
 from pathlib import Path
 
 import requests
+
+try:
+    from lx_music_bridge import attach_lx_fields as _lx_attach  # LXSRC-IMPORT
+except Exception:
+    def _lx_attach(item, platform="", **ids):
+        return item
 
 IS_WIN = (os.name == "nt")
 
@@ -130,7 +137,10 @@ def _search_qq(query: str, limit: int = 10) -> list:
             cover = ("https://y.qq.com/music/photo_new/T002R300x300M000%s.jpg" % amid) if amid else ""
             mid = str(s.get("mid") or s.get("id") or "")
             dur = int(s.get("interval") or 0)
-            out.append({
+            file = s.get("file") or {}
+            media_mid = str(file.get("media_mid") or s.get("strMediaMid") or mid)
+            album_id = str(alb.get("id") or s.get("albumid") or "")
+            out.append(_lx_attach({
                 "id": "qq_" + mid,
                 "sid": "",
                 "title": title,
@@ -141,9 +151,12 @@ def _search_qq(query: str, limit: int = 10) -> list:
                 "source": "QQ音乐",
                 "url": "",
                 "query": ("%s %s" % (title, artists)).strip(),
-            })
+            }, "tx", songmid=mid, strMediaMid=media_mid, media_mid=media_mid,
+               albumId=album_id, albumMid=amid, id=mid, interval=str(dur)))
     except Exception:
         pass
+    if not out:
+        return _search_qq_legacy(query, limit=limit)   # musicu.fcg 空/被限流时走老接口兜底
     return out
 
 
@@ -166,7 +179,8 @@ def _search_kugou(query: str, limit: int = 10) -> list:
             album = _clean_html_text(s.get("album_name") or "")
             dur = int(s.get("duration") or 0)
             h = str(s.get("hash") or "")
-            out.append({
+            album_id = str(s.get("album_id") or s.get("albumid") or "")
+            out.append(_lx_attach({
                 "id": "kg_" + h[:16],
                 "sid": "",
                 "kg_hash": h,
@@ -179,7 +193,7 @@ def _search_kugou(query: str, limit: int = 10) -> list:
                 "source": "酷狗",
                 "url": "",
                 "query": ("%s %s" % (title, artist)).strip(),
-            })
+            }, "kg", hash=h, albumId=album_id, album_id=album_id, interval=str(dur)))
     except Exception:
         pass
     return out
@@ -210,7 +224,7 @@ def _search_kuwo(query: str, limit: int = 8) -> list:
             pic = str(s.get("hts_MVPIC") or s.get("web_albumpic_short") or "")
             if pic and not pic.startswith("http"):
                 pic = "https://img4.kuwo.cn/star/albumcover/" + pic.lstrip("/")
-            out.append({
+            out.append(_lx_attach({
                 "id": "kw_" + rid,
                 "sid": "",
                 "title": title,
@@ -221,7 +235,7 @@ def _search_kuwo(query: str, limit: int = 8) -> list:
                 "source": "酷我",
                 "url": "",
                 "query": ("%s %s" % (title, artist)).strip(),
-            })
+            }, "kw", songmid=rid, id=rid, interval=str(dur)))
     except Exception:
         pass
     return out
@@ -260,7 +274,7 @@ def _search_netease(query: str, limit: int = 10) -> list:
             cover = str(alb.get("picUrl") or "")
             dur_ms = int(s.get("dt") or s.get("duration") or 0)
             sid = str(s.get("id") or "")
-            out.append({
+            out.append(_lx_attach({
                 "id": "ne_" + sid,
                 "sid": sid,
                 "title": title,
@@ -271,7 +285,7 @@ def _search_netease(query: str, limit: int = 10) -> list:
                 "source": "网易云",
                 "url": "",
                 "query": ("%s %s" % (title, artists)).strip(),
-            })
+            }, "wy", songmid=sid, id=sid))
     except Exception:
         pass
     return out
@@ -360,60 +374,544 @@ def _search_ytmusic(ytdlp: str, query: str, limit: int = 8, proxy: str = "") -> 
     return out
 
 
-def search_songs(query: str, source: str = "all", ytdlp: str = "", proxy: str = "") -> list:
-    """6 大音源并发检索任意歌曲。source: all | qq | kugou | netease | kuwo | bilibili | youtube | ytmusic"""
+def search_songs(query: str, source: str = "all", ytdlp: str = "", proxy: str = "", music_dir: str = "",
+                 with_stats: bool = False):
+    """全网多音源并发检索任意歌曲（国内 7 源 + 海外/独立 6 源 + 本地曲库）。
+
+    source: all | qq | kugou | kuwo | netease | migu | bilibili | bilibili2 |
+            youtube | soundcloud | audius | itunes | deezer | archive | local
+    with_stats=True 时返回 {"results": [...], "stats": {音源: 条数}}，便于前端展示每源命中。
+    """
     q = (query or "").strip()
     if not q:
-        return []
+        return {"results": [], "stats": {}} if with_stats else []
     src = (source or "all").lower()
-    if src == "qq":
-        return _search_qq(q, limit=18)
-    if src == "kugou":
-        return _search_kugou(q, limit=18)
-    if src == "kuwo":
-        return _search_kuwo(q, limit=15)
-    if src == "netease":
-        return _search_netease(q, limit=18)
-    if src == "bilibili":
-        return _search_bilibili_music(q, limit=15)
-    if src in ("youtube", "ytmusic"):
-        return _search_ytmusic(ytdlp, q, limit=14, proxy=proxy)
+    singles = {
+        "qq": lambda: _search_qq(q, limit=40),
+        "kugou": lambda: _search_kugou(q, limit=40),
+        "kuwo": lambda: _search_kuwo(q, limit=30),
+        "netease": lambda: _search_netease(q, limit=40),
+        "migu": lambda: _search_migu(q, limit=40),
+        "bilibili": lambda: _search_bilibili_music(q, limit=30),
+        "bilibili2": lambda: _search_bilibili_zone(q, limit=30),
+        "youtube": lambda: _search_ytmusic(ytdlp, q, limit=25, proxy=proxy),
+        "ytmusic": lambda: _search_ytmusic(ytdlp, q, limit=14, proxy=proxy),
+        "soundcloud": lambda: _search_soundcloud(ytdlp, q, limit=20),
+        "audius": lambda: _search_audius(q, limit=20),
+        "itunes": lambda: _search_itunes(q, limit=25),
+        "deezer": lambda: _search_deezer(q, limit=25),
+        "archive": lambda: _search_archive(q, limit=12),
+        "local": lambda: _search_local(music_dir, q, limit=40),
+    }
+    if src in singles:
+        rows = singles[src]() or []
+        stats = {rows[0].get("source", src): len(rows)} if rows else {src: 0}
+        return {"results": rows, "stats": stats} if with_stats else rows
 
     import concurrent.futures
-    buckets = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as ex:
-        futs = [
-            ex.submit(_search_qq, q, 8),
-            ex.submit(_search_kugou, q, 8),
-            ex.submit(_search_netease, q, 8),
-            ex.submit(_search_bilibili_music, q, 6),
-            ex.submit(_search_kuwo, q, 5),
-        ]
-        if ytdlp and proxy:
-            futs.append(ex.submit(_search_ytmusic, ytdlp, q, 5, proxy))
-        for fut in futs:
-            try:
-                rows = fut.result(timeout=10) or []
-                if rows:
-                    buckets.append(rows)
-            except Exception:
-                pass
+    # 顺序 = 展示优先级：先国内主流 → B站 → 海外/独立 → 本地
+    plan = [
+        ("netease", lambda: _search_netease(q, 30)),
+        ("qq", lambda: _search_qq(q, 30)),
+        ("migu", lambda: _search_migu(q, 40)),
+        ("kugou", lambda: _search_kugou(q, 30)),
+        ("kuwo", lambda: _search_kuwo(q, 24)),
+        ("bilibili", lambda: _search_bilibili_music(q, 16)),
+        ("bilibili2", lambda: _search_bilibili_zone(q, 16)),
+        ("itunes", lambda: _search_itunes(q, 20)),
+        ("soundcloud", lambda: _search_soundcloud(ytdlp, q, 10)),
+        ("audius", lambda: _search_audius(q, 12)),
+        ("deezer", lambda: _search_deezer(q, 16)),
+        ("archive", lambda: _search_archive(q, 8)),
+        ("local", lambda: _search_local(music_dir, q, 30)),
+    ]
+    if ytdlp:
+        plan.insert(7, ("youtube", lambda: _search_ytmusic(ytdlp, q, 15, proxy)))
 
-    # Interleave results across sources & deduplicate by (title, artist, source)
-    results = []
-    seen = set()
+    buckets, stats = [], {}
+    # 全部同时起跑；先等 2.8s，够 20 首就立刻返回（首屏快），不够再等最多 3.2s 补齐冷门源
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=max(8, len(plan)))
+    try:
+        fut_map = [(nm, ex.submit(fn)) for nm, fn in plan]
+        all_futs = [f for _, f in fut_map]
+        # 纯中文查询 2.8s 就够（国内 7 源很快）；带英文的关键词多半要找海外/独立源，多等一会儿
+        gate = 5.4 if re.search(r"[A-Za-z]", q) else 2.8
+        done, pending = concurrent.futures.wait(all_futs, timeout=gate)
+
+        def _rows_now(f):
+            if f not in done or f.cancelled():
+                return []
+            try:
+                return f.result() or []
+            except Exception:
+                return []
+
+        if sum(len(_rows_now(f)) for f in all_futs) < 20:
+            done2, pending = concurrent.futures.wait(pending, timeout=3.2)
+            done = set(done) | set(done2)
+        for fut in pending:
+            fut.cancel()
+        for nm, fut in fut_map:
+            if fut not in done:
+                stats[nm] = 0
+                continue
+            try:
+                rows = fut.result() or []
+            except Exception:
+                rows = []
+            stats[nm] = len(rows)
+            if rows:
+                buckets.append(rows)
+    finally:
+        try:
+            ex.shutdown(wait=False, cancel_futures=True)
+        except TypeError:
+            ex.shutdown(wait=False)
+
+    # 跨源去重（同名同歌手只留第一条，其余源名并入 source_extra），源内保持原顺序交错
+    def _norm(s):
+        return re.sub(r"[\s\-_（()）\[\]【】·,，.。]+", "", (s or "").lower())
+
+    results, seen = [], {}
     max_len = max((len(b) for b in buckets), default=0)
     for i in range(max_len):
         for b in buckets:
             if i >= len(b):
                 continue
             item = b[i]
-            key = (item.get("title", "").lower(), item.get("artist", "").lower(), item.get("source", ""))
+            key = (_norm(item.get("title")), _norm(item.get("artist")))
             if key in seen:
+                prev = seen[key]
+                extra = prev.get("source_extra") or ""
+                src_name = item.get("source") or ""
+                if src_name and src_name not in (prev.get("source") or "") and src_name not in extra:
+                    prev["source_extra"] = (extra + " / " + src_name).strip(" /")
                 continue
-            seen.add(key)
+            seen[key] = item
             results.append(item)
-    return results[:45]
+    results = results[:200]
+    return {"results": results, "stats": stats} if with_stats else results
+
+
+# ------------------------------------------------------------------
+# 扩充音源：咪咕 / Apple iTunes / Deezer / Audius / Internet Archive / SoundCloud / B站音乐区 / 本地曲库
+# ------------------------------------------------------------------
+_AUDIUS_HOST = {"host": "", "ts": 0.0}
+_LOCAL_AUDIO_EXT = (".mp3", ".flac", ".m4a", ".wav", ".ogg", ".ape", ".aac", ".wma", ".opus", ".dsf")
+
+
+def _search_migu(query: str, limit: int = 12) -> list:
+    """咪咕音乐 App 接口（免登录检索，覆盖大量华语版权曲库；播放交给跨源解析）。"""
+    out = []
+    songs = []
+    try:
+        pages = [1] if limit <= 20 else [1, 2]
+        for pg in pages:
+            r = requests.get(
+                "https://app.c.nf.migu.cn/MIGUM2.0/v1.0/content/search_all.do",
+                params={
+                    "ua": "Android_migu", "version": "5.0.1", "text": query,
+                    "pageNo": pg, "pageSize": 20,
+                    "searchSwitch": '{"song":1,"album":0,"singer":0,"tagSong":0,"mvSong":0,"bestShow":1,"songlist":0}',
+                },
+                headers={"User-Agent": _UA, "Referer": "https://music.migu.cn/", "Accept": "application/json"},
+                proxies={"http": None, "https": None},
+                timeout=6,
+            )
+            part = ((r.json().get("songResultData") or {}).get("result")) or []
+            songs += part
+            if len(songs) >= limit or not part:
+                break
+        for s in songs:
+            title = _clean_html_text(s.get("name") or "")
+            if not title:
+                continue
+            artist = ", ".join(str(x.get("name") or "") for x in (s.get("singers") or []) if x.get("name")) or "未知歌手"
+            album = _clean_html_text(s.get("album") or s.get("albumName") or "")
+            cover = ""
+            for img in (s.get("imgItems") or []):
+                if img.get("img"):
+                    cover = str(img["img"])
+                    break
+            dur_raw = s.get("duration")
+            try:
+                dur = float(dur_raw)
+                dur = dur / 1000.0 if dur > 10000 else dur
+            except Exception:
+                dur = 0
+            cid = str(s.get("copyrightId") or s.get("id") or "")
+            content_id = str(s.get("contentId") or s.get("songId") or cid)
+            out.append(_lx_attach({
+                "id": "mg_" + cid[:20],
+                "sid": "",
+                "migu_id": cid,
+                "title": title,
+                "artist": artist,
+                "album": album,
+                "cover": cover,
+                "duration": _fmt_dur(dur),
+                "source": "咪咕",
+                "url": "",
+                "query": ("%s %s" % (title, artist)).strip(),
+            }, "mg", copyrightId=cid, contentId=content_id, songmid=cid, id=cid))
+    except Exception:
+        pass
+    return out
+
+
+def _search_qq_legacy(query: str, limit: int = 10) -> list:
+    """QQ 音乐老接口（musicu.fcg 为空时的兜底）。"""
+    out = []
+    try:
+        r = requests.get(
+            "https://c.y.qq.com/soso/fcgi-bin/client_search_cp",
+            params={"w": query, "format": "json", "n": limit, "p": 1, "cr": 1, "new_json": 1},
+            headers={"User-Agent": _UA, "Referer": "https://y.qq.com/portal/search.html"},
+            proxies={"http": None, "https": None},
+            timeout=7,
+        )
+        lst = (((json.loads(r.text).get("data") or {}).get("song") or {}).get("list")) or []
+        for s in lst:
+            title = _clean_html_text(s.get("name") or s.get("title") or "")
+            if not title:
+                continue
+            artists = ", ".join(str(x.get("name") or "") for x in (s.get("singer") or []) if x.get("name"))
+            mid = str(s.get("songmid") or s.get("mid") or "")
+            media_mid = str(s.get("strMediaMid") or (s.get("file") or {}).get("media_mid") or mid)
+            alb = s.get("album") or {}
+            out.append(_lx_attach({
+                "id": "qq2_" + (mid or title),
+                "sid": "",
+                "title": title,
+                "artist": artists or "未知歌手",
+                "album": _clean_html_text(alb.get("name") or ""),
+                "cover": "",
+                "duration": _fmt_dur(s.get("interval") or 0),
+                "source": "QQ音乐",
+                "url": "",
+                "query": ("%s %s" % (title, artists)).strip(),
+            }, "tx", songmid=mid, strMediaMid=media_mid, media_mid=media_mid,
+               albumId=str(alb.get("id") or s.get("albumid") or ""),
+               albumMid=str(alb.get("mid") or ""), id=mid))
+    except Exception:
+        pass
+    return out
+
+
+def _search_itunes(query: str, limit: int = 12) -> list:
+    """Apple / iTunes 曲库（国内店 + 海外店兜底），自带 30 秒试听直链。"""
+    out = []
+    stores = ["cn", "us"]
+
+    def _one(country):
+        r = requests.get(
+            "https://itunes.apple.com/search",
+            params={"term": query, "media": "music", "entity": "song", "limit": limit,
+                    "country": country, "lang": "zh_cn" if country == "cn" else "en_us"},
+            headers={"User-Agent": _UA},
+            proxies={"http": None, "https": None},
+            timeout=7,
+        )
+        return r.json().get("results") or []
+
+    rows = []
+    try:
+        rows = _one(stores[0])
+        if len(rows) < 3:
+            rows += _one(stores[1])
+    except Exception:
+        try:
+            rows = _one("us")
+        except Exception:
+            rows = []
+    for x in rows:
+        title = str(x.get("trackName") or "").strip()
+        if not title:
+            continue
+        prev = str(x.get("previewUrl") or "")
+        out.append({
+            "id": "it_" + str(x.get("trackId") or title),
+            "sid": "",
+            "title": title,
+            "artist": str(x.get("artistName") or "未知歌手"),
+            "album": str(x.get("collectionName") or ""),
+            "cover": str(x.get("artworkUrl100") or "").replace("100x100", "300x300"),
+            "duration": _fmt_dur((x.get("trackTimeMillis") or 0) / 1000.0),
+            "source": "Apple试听" if prev else "Apple",
+            "url": prev,
+            "preview": bool(prev),
+            "query": ("%s %s" % (title, x.get("artistName") or "")).strip(),
+        })
+    return out[:limit]
+
+
+def _search_deezer(query: str, limit: int = 10) -> list:
+    """Deezer 曲库（欧美/日韩覆盖好），自带 30 秒试听直链。"""
+    out = []
+    try:
+        r = requests.get(
+            "https://api.deezer.com/search",
+            params={"q": query, "limit": max(5, min(25, limit))},
+            headers={"User-Agent": _UA},
+            proxies={"http": None, "https": None},
+            timeout=7,
+        )
+        for x in (r.json().get("data") or []):
+            title = str(x.get("title") or "").strip()
+            if not title:
+                continue
+            prev = str(x.get("preview") or "")
+            out.append({
+                "id": "dz_" + str(x.get("id") or title),
+                "sid": "",
+                "title": title,
+                "artist": str((x.get("artist") or {}).get("name") or "未知歌手"),
+                "album": str((x.get("album") or {}).get("title") or ""),
+                "cover": str((x.get("album") or {}).get("cover_medium") or ""),
+                "duration": _fmt_dur(x.get("duration") or 0),
+                "source": "Deezer试听" if prev else "Deezer",
+                "url": prev,
+                "preview": bool(prev),
+                "query": ("%s %s" % (title, (x.get("artist") or {}).get("name") or "")).strip(),
+            })
+    except Exception:
+        pass
+    return out
+
+
+def _audius_hosts(n: int = 4) -> list:
+    try:
+        j = requests.get("https://api.audius.co", headers={"User-Agent": _UA},
+                         proxies={"http": None, "https": None}, timeout=6).json()
+        return [str(h).rstrip("/") for h in (j.get("data") or []) if h][:n]
+    except Exception:
+        return []
+
+
+def _audius_host() -> str:
+    now = time.time()
+    if _AUDIUS_HOST["host"] and now - _AUDIUS_HOST["ts"] < 900:
+        return _AUDIUS_HOST["host"]
+    hosts = _audius_hosts(1)
+    if hosts:
+        _AUDIUS_HOST["host"] = hosts[0]
+        _AUDIUS_HOST["ts"] = now
+        return hosts[0]
+    return ""
+
+
+def _search_audius(query: str, limit: int = 10) -> list:
+    """Audius 去中心化曲库：直接给出可秒播的完整音频流（非试听片段）。多节点自动容灾。"""
+    out = []
+    cands = []
+    h = _audius_host()
+    if h:
+        cands.append(h)
+    for extra in _audius_hosts(4):
+        if extra not in cands:
+            cands.append(extra)
+    for host in cands:
+        try:
+            r = requests.get(host + "/v1/tracks/search",
+                             params={"query": query, "limit": max(5, min(20, limit))},
+                             headers={"User-Agent": _UA}, proxies={"http": None, "https": None}, timeout=7)
+            data = (r.json() or {}).get("data") or []
+        except Exception:
+            continue
+        if not data:
+            continue
+        _AUDIUS_HOST["host"], _AUDIUS_HOST["ts"] = host, time.time()
+        for x in data:
+            title = str(x.get("title") or "").strip()
+            tid = str(x.get("id") or "")
+            if not title or not tid:
+                continue
+            out.append({
+                "id": "au_" + tid,
+                "sid": "",
+                "title": title,
+                "artist": str((x.get("user") or {}).get("name") or "Audius"),
+                "album": str(x.get("genre") or "Audius"),
+                "cover": str((x.get("artwork") or {}).get("480x480") or ""),
+                "duration": _fmt_dur(x.get("duration") or 0),
+                "source": "Audius",
+                "url": host + "/v1/tracks/" + tid + "/stream",
+                "query": ("%s %s" % (title, (x.get("user") or {}).get("name") or "")).strip(),
+            })
+        break
+    return out
+
+
+def _search_archive(query: str, limit: int = 8) -> list:
+    """Internet Archive 公共音频库：为前几条解析出可直连的音频文件。"""
+    out = []
+    try:
+        r = requests.get(
+            "https://archive.org/advancedsearch.php",
+            params={"q": '(%s) AND mediatype:(audio)' % query,
+                    "fl[]": ["identifier", "title", "creator", "year"], "rows": max(3, min(15, limit)),
+                    "page": 1, "output": "json"},
+            headers={"User-Agent": _UA}, proxies={"http": None, "https": None}, timeout=7,
+        )
+        docs = ((r.json().get("response") or {}).get("docs")) or []
+        for i, d in enumerate(docs):
+            ident = str(d.get("identifier") or "")
+            title = _clean_html_text(d.get("title") or ident)
+            if not ident or not title:
+                continue
+            creator = d.get("creator")
+            if isinstance(creator, list):
+                creator = ", ".join(str(c) for c in creator)
+            direct = ""
+            if i < 2:   # 只对前 2 条做直链解析，控制耗时
+                try:
+                    meta = requests.get("https://archive.org/metadata/" + ident,
+                                        headers={"User-Agent": _UA}, proxies={"http": None, "https": None},
+                                        timeout=7).json()
+                    for f in meta.get("files") or []:
+                        nm = str(f.get("name") or "")
+                        if nm.lower().endswith((".mp3", ".m4a", ".ogg", ".flac")):
+                            direct = "https://archive.org/download/%s/%s" % (ident, urllib.parse.quote(nm))
+                            break
+                except Exception:
+                    direct = ""
+            out.append({
+                "id": "ia_" + ident,
+                "sid": "",
+                "title": title,
+                "artist": str(creator or "Internet Archive"),
+                "album": "Internet Archive" + (" · " + str(d.get("year")) if d.get("year") else ""),
+                "cover": "https://archive.org/services/img/" + ident,
+                "duration": "--:--",
+                "source": "Archive",
+                "url": direct,
+                "query": ("%s %s" % (title, creator or "")).strip(),
+            })
+    except Exception:
+        pass
+    return out[:limit]
+
+
+def _search_soundcloud(ytdlp: str, query: str, limit: int = 8) -> list:
+    """SoundCloud 检索（走 yt-dlp 的 scsearch，免 API key），翻唱/Remix/Live 覆盖极广。"""
+    if not ytdlp:
+        return []
+    out = []
+    try:
+        env = os.environ.copy()
+        for k in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "ALL_PROXY", "all_proxy"):
+            env.pop(k, None)
+        cmd = [ytdlp, "--flat-playlist", "--dump-single-json", "--no-warnings",
+               "--socket-timeout", "6", "--retries", "1",
+               "scsearch%d:%s" % (max(3, min(8, limit)), query)]
+        res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                             env=env, timeout=20, **_popen_kwargs())
+        if res.returncode == 0 and res.stdout:
+            d = json.loads(res.stdout)
+            for e in (d.get("entries") or []):
+                u = str(e.get("url") or "")
+                title = str(e.get("title") or "").strip()
+                if not u.startswith("http") or not title:
+                    continue
+                out.append({
+                    "id": "sc_" + str(e.get("id") or ""),
+                    "sid": "",
+                    "title": title,
+                    "artist": str(e.get("uploader") or e.get("channel") or "SoundCloud"),
+                    "album": "SoundCloud",
+                    "cover": str(e.get("thumbnail") or ""),
+                    "duration": _fmt_dur(e.get("duration")),
+                    "source": "SoundCloud",
+                    "url": u,
+                    "query": title,
+                })
+    except Exception:
+        pass
+    return out
+
+
+def _search_bilibili_zone(query: str, limit: int = 10) -> list:
+    """B站「音乐区」定向检索（tids=3），纯歌曲稿件比全站搜索准得多。"""
+    out = []
+    try:
+        sess = _get_bili_session()
+        r = sess.get(
+            "https://api.bilibili.com/x/web-interface/search/type",
+            params={"search_type": "video", "keyword": query, "page": 1,
+                    "page_size": max(5, min(20, limit)), "tids": 3},
+            proxies={"http": None, "https": None},
+            timeout=7,
+        )
+        for it in (((r.json().get("data") or {}).get("result")) or []):
+            bvid = str(it.get("bvid") or "").strip()
+            title = _clean_html_text(it.get("title") or "")
+            if not bvid or not title:
+                continue
+            pic = str(it.get("pic") or "")
+            if pic.startswith("//"):
+                pic = "https:" + pic
+            out.append({
+                "id": "bg_" + bvid,
+                "sid": "",
+                "bvid": bvid,
+                "title": title,
+                "artist": _clean_html_text(it.get("author") or "B站音乐区"),
+                "album": "B站音乐区",
+                "cover": pic,
+                "duration": str(it.get("duration") or "--:--"),
+                "source": "B站音乐区",
+                "url": "https://www.bilibili.com/video/" + bvid,
+                "query": title,
+            })
+    except Exception:
+        pass
+    return out
+
+
+def _search_local(music_dir: str, query: str, limit: int = 20) -> list:
+    """本地曲库检索：已下载的音频按文件名分词匹配（命中即秒播，零流量）。"""
+    out = []
+    try:
+        if not music_dir or not os.path.isdir(music_dir):
+            return out
+        tokens = [t for t in re.split(r"[\s\-_/&]+", (query or "").lower()) if t]
+        if not tokens:
+            return out
+        for root, _dirs, files in os.walk(music_dir):
+            for fn in files:
+                if not fn.lower().endswith(_LOCAL_AUDIO_EXT):
+                    continue
+                low = fn.lower()
+                if not all(t in low for t in tokens):
+                    continue
+                stem = os.path.splitext(fn)[0]
+                artist, title = "", stem
+                for sep in (" - ", " – ", "-", "_"):
+                    if sep in stem:
+                        a, b = stem.split(sep, 1)
+                        if a.strip() and b.strip():
+                            artist, title = a.strip(), b.strip()
+                            break
+                fp = os.path.join(root, fn)
+                out.append({
+                    "id": "lo_" + str(abs(hash(fp)) % (10 ** 10)),
+                    "sid": "",
+                    "title": title,
+                    "artist": artist or "本地曲库",
+                    "album": "本地曲库",
+                    "cover": "",
+                    "duration": "--:--",
+                    "source": "本地",
+                    "url": fp,
+                    "local_path": fp,
+                    "query": stem,
+                })
+                if len(out) >= limit:
+                    return out
+    except Exception:
+        pass
+    return out
+
 
 
 # 各大热门音乐榜单（网易云 v6 + QQ 音乐官方榜单双源兜底，毫秒级响应）
@@ -459,7 +957,10 @@ def _fetch_qq_toplist(top_id: int, meta: dict, limit: int = 40) -> list:
             cover = ("https://y.qq.com/music/photo_new/T002R300x300M000%s.jpg" % amid) if amid else ""
             dur = int(s.get("interval") or 0)
             mid = str(s.get("mid") or s.get("id") or "")
-            rows.append({
+            file = s.get("file") or {}
+            media_mid = str(file.get("media_mid") or s.get("strMediaMid") or mid)
+            album_id = str(alb.get("id") or s.get("albumid") or "")
+            rows.append(_lx_attach({
                 "rank": idx,
                 "id": "qq_" + mid,
                 "sid": "",
@@ -472,7 +973,8 @@ def _fetch_qq_toplist(top_id: int, meta: dict, limit: int = 40) -> list:
                 "chart": meta["name"],
                 "url": "",
                 "query": ("%s %s" % (title, artists)).strip(),
-            })
+            }, "tx", songmid=mid, strMediaMid=media_mid, media_mid=media_mid,
+               albumId=album_id, albumMid=amid, id=mid, interval=str(dur)))
     except Exception:
         pass
     return rows
@@ -513,7 +1015,7 @@ def fetch_music_chart(chart_id: str = "hot", limit: int = 40) -> dict:
             cover = str(alb.get("picUrl") or "")
             dur_ms = int(s.get("dt") or s.get("duration") or 0)
             sid = str(s.get("id") or "")
-            rows.append({
+            rows.append(_lx_attach({
                 "rank": idx,
                 "id": "ne_" + sid,
                 "sid": sid,
@@ -526,7 +1028,7 @@ def fetch_music_chart(chart_id: str = "hot", limit: int = 40) -> dict:
                 "chart": meta["name"],
                 "url": "",
                 "query": ("%s %s" % (title, artists)).strip(),
-            })
+            }, "wy", songmid=sid, id=sid))
     except Exception:
         pass
 
@@ -821,14 +1323,41 @@ def _find_local_music_match(music_dir: str, title: str, artist: str = "") -> str
 
 def resolve_music_stream(title: str = "", artist: str = "", url: str = "", query: str = "",
                          bvid: str = "", ytdlp: str = "", proxy: str = "", music_dir: str = "") -> dict:
-    """为任意音源歌曲解析秒播音频流：本地已下文件 → B站直链 DASH 音频 → 智能匹配 B站高码率音频 → yt-dlp bestaudio。"""
+    """为任意音源歌曲解析秒播音频流：本地文件 → 直链音频(Audius/Archive/试听片段) → B站直链 DASH 音频 →
+    智能匹配 B站高码率音频 → yt-dlp 通用解析(SoundCloud/YouTube 等) → ytsearch 兜底。"""
+    u = (url or "").strip()
+
+    # 0) 直接就是本地文件
+    try:
+        if u and os.path.isfile(u) and os.path.splitext(u)[1].lower() in _LOCAL_AUDIO_EXT:
+            return {"ok": True, "is_local": True, "local_path": u, "source": "本地曲库", "msg": "命中本地音频 ✔"}
+    except Exception:
+        pass
+
     # 1) Local downloaded file match
     local_fp = _find_local_music_match(music_dir, title or query, artist)
     if local_fp:
         return {"ok": True, "is_local": True, "local_path": local_fp, "source": "本地无损", "msg": "命中本地已下载音频 ✔"}
 
-    # 2) Direct Bilibili bvid stream
-    bv = bvid or _extract_bvid(url)
+    # 2) 直链音频文件（Audius / Internet Archive / Apple·Deezer 试听片段 等）
+    if u and u.lower().split("?")[0].endswith((".mp3", ".m4a", ".aac", ".ogg", ".opus", ".flac", ".wav")):
+        low = u.lower()
+        if "audius" in low:
+            mime, src, prox = "audio/mpeg", "Audius 完整音频", False
+        elif "archive.org" in low:
+            mime, src, prox = "audio/mpeg", "Internet Archive 音频", False
+        elif ".m4a" in low or ".aac" in low:
+            mime, src, prox = "audio/mp4", "在线音频直链", False
+        else:
+            mime, src, prox = "audio/mpeg", "在线音频直链", False
+        return {
+            "ok": True, "is_local": False, "stream_url": u, "mime": mime,
+            "headers": {"User-Agent": _UA}, "use_proxy": prox, "source": src,
+            "msg": "已直连音频流 ✔" + ("（试听片段）" if ".m4a" in low or "preview" in low else ""),
+        }
+
+    # 3) Direct Bilibili bvid stream
+    bv = bvid or _extract_bvid(u)
     if bv:
         su, mime = _resolve_bili_audio_stream(bv)
         if su:
@@ -838,31 +1367,77 @@ def resolve_music_stream(title: str = "", artist: str = "", url: str = "", query
                 "use_proxy": False, "source": "B站高码率流", "msg": "B站高清音频流就绪 ✔",
             }
 
-    # 3) Direct YouTube / video URL via yt-dlp -g
-    u = (url or "").strip()
-    if u and ytdlp and ("youtube.com" in u.lower() or "youtu.be" in u.lower()):
+    # 4) 任意 http 链接交 yt-dlp 通用解析（YouTube / SoundCloud / 其它站点）
+    if u and ytdlp and u.startswith("http") and not bv:
+        for fmt in ("bestaudio[protocol^=http][ext=m4a]/bestaudio[protocol^=http]/http_mp3_128/http_aac_160",
+                    "http_mp3_128/http_aac_160/http_aac_128",
+                    "bestaudio"):
+            try:
+                env = os.environ.copy()
+                if proxy:
+                    env["HTTP_PROXY"] = env["HTTPS_PROXY"] = env["http_proxy"] = env["https_proxy"] = proxy
+                    env.pop("ALL_PROXY", None)
+                    env.pop("all_proxy", None)
+                r = subprocess.run(
+                    [ytdlp, "-f", fmt, "-g", "--no-warnings", "--no-playlist", u],
+                    capture_output=True, text=True, encoding="utf-8", errors="replace",
+                    env=env, timeout=18, **_popen_kwargs()
+                )
+                su = (r.stdout or "").strip().splitlines()[0].strip() if r.stdout else ""
+                if r.returncode != 0 or not su.startswith("http"):
+                    continue
+                if ".m3u8" in su.split("?")[0].lower():
+                    continue          # HTML5 <audio> 播不了 HLS，换下一个格式再试
+                is_sc = "soundcloud" in u.lower()
+                return {
+                    "ok": True, "is_local": False, "stream_url": su,
+                    "mime": "audio/mp4" if ".m4a" in su.split("?")[0].lower() else "audio/mpeg",
+                    "headers": {"User-Agent": _UA},
+                    "use_proxy": bool(proxy) and not is_sc,
+                    "source": "SoundCloud 音频流" if is_sc else "站点音频流",
+                    "msg": "音频流已解析 ✔",
+                }
+            except Exception:
+                continue
+
+    # 5) 只有 HLS / 无 progressive 直链的站点（典型：SoundCloud）→ 先按需落盘再播，避免 <audio> 播不了 m3u8
+    if u and ytdlp and u.startswith("http") and not bv:
         try:
+            cache_dir = Path(__file__).resolve().parent / "cache" / "onplay"
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            key = hashlib.md5(u.encode("utf-8")).hexdigest()[:16]
+            for ext in (".m4a", ".mp3", ".opus", ".webm", ".aac", ".flac"):
+                p = cache_dir / (key + ext)
+                if p.is_file() and p.stat().st_size > 120 * 1024:
+                    return {"ok": True, "is_local": True, "local_path": str(p),
+                            "source": "按需缓存", "msg": "命中已缓存音频 ✔"}
             env = os.environ.copy()
             if proxy:
                 env["HTTP_PROXY"] = env["HTTPS_PROXY"] = env["http_proxy"] = env["https_proxy"] = proxy
                 env.pop("ALL_PROXY", None)
                 env.pop("all_proxy", None)
-            r = subprocess.run(
-                [ytdlp, "-f", "bestaudio[ext=m4a]/bestaudio", "-g", "--no-warnings", u],
+            out_tpl = str(cache_dir / (key + ".%(ext)s"))
+            subprocess.run(
+                [ytdlp, "-f", "bestaudio/best", "-o", out_tpl, "--no-playlist",
+                 "--no-warnings", "--socket-timeout", "10", "--retries", "1", u],
                 capture_output=True, text=True, encoding="utf-8", errors="replace",
-                env=env, timeout=14, **_popen_kwargs()
+                env=env, timeout=60, **_popen_kwargs()
             )
-            su = (r.stdout or "").strip().splitlines()[0].strip() if r.stdout else ""
-            if r.returncode == 0 and su.startswith("http"):
-                return {
-                    "ok": True, "is_local": False, "stream_url": su, "mime": "audio/mp4",
-                    "headers": {"User-Agent": _UA},
-                    "use_proxy": bool(proxy), "source": "YouTube 音频流", "msg": "YouTube 音频流就绪 ✔",
-                }
+            for ext in (".m4a", ".mp3", ".opus", ".webm", ".aac", ".flac"):
+                p = cache_dir / (key + ext)
+                if p.is_file() and p.stat().st_size > 120 * 1024:
+                    try:   # 只保留最近 40 个按需缓存，避免涨盘
+                        olds = sorted(cache_dir.glob(key[0] + "*"), key=lambda x: x.stat().st_mtime)
+                        for f in olds[:-40]:
+                            f.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                    return {"ok": True, "is_local": True, "local_path": str(p),
+                            "source": "按需落盘", "msg": "已边下边播（该站点仅提供 HLS）✔"}
         except Exception:
             pass
 
-    # 4) Cross-source instant match on Bilibili (works for QQ / Kugou / NetEase / Kuwo including Jay Chou!)
+    # 6) Cross-source instant match on Bilibili (works for QQ / Kugou / NetEase / Kuwo including Jay Chou!)
     q_clean = _clean_song_query(title or query, artist) or (query or title or "").strip()
     if q_clean:
         for cand_q in (q_clean + " 无损 OR 完整版 OR 原唱", q_clean):

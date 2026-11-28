@@ -139,6 +139,21 @@ try:
 except Exception:
     MS = None
 
+try:
+    import lx_music_bridge as LXB  # LXSRC-IMPORT
+except Exception:
+    LXB = None
+
+try:
+    import reader_hub as RH
+except Exception:
+    RH = None
+
+try:
+    import drama_hub as DH
+except Exception:
+    DH = None
+
 # ------------------------------------------------------------------ 路径（原样）
 APP_DIR = Path(__file__).resolve().parent
 HOME = Path(os.environ.get("USERPROFILE") or Path.home())
@@ -245,7 +260,8 @@ DEFAULT_CFG = {
     },
     "ui": {"theme": "dark", "autostart_panel": False, "autostart_aria2": False,
            "upscale": False},
-    "paths": {"downloads": str(DL_HOME), "music": "", "voice": "", "aigc": ""},
+    "paths": {"downloads": str(DL_HOME), "music": "", "voice": "", "aigc": "", "books": ""},
+    "reader_roots": [],
     "voice": {"api_url": "http://127.0.0.1:9880"},
     "comfyui": {
         "enabled": False,
@@ -1490,6 +1506,440 @@ class ControlBackend:
             return s
         except Exception:
             return ""
+
+
+    def _reader_proxy(self):
+        """给书城用的代理：Clash 混合端口上 socks5 对 requests 不友好，改走同端口 HTTP。"""
+        px = ""
+        try:
+            px = self._sys_proxy() or ""
+        except Exception:
+            px = ""
+        if px.lower().startswith("socks5://") or px.lower().startswith("socks5h://"):
+            host = px.split("://", 1)[-1]
+            return "http://" + host
+        return px
+
+    def _sanitize_reader_root(self, raw, must_exist=True):
+        """只允许程序目录、缓存目录，或 D: 上的非盘符根目录。禁止扫 C: 和整个 D:。"""
+        s = str(raw or "").strip().strip('"').strip("'")
+        if not s:
+            return None
+        try:
+            p = Path(s).expanduser()
+            p = p.resolve()
+        except Exception:
+            return None
+        if must_exist and not p.is_dir():
+            return None
+        if p.is_file():
+            return None
+        try:
+            if p == p.anchor or p == Path(p.drive + "\\") or len(p.parts) < 2:
+                return None
+        except Exception:
+            return None
+        try:
+            p.relative_to(APP_DIR.resolve())
+            return p
+        except Exception:
+            pass
+        try:
+            p.relative_to(CACHE.resolve())
+            return p
+        except Exception:
+            pass
+        drive = (getattr(p, "drive", "") or "").upper()
+        if drive == "C:":
+            return None
+        if drive != "D:":
+            return None
+        low_parts = [str(x).lower() for x in p.parts]
+        if "windows" in low_parts or "$recycle.bin" in low_parts:
+            return None
+        return p
+
+    def _reader_roots(self):
+        roots = []
+        default_lib = APP_DIR / "library"
+        try:
+            default_lib.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+        for raw in [default_lib,
+                    (self.cfg.get("paths") or {}).get("books") or "",
+                    *((self.cfg.get("reader_roots") or []) if isinstance(self.cfg.get("reader_roots"), list) else [])]:
+            p = self._sanitize_reader_root(raw, must_exist=True)
+            if p is not None and p not in roots:
+                roots.append(p)
+        return roots
+
+    def _reader(self):
+        if RH is None:
+            raise RuntimeError("书城模块未加载（reader_hub）")
+        hub = getattr(self, "reader", None)
+        if hub is None:
+            hub = RH.ReaderHub(
+                CACHE,
+                proxy_fn=self._reader_proxy,
+                roots_fn=self._reader_roots,
+                log_fn=lambda *a, **k: self.log("书城 " + " ".join(str(x) for x in a)),
+            )
+            self.reader = hub
+        return hub
+
+    def _add_reader_root(self, raw):
+        p = self._sanitize_reader_root(raw, must_exist=True)
+        if p is None:
+            raise RuntimeError("无效的书库目录。请填写 D: 盘上一个已存在的文件夹，不能是盘符根目录或 C:。")
+        roots = self.cfg.get("reader_roots")
+        if not isinstance(roots, list):
+            roots = []
+        s = str(p)
+        if s not in roots:
+            roots.append(s)
+        self.cfg["reader_roots"] = roots
+        save_cfg(self.cfg)
+        hub = getattr(self, "reader", None)
+        if hub is not None:
+            hub._scan_cache = (0.0, [])
+        return [str(x) for x in self._reader_roots()]
+
+    def _del_reader_root(self, raw):
+        s = str(Path(str(raw or "")).expanduser())
+        roots = [x for x in (self.cfg.get("reader_roots") or []) if str(x) not in (str(raw), s)]
+        self.cfg["reader_roots"] = roots
+        save_cfg(self.cfg)
+        hub = getattr(self, "reader", None)
+        if hub is not None:
+            hub._scan_cache = (0.0, [])
+        return [str(x) for x in self._reader_roots()]
+
+    def _reader_audio_dir(self):
+        d = CACHE / "reader" / "audio"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def _prune_reader_audio(self, max_bytes=1024 * 1024 * 1024):
+        try:
+            files = [(f.stat().st_atime, f.stat().st_size, f) for f in self._reader_audio_dir().glob("*") if f.is_file()]
+            total = sum(s for _, s, _ in files)
+            for _, s, f in sorted(files):
+                if total <= max_bytes:
+                    break
+                try:
+                    f.unlink()
+                    total -= s
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def _edge_tts_cmd(self):
+        """Locate an already-installed edge-tts (module or CLI). Never pip-install."""
+        import shutil
+        cands = []
+        for exe in (sys.executable, r"D:\python315\python.exe"):
+            if exe and Path(exe).is_file():
+                cands.append(exe)
+        for exe in cands:
+            try:
+                r = subprocess.run(
+                    [exe, "-c", "import importlib.util,sys; sys.exit(0 if importlib.util.find_spec('edge_tts') else 1)"],
+                    capture_output=True, timeout=8, **_popen_kwargs()
+                )
+                if r.returncode == 0:
+                    return ("py", exe)
+            except Exception:
+                pass
+        for cli in (shutil.which("edge-tts"), r"D:\python315\Scripts\edge-tts.EXE"):
+            if cli and Path(cli).is_file():
+                return ("cli", cli)
+        return ("", "")
+
+    def _sapi_voices(self):
+        cached = getattr(self, "_sapi_voice_cache", None)
+        if cached is not None:
+            return cached
+        out = []
+        ps = (
+            "Add-Type -AssemblyName System.Speech; "
+            "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+            "$s.GetInstalledVoices() | ForEach-Object { "
+            "$_.VoiceInfo.Name + '|' + $_.VoiceInfo.Culture.Name + '|' + $_.VoiceInfo.Gender }"
+        )
+        try:
+            r = subprocess.run(
+                ["powershell", "-NoProfile", "-STA", "-Command", ps],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=12, **_popen_kwargs()
+            )
+            for line in (r.stdout or "").splitlines():
+                parts = [p.strip() for p in line.split("|")]
+                if len(parts) >= 2 and parts[0]:
+                    out.append({
+                        "id": "sapi:" + parts[0],
+                        "name": "%s（系统 · %s）" % (parts[0].replace("Microsoft ", "").replace(" Desktop", ""), parts[1]),
+                        "engine": "sapi",
+                        "ready": True,
+                        "group": "系统音色（离线）",
+                        "culture": parts[1],
+                    })
+        except Exception:
+            out = []
+        self._sapi_voice_cache = out
+        return out
+
+    def _reader_voices(self):
+        voices = []
+        kind, _exe = self._edge_tts_cmd()
+        edge_ready = bool(kind)
+        ev = list(getattr(MS, "EDGE_VOICES", []) or []) if MS else []
+        if not ev:
+            ev = [
+                {"id": "zh-CN-XiaoxiaoNeural", "name": "晓晓（女 · 自然全能中文）"},
+                {"id": "zh-CN-YunxiNeural", "name": "云希（男 · 阳光磁性中文）"},
+                {"id": "en-US-AvaMultilingualNeural", "name": "Ava（女 · 中英双语丝滑）"},
+            ]
+        for v in ev:
+            voices.append({
+                "id": v.get("id"), "name": v.get("name") or v.get("id"),
+                "engine": "edge", "ready": edge_ready,
+                "group": "神经配音（Edge TTS）",
+            })
+        voices.extend(self._sapi_voices())
+        env = {}
+        try:
+            env = self._get_voice_env_cached() if MS else {}
+        except Exception:
+            env = {}
+        ref = ""
+        ref_name = ""
+        try:
+            ref = str(self.voice_job.get("ref_wav") or "")
+            ref_name = str(self.voice_job.get("ref_name") or "")
+        except Exception:
+            pass
+        ref_ok = bool(ref and Path(ref).is_file())
+        if not ref_name and ref_ok:
+            ref_name = Path(ref).name
+        f5_ready = bool(env.get("f5_ready") and ref_ok)
+        api_url = ""
+        try:
+            api_url = str((self.cfg.get("voice") or {}).get("api_url") or self.voice_job.get("api_url") or "").strip()
+        except Exception:
+            api_url = ""
+        voices.append({
+            "id": "clone-f5",
+            "name": ("我的克隆音色（F5-TTS · %s）" % (ref_name or "参考音")) if ref_ok else "我的克隆音色（F5-TTS）",
+            "engine": "f5", "ready": f5_ready,
+            "group": "声音工坊 · 克隆音色",
+            "hint": ("" if f5_ready else ("已有参考音，请先在「声音」页部署 F5-TTS" if ref_ok else "先在「声音」页上传/录制参考音，再部署 F5-TTS")),
+        })
+        if ref_ok and api_url:
+            voices.append({
+                "id": "clone-api",
+                "name": "我的克隆音色（外部 API）",
+                "engine": "api", "ready": True,
+                "group": "声音工坊 · 克隆音色",
+                "hint": api_url,
+            })
+        return {
+            "voices": voices,
+            "edge_ready": edge_ready,
+            "f5_ready": bool(env.get("f5_ready")),
+            "has_ref": ref_ok,
+            "ref_name": ref_name,
+            "sapi_count": len([v for v in voices if v.get("engine") == "sapi"]),
+        }
+
+    def _reader_tts_key(self, engine, voice_id, rate, text):
+        import hashlib
+        raw = ("%s|%s|%s|%s" % (engine, voice_id, rate, text)).encode("utf-8")
+        return hashlib.sha1(raw).hexdigest()
+
+    def _reader_tts_file(self, key, ext):
+        return self._reader_audio_dir() / (key + ext)
+
+    def _run_edge_tts_file(self, text, voice_id, rate, out_file):
+        rate = rate or "+0%"
+        if not rate.startswith(("+", "-")):
+            rate = "+0%"
+        px = self._reader_proxy()
+        if MS is not None:
+            ok, msg = MS.run_edge_tts(text, voice_id, rate, "+0Hz", out_file, proxy=px)
+            if ok:
+                return True, msg
+        kind, exe = self._edge_tts_cmd()
+        env = os.environ.copy()
+        if px:
+            env["HTTP_PROXY"] = env["HTTPS_PROXY"] = env["http_proxy"] = env["https_proxy"] = px
+            env.pop("ALL_PROXY", None)
+            env.pop("all_proxy", None)
+        if kind == "py":
+            code = (
+                "import asyncio, sys, edge_tts\n"
+                "async def go():\n"
+                "    comm = edge_tts.Communicate(sys.argv[1], voice=sys.argv[2], rate=sys.argv[3], pitch=sys.argv[4])\n"
+                "    await comm.save(sys.argv[5])\n"
+                "asyncio.run(go())\n"
+            )
+            r = subprocess.run(
+                [exe, "-B", "-c", code, text, voice_id, rate, "+0Hz", str(out_file)],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                env=env, timeout=60, **_popen_kwargs()
+            )
+            if r.returncode == 0 and out_file.is_file() and out_file.stat().st_size > 500:
+                return True, "Edge TTS 完成"
+            return False, ((r.stderr or r.stdout or "edge-tts 失败")[:180])
+        if kind == "cli":
+            cmd = [exe, "--voice", voice_id, "--rate=" + rate, "--pitch=+0Hz", "--text", text, "--write-media", str(out_file)]
+            r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                               env=env, timeout=60, **_popen_kwargs())
+            if r.returncode == 0 and out_file.is_file() and out_file.stat().st_size > 500:
+                return True, "Edge TTS 完成"
+            return False, ((r.stderr or r.stdout or "edge-tts CLI 失败")[:180])
+        return False, "本机未检测到 edge-tts（可用系统音色离线朗读，或在「声音」页使用已安装的神经配音）"
+
+    def _run_sapi_tts_file(self, text, voice_name, rate, out_file):
+        wav = out_file.with_suffix(".wav")
+        txt = out_file.with_suffix(".txt")
+        txt.write_text(text, encoding="utf-8")
+        rate_n = 0
+        try:
+            # rate "+20%" -> ~ +2 on SAPI's -10..10 scale
+            if isinstance(rate, str) and rate.endswith("%"):
+                rate_n = max(-10, min(10, int(float(rate.replace("%", "").replace("+", "") or 0) / 10)))
+        except Exception:
+            rate_n = 0
+        name = voice_name[5:] if str(voice_name).startswith("sapi:") else voice_name
+        ps = (
+            "Add-Type -AssemblyName System.Speech; "
+            "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+            "try { $s.SelectVoice([IO.File]::ReadAllText([string]$env:RD_VNAME).Trim()) } catch {}; "
+            "$s.Rate = [int]$env:RD_RATE; "
+            "$s.SetOutputToWaveFile($env:RD_WAV); "
+            "$s.Speak([IO.File]::ReadAllText($env:RD_TXT, [Text.Encoding]::UTF8)); "
+            "$s.Dispose();"
+        )
+        env = os.environ.copy()
+        env["RD_WAV"] = str(wav)
+        env["RD_TXT"] = str(txt)
+        env["RD_RATE"] = str(rate_n)
+        env["RD_VNAME"] = name
+        # pass voice via a tiny file to avoid escaping
+        vfile = out_file.with_suffix(".vn")
+        vfile.write_text(name, encoding="utf-8")
+        ps = ps.replace("[IO.File]::ReadAllText([string]$env:RD_VNAME).Trim()", "[IO.File]::ReadAllText($env:RD_VNAME, [Text.Encoding]::UTF8).Trim()")
+        env["RD_VNAME"] = str(vfile)
+        try:
+            r = subprocess.run(
+                ["powershell", "-NoProfile", "-STA", "-Command", ps],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                env=env, timeout=60, **_popen_kwargs()
+            )
+            if wav.is_file() and wav.stat().st_size > 500:
+                if out_file.suffix.lower() != ".wav":
+                    try:
+                        wav.replace(out_file)
+                    except Exception:
+                        return True, str(wav)
+                return True, "系统音色朗读完成"
+            return False, ((r.stderr or r.stdout or "SAPI 合成失败")[:180])
+        finally:
+            try:
+                txt.unlink()
+                vfile.unlink()
+            except Exception:
+                pass
+
+    def _run_clone_tts_file(self, engine, text, rate, out_file):
+        if MS is None:
+            return False, "media_studio 模块不可用"
+        ref_wav = str(self.voice_job.get("ref_wav") or "")
+        ref_text = str(self.voice_job.get("ref_text") or "")
+        if not ref_wav or not Path(ref_wav).is_file():
+            return False, "还没有克隆参考音。请先到「声音」页上传或录制一段 3~15 秒的清晰人声。"
+        if engine == "api":
+            api_url = str((self.cfg.get("voice") or {}).get("api_url") or self.voice_job.get("api_url") or "").strip()
+            ok, msg = MS.run_external_clone_api(api_url, Path(ref_wav), ref_text, text, out_file)
+            return ok, msg
+        # f5
+        if self.voice_job.get("running") and self.voice_job.get("engine") == "f5":
+            return False, "声音工坊正在克隆，请稍后再用克隆音色听书"
+        f5_cli = MS.voice_venv_f5cli(PANEL_DIR)
+        cli_path = str(f5_cli) if f5_cli.is_file() else (shutil.which("f5-tts_infer-cli") or "")
+        if not cli_path:
+            return False, "本机尚未部署 F5-TTS。请到「声音」页一键部署后再用克隆音色；神经配音与系统音色仍可听书。"
+        out_dir = out_file.parent
+        out_name = out_file.name
+        cmd = [
+            cli_path, "--model", "F5TTS_v1_Base",
+            "--ref_audio", ref_wav, "--ref_text", ref_text,
+            "--gen_text", text, "--output_dir", str(out_dir), "--output_file", out_name,
+        ]
+        env = os.environ.copy()
+        env["PYTHONUTF8"] = "1"
+        env["PYTHONIOENCODING"] = "utf-8"
+        ff_dir = self._find_ffmpeg()
+        if ff_dir:
+            env["PATH"] = ff_dir + os.pathsep + env.get("PATH", "")
+        # do not force a model download endpoint; use whatever the installed CLI already has
+        r = subprocess.run(cmd, cwd=str(out_dir), env=env, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=180, **_popen_kwargs())
+        if r.returncode == 0 and out_file.is_file() and out_file.stat().st_size > 1000:
+            return True, "克隆音色合成完成"
+        return False, ((r.stderr or r.stdout or "F5-TTS 失败")[:200])
+
+    def reader_tts(self, text, voice_id="", engine="", rate="+0%"):
+        """Synthesize one utterance into cache/reader/audio. Returns dict."""
+        text = (text or "").strip()
+        if not text:
+            raise RuntimeError("没有可朗读的文本")
+        if len(text) > 800:
+            text = text[:800]
+        voice_id = (voice_id or "zh-CN-XiaoxiaoNeural").strip()
+        engine = (engine or "").strip().lower()
+        if voice_id.startswith("sapi:"):
+            engine = "sapi"
+        elif voice_id in ("clone-f5", "clone-api"):
+            engine = "f5" if voice_id == "clone-f5" else "api"
+        elif not engine:
+            engine = "edge"
+        rate = (rate or "+0%").strip() or "+0%"
+        key = self._reader_tts_key(engine, voice_id, rate, text)
+        ext = ".wav" if engine in ("sapi", "f5", "api") else ".mp3"
+        fp = self._reader_tts_file(key, ext)
+        if fp.is_file() and fp.stat().st_size > 500:
+            return {"ready": True, "key": key, "url": "/api/reader/audio?h=" + key, "cached": True, "engine": engine}
+        if engine == "edge":
+            ok, msg = self._run_edge_tts_file(text, voice_id, rate, fp)
+        elif engine == "sapi":
+            ok, msg = self._run_sapi_tts_file(text, voice_id, rate, fp)
+        elif engine in ("f5", "api"):
+            ok, msg = self._run_clone_tts_file(engine, text, rate, fp)
+        else:
+            raise RuntimeError("未知听书引擎：" + engine)
+        if not ok:
+            try:
+                if fp.is_file() and fp.stat().st_size < 500:
+                    fp.unlink()
+            except Exception:
+                pass
+            raise RuntimeError(msg)
+        self._prune_reader_audio()
+        return {"ready": True, "key": key, "url": "/api/reader/audio?h=" + key, "cached": False, "engine": engine, "msg": msg}
+
+    def reader_audio_path(self, key):
+        key = "".join(c for c in str(key or "") if c.isalnum())
+        if len(key) < 16:
+            return None
+        d = self._reader_audio_dir()
+        for ext in (".mp3", ".wav", ".ogg", ".m4a"):
+            fp = d / (key + ext)
+            if fp.is_file():
+                return fp
+        return None
 
     def run_cmd(self, args, title, key=None, cwd=None):
         try:
@@ -2936,7 +3386,33 @@ class ControlBackend:
         except Exception:
             return {"ok": False, "tracker_count": 0, "missing": [], "dht_dat_size": 0, "cached_trackers": 0}
 
+    def _katelyatv_cred(self):
+        # 影视站账号从部署环境的 .env 读取，绝不写进源码（源码会公开到仓库）
+        user, pwd = "admin", ""
+        try:
+            for cand in (Path(r"D:\MediaStack\.env"), Path(r"C:\MediaStack\.env")):
+                if not cand.is_file():
+                    continue
+                for line in cand.read_text(encoding="utf-8", errors="ignore").splitlines():
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    if line.startswith("KATELYA_USER="):
+                        user = line.split("=", 1)[1].strip()
+                    elif line.startswith("KATELYA_PASS="):
+                        pwd = line.split("=", 1)[1].strip()
+                break
+        except Exception:
+            pass
+        return {"user": user, "pass": pwd, "configured": bool(pwd)}
+
     def get_state(self):
+        # 打开面板要瞬间出数据：state 里有多个引擎探测（qB/Aria2/ComfyUI…），串起来要 3 秒以上。
+        # 这里做 1.5 秒短缓存，轮询和首屏都走缓存，避免每次刷新都全量探测一遍。
+        _now = time.time()
+        _cc = getattr(self, "_state_cache", None)
+        if _cc is not None and (_now - getattr(self, "_state_ts", 0.0)) < 1.5:
+            return _cc
         sec = int(time.time() - self.t0)
         up = "%02d:%02d:%02d" % (sec // 3600, sec % 3600 // 60, sec % 60)
         with self.lock:
@@ -2964,6 +3440,11 @@ class ControlBackend:
         music_job["has_ytdlp"] = yt_job["has_ytdlp"]
         music_job["has_ffmpeg"] = yt_job["has_ffmpeg"]
         music_job["charts"] = list(MS.MUSIC_CHARTS) if MS else []
+        # LXSRC-STATE
+        try:
+            music_job["lx_sources"] = LXB.ui_source_payload() if LXB else {"ready": False, "apis": [], "count": 0}
+        except Exception:
+            music_job["lx_sources"] = {"ready": False, "apis": [], "count": 0}
         voice_job["out_dir"] = self.voice_output()
         voice_job["env"] = self._get_voice_env_cached()
         aigc_job["out_dir"] = self.aigc_output()
@@ -2976,7 +3457,7 @@ class ControlBackend:
             "api_style": str(codex_cfg.get("api_style") or "auto"),
             "key_masked": self._mask_key(str(codex_cfg.get("api_key") or "")),
         }
-        return {
+        _state = {
             "aria2": dict(self.pr.a),
             "qbit": dict(self.pr.q),
             "yt": yt_state,
@@ -3001,13 +3482,22 @@ class ControlBackend:
                 "qbit_direct": self._qbit_url(),
             },
             "cfg": self._safe_cfg_for_ui(),
+            "gtv_cred": self._katelyatv_cred(),
             "wave": wave,
             "logs": logs,
-            "uptime": up,
+            "modules": {"reader": RH is not None, "drama": DH is not None, "lx": LXB is not None}, "uptime": up,
         }
+        self._state_cache = _state
+        self._state_ts = time.time()
+        return _state
 
     def handle_action(self, body):
         act = (body.get("action") or "").strip()
+
+        if act.startswith("drama_"):
+            if DH is None:
+                return False, "短剧模块未加载（drama_hub）", {}
+            return DH.handle_action(self, act, body)
         if act == "gtv_save_to_cinema":
             import threading
             url = str(body.get("url") or "").strip()
@@ -4071,13 +4561,24 @@ class ControlBackend:
             src = str(body.get("source") or "all").strip().lower()
             if not q:
                 return False, "请输入歌名、歌手或歌词片段", {}
-            res = MS.search_songs(q, source=src, ytdlp=self._find_ytdlp(), proxy=self._sys_proxy())
+            pack = MS.search_songs(q, source=src, ytdlp=self._find_ytdlp(), proxy=self._sys_proxy(),
+                                   music_dir=self.music_output(), with_stats=True) or {}
+            res = pack.get("results") or []
+            stats = pack.get("stats") or {}
             with self.lock:
                 self.music_job["query"] = q
                 self.music_job["source"] = src
                 self.music_job["results"] = res
-            self.log("音乐检索 [%s]「%s」命中 %d 首" % (src, q, len(res)), "OK" if res else "WARN")
-            return bool(res), ("找到 %d 首歌曲" % len(res)) if res else "未找到匹配歌曲，请更换关键词或切换音源", {"results": res}
+            try:
+                detail = " / ".join("%s %d" % (k, v) for k, v in stats.items() if v) or "全部音源 0 命中"
+            except Exception:
+                detail = ""
+            self.log("音乐检索 [%s]「%s」命中 %d 首（%s）" % (src, q, len(res), detail),
+                     "OK" if res else "WARN")
+            return (bool(res),
+                    ("找到 %d 首歌曲 · %s" % (len(res), detail)) if res else
+                    "未找到匹配歌曲：%s。可换关键词/歌手名，或切到单个音源重试" % (detail or "全部音源无结果"),
+                    {"results": res, "stats": stats})
 
         if act == "music_chart":
             if MS is None:
@@ -4125,10 +4626,50 @@ class ControlBackend:
             url = str(body.get("url") or "").strip()
             query = str(body.get("query") or "").strip()
             bvid = str(body.get("bvid") or "").strip()
-            info = MS.resolve_music_stream(
-                title=title, artist=artist, url=url, query=query, bvid=bvid,
-                ytdlp=self._find_ytdlp(), proxy=self._sys_proxy(), music_dir=self.music_output(),
-            )
+            # LXSRC-PLAY: try the user's LX Music 音源 first for wy/tx/kg/kw/mg
+            song = {
+                "title": title, "artist": artist, "url": url, "query": query,
+                "bvid": bvid, "album": str(body.get("album") or "").strip(),
+                "sid": str(body.get("sid") or "").strip(),
+                "id": str(body.get("id") or body.get("song_id") or "").strip(),
+                "source": str(body.get("source") or "").strip(),
+                "kg_hash": str(body.get("kg_hash") or body.get("hash") or "").strip(),
+                "migu_id": str(body.get("migu_id") or "").strip(),
+                "songmid": str(body.get("songmid") or "").strip(),
+                "lx_source": str(body.get("lx_source") or "").strip(),
+                "lx_info": body.get("lx_info") or {},
+                "albumId": str(body.get("albumId") or body.get("album_id") or "").strip(),
+                "strMediaMid": str(body.get("strMediaMid") or body.get("media_mid") or "").strip(),
+                "contentId": str(body.get("contentId") or "").strip(),
+                "duration": str(body.get("duration") or "").strip(),
+            }
+            info = {}
+            try:
+                local_fp = MS._find_local_music_match(self.music_output(), title or query, artist) or ""
+            except Exception:
+                local_fp = ""
+            if local_fp:
+                info = {"ok": True, "is_local": True, "local_path": local_fp, "source": "本地无损",
+                        "msg": "命中本地已下载音频 ✔"}
+            if (not info.get("ok")) and LXB is not None:
+                try:
+                    plat = LXB.map_platform(song.get("source"), song.get("id"), song.get("lx_source"))
+                    if plat in LXB.PLAYABLE_PLATFORMS:
+                        info = LXB.resolve_play_url(
+                            title=title, artist=artist, source=song.get("source") or "",
+                            quality=str(body.get("lx_quality") or body.get("quality") or "flac").strip() or "flac",
+                            api_id=str(body.get("lx_api") or body.get("api_id") or "auto").strip() or "auto",
+                            song=song,
+                        ) or {}
+                except Exception as ex:
+                    info = {"ok": False, "msg": "LX 音源解析异常：%s" % ex}
+            if not info.get("ok"):
+                fb = MS.resolve_music_stream(
+                    title=title, artist=artist, url=url, query=query, bvid=bvid,
+                    ytdlp=self._find_ytdlp(), proxy=self._sys_proxy(), music_dir=self.music_output(),
+                ) or {}
+                if fb.get("ok") or not info.get("msg"):
+                    info = fb
             if not info.get("ok"):
                 return False, info.get("msg") or "未解析到可播放音频流", {}
             if info.get("is_local") and info.get("local_path"):
@@ -4170,6 +4711,36 @@ class ControlBackend:
             save_dir = str(body.get("save_dir") or "").strip()
             if not url and not q and not title:
                 return False, "请先选择歌曲或输入歌名/音频链接", {}
+            # LXSRC-DOWNLOAD: resolve a direct audio URL via installed LX 音源 when possible
+            if (not url) and LXB is not None:
+                try:
+                    song = {
+                        "title": title, "artist": artist, "query": q or title,
+                        "source": str(body.get("source") or "").strip(),
+                        "id": str(body.get("id") or "").strip(),
+                        "sid": str(body.get("sid") or "").strip(),
+                        "kg_hash": str(body.get("kg_hash") or body.get("hash") or "").strip(),
+                        "migu_id": str(body.get("migu_id") or "").strip(),
+                        "songmid": str(body.get("songmid") or "").strip(),
+                        "lx_source": str(body.get("lx_source") or "").strip(),
+                        "lx_info": body.get("lx_info") or {},
+                        "albumId": str(body.get("albumId") or "").strip(),
+                        "strMediaMid": str(body.get("strMediaMid") or "").strip(),
+                        "contentId": str(body.get("contentId") or "").strip(),
+                    }
+                    plat = LXB.map_platform(song.get("source"), song.get("id"), song.get("lx_source"))
+                    if plat in LXB.PLAYABLE_PLATFORMS:
+                        resolved = LXB.resolve_play_url(
+                            title=title, artist=artist, source=song.get("source") or "",
+                            quality=str(body.get("lx_quality") or body.get("quality") or "flac").strip() or "flac",
+                            api_id=str(body.get("lx_api") or "auto").strip() or "auto",
+                            song=song,
+                        ) or {}
+                        if resolved.get("ok") and resolved.get("stream_url"):
+                            url = resolved["stream_url"]
+                            self._music_append_log("[INFO] 使用 LX 音源取链：%s" % (resolved.get("source") or ""))
+                except Exception as ex:
+                    self._music_append_log("[WARN] LX 音源取链失败，回退原下载逻辑：%s" % ex)
             with self.lock:
                 if self.music_job.get("running"):
                     return False, "当前已有歌曲正在下载，请稍候或先取消", {}
@@ -4939,10 +5510,16 @@ def run_3d_server(open_browser=True):
     """启动 Spatial 3D HUD 本地服务（同时同源直出 AriaNg）。"""
     import mimetypes
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-    from urllib.parse import unquote
+    from urllib.parse import quote, unquote
 
     ui_file = APP_DIR / "panel_ui.html"
     backend = ControlBackend()
+    # LXSRC-WARMUP: start the local LX userApi host in the background
+    try:
+        if LXB is not None:
+            LXB.warmup_async()
+    except Exception:
+        pass
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
@@ -4956,6 +5533,350 @@ def run_3d_server(open_browser=True):
             self.send_header("Content-Length", str(len(raw)))
             self.end_headers()
             self.wfile.write(raw)
+
+
+        def _send_bytes(self, data, ctype, cache="no-store", code=200, filename=None, inline=True):
+            if data is None:
+                self.send_error(404)
+                return
+            if not isinstance(data, (bytes, bytearray)):
+                data = bytes(data)
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Cache-Control", cache)
+            self.send_header("Content-Length", str(len(data)))
+            if filename:
+                disp = "inline" if inline else "attachment"
+                self.send_header("Content-Disposition", "%s; filename*=UTF-8''%s" % (disp, quote(filename)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def _send_file_path(self, path, ctype, cache="no-store", inline=True):
+            path = Path(path)
+            if not path.is_file():
+                self.send_error(404)
+                return
+            size = path.stat().st_size
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Cache-Control", cache)
+            self.send_header("Accept-Ranges", "bytes")
+            self.send_header("Content-Length", str(size))
+            name = path.name
+            disp = "inline" if inline else "attachment"
+            self.send_header("Content-Disposition", "%s; filename*=UTF-8''%s" % (disp, quote(name)))
+            self.end_headers()
+            with path.open("rb") as f:
+                while True:
+                    chunk = f.read(64 * 1024)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+
+        def _reader_qs(self):
+            from urllib.parse import parse_qs, urlsplit
+            return {k: (v[0] if v else "") for k, v in parse_qs(urlsplit(self.path).query, keep_blank_values=True).items()}
+
+        def _reader_hub(self):
+            return backend._reader()
+
+        def _handle_reader_get(self):
+            from urllib.parse import unquote
+            req = self.path.split("?", 1)[0]
+            qs = self._reader_qs()
+            if req == "/api/drama_media":
+                fp = Path(unquote(qs.get("path") or ""))
+                cache_root = (APP_DIR / "cache" / "drama_hq").resolve()
+                try:
+                    fp = fp.resolve()
+                    ok = cache_root == fp.parent or cache_root in fp.parents
+                except Exception:
+                    ok = False
+                if not ok or not fp.is_file():
+                    self.send_error(404, "drama media")
+                    return
+                size = fp.stat().st_size
+                rng = self.headers.get("Range") or ""
+                start, end = 0, size - 1
+                code = 200
+                import re as _re
+                m = _re.match(r"bytes=(\d*)-(\d*)", rng)
+                if m:
+                    if m.group(1):
+                        start = int(m.group(1))
+                    if m.group(2):
+                        end = min(size - 1, int(m.group(2)))
+                    code = 206
+                if start >= size:
+                    self.send_error(416, "range")
+                    return
+                self.send_response(code)
+                self.send_header("Content-Type", "video/mp4")
+                self.send_header("Accept-Ranges", "bytes")
+                self.send_header("Cache-Control", "public, max-age=86400")
+                self.send_header("Content-Length", str(end - start + 1))
+                if code == 206:
+                    self.send_header("Content-Range", "bytes %d-%d/%d" % (start, end, size))
+                self.end_headers()
+                try:
+                    with fp.open("rb") as f:
+                        f.seek(start)
+                        left = end - start + 1
+                        while left > 0:
+                            chunk = f.read(min(262144, left))
+                            if not chunk:
+                                break
+                            self.wfile.write(chunk)
+                            left -= len(chunk)
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                    pass
+                return
+            try:
+                if req == "/api/reader/img":
+                    u = unquote(qs.get("u") or "")
+                    hub = self._reader_hub()
+                    res = hub.fetch_image(u)
+                    if not res:
+                        self.send_error(404, "image")
+                        return
+                    ctype, data = res
+                    self._send_bytes(data, ctype or "image/jpeg", cache="public, max-age=86400")
+                    return
+                if req == "/api/reader/local":
+                    hub = self._reader_hub()
+                    res = hub.serve_local(unquote(qs.get("p") or ""), unquote(qs.get("e") or ""))
+                    if not res:
+                        self.send_error(404, "local")
+                        return
+                    self._send_bytes(res[1], res[0] or "application/octet-stream", cache="public, max-age=3600")
+                    return
+                if req == "/api/reader/file":
+                    hub = self._reader_hub()
+                    p = hub.allowed_path(unquote(qs.get("p") or ""))
+                    if p is None or not p.is_file():
+                        self.send_error(404, "file")
+                        return
+                    if p.suffix.lower() != ".pdf":
+                        self.send_error(403, "only pdf")
+                        return
+                    self._send_file_path(p, "application/pdf", cache="no-store", inline=True)
+                    return
+                if req == "/api/reader/audio":
+                    fp = backend.reader_audio_path(qs.get("h") or qs.get("id") or "")
+                    if fp is None:
+                        self.send_error(404, "audio")
+                        return
+                    ctype = {".mp3": "audio/mpeg", ".wav": "audio/wav", ".ogg": "audio/ogg", ".m4a": "audio/mp4"}.get(fp.suffix.lower(), "application/octet-stream")
+                    self._send_file_path(fp, ctype, cache="public, max-age=86400", inline=True)
+                    return
+                if req == "/api/reader/genres":
+                    hub = self._reader_hub()
+                    self._send_json({"ok": True, **hub.genres()})
+                    return
+                if req == "/api/reader/browse":
+                    hub = self._reader_hub()
+                    items, errors, meta = hub.browse(
+                        qs.get("kind") or "",
+                        qs.get("id") or qs.get("tag") or qs.get("genre") or "",
+                        qs.get("lang") or "zh",
+                        int(qs.get("page") or 0 or 0),
+                    )
+                    self._send_json({"ok": True, "items": items, "errors": errors, "meta": meta})
+                    return
+                if req == "/api/reader/home":
+                    hub = self._reader_hub()
+                    self._send_json({"ok": True, **hub.home_rails(qs.get("lang") or "zh")})
+                    return
+                if req == "/api/reader/search":
+                    hub = self._reader_hub()
+                    items, errors = hub.search(qs.get("q") or "", qs.get("source") or "all", qs.get("lang") or "zh", int(qs.get("page") or 0 or 0))
+                    self._send_json({"ok": True, "items": items, "errors": errors})
+                    return
+                if req == "/api/reader/detail":
+                    hub = self._reader_hub()
+                    item = hub.detail(qs.get("src") or "", qs.get("id") or qs.get("bid") or "", qs.get("lang") or "zh")
+                    self._send_json({"ok": True, "item": item})
+                    return
+                if req == "/api/reader/chapter":
+                    hub = self._reader_hub()
+                    ch = hub.chapter(qs.get("src") or "", qs.get("id") or qs.get("bid") or "", qs.get("cid") or "", qs.get("quality") or "data")
+                    self._send_json({"ok": True, "chapter": ch})
+                    return
+                if req == "/api/reader/shelf":
+                    hub = self._reader_hub()
+                    d = hub.shelf_get()
+                    self._send_json({"ok": True, "items": d.get("items") or {}, "prefs": d.get("prefs") or {}, "stats": d.get("stats") or {}, "roots": [str(x) for x in backend._reader_roots()]})
+                    return
+                if req == "/api/reader/hot":
+                    hub = self._reader_hub()
+                    import time as _t
+                    cache = getattr(backend, "_rd_hot_cache", None)
+                    now = _t.time()
+                    if cache and (now - cache.get("ts", 0)) < 600:
+                        hot = cache.get("data") or {}
+                    else:
+                        hr = hub.home_rails(qs.get("lang") or "zh") or {}
+                        manga, novel, seen = [], [], set()
+                        for rail in (hr.get("rails") or []):
+                            for it in (rail.get("items") or []):
+                                key = (it.get("src"), it.get("id"))
+                                if key in seen:
+                                    continue
+                                seen.add(key)
+                                if it.get("kind") == "manga" and len(manga) < 24:
+                                    manga.append(it)
+                                elif it.get("kind") != "manga" and len(novel) < 24:
+                                    novel.append(it)
+                                if len(manga) >= 24 and len(novel) >= 24:
+                                    break
+                            if len(manga) >= 24 and len(novel) >= 24:
+                                break
+                        hot = {"manga": manga, "novel": novel, "total": len(manga) + len(novel)}
+                        try:
+                            backend._rd_hot_cache = {"ts": now, "data": hot}
+                        except Exception:
+                            pass
+                    self._send_json({"ok": True, **hot})
+                    return
+                if req == "/api/reader/platforms":
+                    plats = [
+                        {"id": "mangadex", "name": "MangaDex", "kind": "漫画", "color": "#ff6740", "home": "https://mangadex.org/", "search": "https://mangadex.org/search?title={q}", "proxy": False},
+                        {"id": "bilibilicomic", "name": "哔哩哔哩漫画", "kind": "漫画", "color": "#00a1d6", "home": "https://manga.bilibili.com/", "search": "https://manga.bilibili.com/search?from=0&keyword={q}", "proxy": False},
+                        {"id": "qqcomic", "name": "腾讯动漫", "kind": "漫画", "color": "#ff8a00", "home": "https://ac.qq.com/", "search": "https://ac.qq.com/Search?keyword={q}", "proxy": False},
+                        {"id": "kuaikan", "name": "快看漫画", "kind": "漫画", "color": "#ff4f81", "home": "https://www.kuaikanmanhua.com/", "search": "https://www.kuaikanmanhua.com/search/{q}", "proxy": False},
+                        {"id": "manhuagui", "name": "漫画柜", "kind": "漫画", "color": "#22c55e", "home": "https://www.manhuagui.com/", "search": "https://www.manhuagui.com/s/{q}.html", "proxy": False},
+                        {"id": "qidian", "name": "起点中文网", "kind": "小说", "color": "#e11d48", "home": "https://www.qidian.com/", "search": "https://www.qidian.com/search?kw={q}", "proxy": False},
+                        {"id": "weread", "name": "微信读书", "kind": "小说", "color": "#2563eb", "home": "https://weread.qq.com/", "search": "https://weread.qq.com/web/search/books?keyword={q}", "proxy": False},
+                        {"id": "17k", "name": "17K 小说网", "kind": "小说", "color": "#a855f7", "home": "https://www.17k.com/", "search": "https://www.17k.com/search/index.do?key={q}", "proxy": False},
+                        {"id": "biquge365", "name": "笔趣阁", "kind": "小说", "color": "#16a34a", "home": "https://www.biquge365.net/", "search": "https://www.biquge365.net/search.html?keyword={q}", "proxy": False},
+                        {"id": "aixiawx", "name": "爱下电子书", "kind": "小说", "color": "#0891b2", "home": "https://www.aixiawx.com/", "search": "https://www.aixiawx.com/search.html?keyword={q}", "proxy": False},
+                        {"id": "luoxia", "name": "落霞小说", "kind": "小说", "color": "#f59e0b", "home": "https://www.luoxia.com/", "search": "https://www.luoxia.com/e/search/?keyboard={q}", "proxy": False},
+                        {"id": "baidunovel", "name": "百度小说", "kind": "小说", "color": "#3b82f6", "home": "https://dushu.baidu.com/", "search": "https://dushu.baidu.com/pc/search?query={q}", "proxy": False},
+                        {"id": "zhangyue", "name": "掌阅", "kind": "小说", "color": "#0ea5e9", "home": "https://www.zhangyue.com/", "search": "https://www.zhangyue.com/search?keyword={q}", "proxy": False},
+                        {"id": "migu", "name": "咪咕阅读", "kind": "小说", "color": "#dc2626", "home": "https://www.miguvideo.com/", "search": "https://www.miguvideo.com/search?keyword={q}", "proxy": False},
+                        {"id": "doubanbook", "name": "豆瓣读书", "kind": "小说", "color": "#22c55e", "home": "https://book.douban.com/", "search": "https://search.douban.com/book/subject_search?search_text={q}", "proxy": False},
+                        {"id": "fanqie", "name": "番茄小说", "kind": "小说", "color": "#f97316", "home": "https://fanqienovel.com/", "search": "https://fanqienovel.com/search?q={q}", "proxy": True},
+                        {"id": "qqread", "name": "QQ阅读", "kind": "小说", "color": "#2563eb", "home": "https://book.qq.com/", "search": "https://book.qq.com/so/{q}", "proxy": True},
+                        {"id": "zongheng", "name": "纵横中文网", "kind": "小说", "color": "#0ea5e9", "home": "https://www.zongheng.com/", "search": "https://www.zongheng.com/search?keyword={q}", "proxy": True},
+                        {"id": "goodreads", "name": "Goodreads", "kind": "小说", "color": "#92400e", "home": "https://www.goodreads.com/", "search": "https://www.goodreads.com/search?q={q}", "proxy": True},
+                        {"id": "wattpad", "name": "Wattpad", "kind": "小说", "color": "#ff6122", "home": "https://www.wattpad.com/", "search": "https://www.wattpad.com/search/{q}", "proxy": True},
+                        {"id": "syosetu", "name": "成为小说家", "kind": "小说", "color": "#0891b2", "home": "https://syosetu.com/", "search": "https://yomou.syosetu.com/search.php?word={q}", "proxy": True},
+                        {"id": "kakuyomu", "name": "Kakuyomu", "kind": "小说", "color": "#111827", "home": "https://kakuyomu.jp/", "search": "https://kakuyomu.jp/search?q={q}", "proxy": True},
+                        {"id": "ao3", "name": "AO3", "kind": "小说", "color": "#990000", "home": "https://archiveofourown.org/", "search": "https://archiveofourown.org/works/search?work_search%5Bquery%5D={q}", "proxy": True},
+                        {"id": "webnovel", "name": "Webnovel", "kind": "小说", "color": "#ff6a00", "home": "https://www.webnovel.com/", "search": "https://www.webnovel.com/search?keywords={q}", "proxy": True},
+                        {"id": "scribblehub", "name": "Scribble Hub", "kind": "小说", "color": "#6366f1", "home": "https://www.scribblehub.com/", "search": "https://www.scribblehub.com/?s={q}", "proxy": True},
+                        {"id": "royalroad", "name": "Royal Road", "kind": "小说", "color": "#b91c1c", "home": "https://www.royalroad.com/", "search": "https://www.royalroad.com/fictions/search?title={q}", "proxy": True},
+                        {"id": "wikisource", "name": "维基文库", "kind": "公有领域", "color": "#64748b", "home": "https://zh.wikisource.org/", "search": "https://zh.wikisource.org/w/index.php?search={q}", "proxy": False},
+                        {"id": "gutenberg", "name": "Gutenberg", "kind": "公有领域", "color": "#8b5cf6", "home": "https://www.gutenberg.org/", "search": "https://www.gutenberg.org/ebooks/search/?query={q}", "proxy": False},
+                        {"id": "archive", "name": "Internet Archive", "kind": "公有领域", "color": "#0891b2", "home": "https://archive.org/", "search": "https://archive.org/search?query={q}", "proxy": False},
+                    ]
+                    self._send_json({"ok": True, "platforms": plats})
+                    return
+                if req == "/api/reader/sources":
+                    srcs = list(RH.SOURCES) if RH else []
+                    self._send_json({"ok": True, "sources": srcs})
+                    return
+                if req == "/api/reader/scan":
+                    hub = self._reader_hub()
+                    force = (qs.get("force") or "") in ("1", "true", "yes")
+                    items = hub.scan_local(force=force)
+                    self._send_json({"ok": True, "items": items, "roots": [str(x) for x in backend._reader_roots()]})
+                    return
+                if req == "/api/reader/jobs":
+                    hub = self._reader_hub()
+                    jobs = list((hub.jobs or {}).values())
+                    self._send_json({"ok": True, "jobs": jobs})
+                    return
+                if req == "/api/reader/job":
+                    hub = self._reader_hub()
+                    jid = qs.get("id") or ""
+                    job = (hub.jobs or {}).get(jid) or {}
+                    if not job:
+                        self._send_json({"ok": False, "msg": "任务不存在"}, code=404)
+                        return
+                    self._send_json({"ok": True, "job": job})
+                    return
+                if req == "/api/reader/cache":
+                    hub = self._reader_hub()
+                    st = hub.cache_stats()
+                    self._send_json({"ok": True, **st, "audio_dir": str(backend._reader_audio_dir()), "shelf": str(hub.shelf_file)})
+                    return
+                if req == "/api/reader/roots":
+                    self._send_json({"ok": True, "roots": [str(x) for x in backend._reader_roots()]})
+                    return
+                if req == "/api/reader/voices":
+                    self._send_json({"ok": True, **backend._reader_voices()})
+                    return
+                self._send_json({"ok": False, "msg": "未知书城接口"}, code=404)
+            except Exception as ex:
+                self._send_json({"ok": False, "msg": str(ex)[:300]}, code=400)
+
+        def _handle_reader_post(self):
+            req = self.path.split("?", 1)[0]
+            length = int(self.headers.get("Content-Length") or 0)
+            raw = self.rfile.read(length) if length > 0 else b"{}"
+            try:
+                body = json.loads(raw.decode("utf-8") or "{}")
+            except Exception:
+                body = {}
+            if not isinstance(body, dict):
+                body = {}
+            try:
+                if req == "/api/reader/tts":
+                    res = backend.reader_tts(
+                        body.get("text") or "",
+                        voice_id=str(body.get("voice_id") or body.get("voice") or ""),
+                        engine=str(body.get("engine") or ""),
+                        rate=str(body.get("rate") or "+0%"),
+                    )
+                    self._send_json({"ok": True, **res})
+                    return
+                hub = self._reader_hub()
+                if req == "/api/reader/shelf":
+                    key = hub.shelf_put(body)
+                    d = hub.shelf_get()
+                    self._send_json({"ok": True, "key": key, "items": d.get("items") or {}})
+                    return
+                if req == "/api/reader/shelf/del":
+                    hub.shelf_del(str(body.get("key") or ""))
+                    d = hub.shelf_get()
+                    self._send_json({"ok": True, "items": d.get("items") or {}})
+                    return
+                if req == "/api/reader/prefs":
+                    prefs = hub.prefs_save(body if "prefs" not in body else (body.get("prefs") or {}))
+                    self._send_json({"ok": True, "prefs": prefs})
+                    return
+                if req == "/api/reader/stats":
+                    st = hub.stats_add(int(body.get("seconds") or 0))
+                    self._send_json({"ok": True, "stats": st})
+                    return
+                if req == "/api/reader/offline":
+                    jid = hub.offline(body.get("src") or "", body.get("id") or body.get("bid") or "",
+                                      body.get("cid") or "", body.get("title") or "offline",
+                                      body.get("quality") or "data")
+                    self._send_json({"ok": True, "id": jid, "job": jid, "jobs": hub.jobs.get(jid)})
+                    return
+                if req == "/api/reader/roots":
+                    op = str(body.get("op") or "add").lower()
+                    if op == "del":
+                        roots = backend._del_reader_root(body.get("path") or "")
+                        self._send_json({"ok": True, "msg": "已移除书库目录", "roots": roots})
+                    else:
+                        roots = backend._add_reader_root(body.get("path") or "")
+                        self._send_json({"ok": True, "msg": "已添加书库目录", "roots": roots})
+                    return
+                if req == "/api/reader/cache/clear":
+                    hub.clear_cache()
+                    self._send_json({"ok": True, "msg": "图片缓存已清空"})
+                    return
+                if req == "/api/reader/scan":
+                    items = hub.scan_local(force=True)
+                    self._send_json({"ok": True, "items": items, "roots": [str(x) for x in backend._reader_roots()]})
+                    return
+                self._send_json({"ok": False, "msg": "未知书城接口"}, code=404)
+            except Exception as ex:
+                self._send_json({"ok": False, "msg": str(ex)[:300]}, code=400)
+
 
         def _proxy_qbit(self, method="GET"):
             c = backend.cfg.get("qbit") or {}
@@ -5105,34 +6026,95 @@ def run_3d_server(open_browser=True):
             "})();</script>"
         )
 
-        def _resolve_share_m3u8(self, url):
+        _SHARE_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+
+        @staticmethod
+        def _unescape_page(txt):
+            # 分享页里的直链常被转义：\/  \u002F  &#47;  &amp;  \u0026
+            return (txt.replace("\\\\/", "/").replace("\\/", "/")
+                       .replace("\\u002F", "/").replace("\\u002f", "/")
+                       .replace("\\u0026", "&")
+                       .replace("&amp;", "&").replace("&#47;", "/").replace("&#x2F;", "/"))
+
+        @staticmethod
+        def _m3u8_rules(txt):
+            # 分享页格式五花八门，按命中优先级逐条试（越靠前越可信）
+            pats = (
+                r'var\s+main\s*=\s*["\']([^"\']+\.m3u8[^"\']*)["\']',
+                r'(?:url|src|source|play|player|video|file|hls|m3u8|m3u8url|m3u8_url|playurl|play_url|'
+                r'video_url|source_url|path|link)\s*[:=]\s*["\']([^"\']+?\.m3u8[^"\']*)["\']',
+                r'["\']((?:https?:)?//[^"\']+?\.m3u8[^"\']*)["\']',
+                r'["\']([^"\']+?\.m3u8[^"\']*)["\']',
+                r'((?:https?:)?//[^\s"\'<>\\]+?\.m3u8[^\s"\'<>\\]*)',
+                r'(/[^\s"\'<>\\]+?\.m3u8[^\s"\'<>\\]*)',
+                r'([A-Za-z0-9_\-/]+\.m3u8[^\s"\'<>\\]*)',
+            )
+            for p in pats:
+                m = re.search(p, txt)
+                if m and m.group(1):
+                    return m.group(1)
+            return None
+
+        @staticmethod
+        def _find_subpage(txt, base):
+            # 有的分享页只是中转壳：真正带 m3u8 的页面在 iframe / location 跳转里
+            for p in (
+                r'<iframe[^>]+src\s*=\s*["\']([^"\']+)["\']',
+                r'location\.(?:href|replace)\s*\(?\s*["\']([^"\']+)["\']',
+                r'window\.location\s*=\s*["\']([^"\']+)["\']',
+                r'<meta[^>]+http-equiv\s*=\s*["\']refresh["\'][^>]+content\s*=\s*["\'][^"\']*url=([^"\'>\s]+)',
+            ):
+                m = re.search(p, txt, re.I)
+                if m:
+                    u = (m.group(1) or "").strip()
+                    if u and not u.lower().startswith(("javascript:", "about:", "data:", "#")):
+                        try:
+                            from urllib.parse import urljoin
+                            return urljoin(base, u)
+                        except Exception:
+                            return None
+            return None
+
+        def _resolve_share_m3u8(self, url, depth=0):
             # 从第三方分享页里抠出真正的 m3u8 直链（页面里就写着 var main = "/xxx/index.m3u8?sign=…"）
+            # 覆盖：var main=… / JSON 字段 / 转义斜杠 / 无引号直链 / 中转 iframe（最多跟两层）
             try:
                 r = requests.get(url, timeout=12, proxies={"http": None, "https": None},
-                                 headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                                                        "AppleWebKit/537.36 (KHTML, like Gecko) "
-                                                        "Chrome/120.0.0.0 Safari/537.36"})
+                                 headers={"User-Agent": self._SHARE_UA, "Referer": url})
                 if r.status_code != 200:
                     return None
-                txt = r.text
-                m = re.search(r'var\s+main\s*=\s*["\']([^"\']+\.m3u8[^"\']*)["\']', txt)
-                if not m:
-                    m = re.search(r'["\']((?:https?:)?//[^"\']+\.m3u8[^"\']*)["\']', txt)
-                if not m:
-                    m = re.search(r'["\']([^"\']+\.m3u8[^"\']*)["\']', txt)
-                if not m:
+                txt = self._unescape_page(r.text or "")
+                hit = self._m3u8_rules(txt)
+                if not hit and depth < 2:
+                    sub = self._find_subpage(txt, url)
+                    if sub and sub.rstrip("/") != url.rstrip("/"):
+                        try:
+                            backend.log("TV 分享页中转 → %s" % sub[:160], "INFO")
+                        except Exception:
+                            pass
+                        return self._resolve_share_m3u8(sub, depth + 1)
+                if not hit:
+                    try:
+                        backend.log("TV 分享页未匹配到 m3u8：%s" % url[:160], "WARN")
+                    except Exception:
+                        pass
                     return None
-                path = m.group(1)
+                path = hit.strip()
                 if path.startswith("//"):
                     return "https:" + path
-                if path.startswith("http"):
+                if path.lower().startswith("http"):
                     return path
                 try:
                     from urllib.parse import urljoin
                     return urljoin(url, path)
                 except Exception:
                     return None
-            except Exception:
+            except Exception as exc:
+                try:
+                    backend.log("TV 分享页解析异常 %s: %s" % (url[:120], exc), "WARN")
+                except Exception:
+                    pass
                 return None
 
         def _proxy_tv(self, method="GET"):
@@ -5321,6 +6303,174 @@ def run_3d_server(open_browser=True):
 
         def do_GET(self):
             req_path = self.path.split("?", 1)[0]
+            if req_path == "/api/hg_media":
+                import re as _re2
+                from urllib.parse import parse_qs as _pq2, urlsplit as _us2, unquote as _uq2
+                qs3 = _pq2(_us2(self.path).query, keep_blank_values=True)
+                target = _uq2((qs3.get("u") or [""])[0])
+                if not target.startswith("https://hongguoduanju.com/video/public/"):
+                    self.send_error(403, "only hongguo video")
+                    return
+                try:
+                    import requests as _rq
+                    hdrs = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                                          "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                            "Referer": "https://hongguoduanju.com/"}
+                    rng = self.headers.get("Range") or ""
+                    if rng:
+                        hdrs["Range"] = rng
+                    rr = _rq.get(target, headers=hdrs, proxies={"http": None, "https": None},
+                                 timeout=25, stream=True, allow_redirects=True)
+                    self.send_response(rr.status_code)
+                    ct = rr.headers.get("Content-Type") or "video/mp4"
+                    self.send_header("Content-Type", ct)
+                    for h in ("Content-Length", "Content-Range", "Accept-Ranges"):
+                        v = rr.headers.get(h)
+                        if v:
+                            self.send_header(h, v)
+                    if not rr.headers.get("Accept-Ranges"):
+                        self.send_header("Accept-Ranges", "bytes")
+                    self.send_header("Cache-Control", "public, max-age=3600")
+                    self.end_headers()
+                    for chunk in rr.iter_content(262144):
+                        if chunk:
+                            self.wfile.write(chunk)
+                    try:
+                        rr.close()
+                    except Exception:
+                        pass
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                    pass
+                except Exception as ex:
+                    try:
+                        backend.log("[hg_media] %s" % ex, "ERROR")
+                    except Exception:
+                        pass
+                    try:
+                        self.send_error(500, "hg_media")
+                    except Exception:
+                        pass
+                return
+            if req_path.startswith("/px/"):
+                try:
+                    self._proxy_px()
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                    pass
+                except Exception as ex:
+                    try:
+                        backend.log("[px] %s" % ex, "ERROR")
+                    except Exception:
+                        pass
+                    try:
+                        self.send_error(502, "px proxy failed")
+                    except Exception:
+                        pass
+                return
+            if req_path == "/ext":
+                from urllib.parse import parse_qs as _pq3, urlsplit as _us3, unquote as _uq3
+                qs4 = _pq3(_us3(self.path).query, keep_blank_values=True)
+                target = _uq3((qs4.get("u") or [""])[0])
+                if not target.startswith("http"):
+                    self.send_error(400, "u required")
+                    return
+                try:
+                    import requests as _rq2
+                    rq = _rq2.get(target, timeout=25, allow_redirects=True, stream=True,
+                                  proxies={"http": None, "https": None},
+                                  headers={
+                                      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                                                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                                      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                                      "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+                                      "Referer": target,
+                                  })
+                    ctype = (rq.headers.get("Content-Type") or "text/html").lower()
+                    body = rq.content
+                    if "html" in ctype:
+                        txt = body.decode("utf-8", "replace")
+                        low = txt.lower()
+                        head_end = low.find("<head")
+                        if head_end < 0:
+                            head_end = low.find("<html")
+                        origin = target.split("/", 3)
+                        base = "/".join(origin[:3]) + "/"
+                        inject = '<meta name="referrer" content="no-referrer"><base href="%s">' % base
+                        if head_end >= 0:
+                            gt = txt.find(">", head_end)
+                            if gt > 0:
+                                txt = txt[:gt + 1] + inject + txt[gt + 1:]
+                        else:
+                            txt = inject + txt
+                        body = txt.encode("utf-8", "replace")
+                        ctype = "text/html; charset=utf-8"
+                    self.send_response(200)
+                    self.send_header("Content-Type", ctype)
+                    self.send_header("Content-Length", str(len(body)))
+                    self.send_header("Cache-Control", "no-store")
+                    self.end_headers()
+                    self.wfile.write(body)
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                    pass
+                except Exception as ex:
+                    try:
+                        backend.log("[ext] %s" % ex, "ERROR")
+                    except Exception:
+                        pass
+                    try:
+                        self.send_error(502, "ext proxy failed")
+                    except Exception:
+                        pass
+                return
+            if req_path == "/api/drama_media":
+                import re as _re
+                from urllib.parse import unquote as _uq, parse_qs as _pq, urlsplit as _us
+                qs2 = _pq(_us(self.path).query, keep_blank_values=True)
+                raw = _uq((qs2.get("path") or [""])[0])
+                fp = Path(raw)
+                cache_root = (APP_DIR / "cache" / "drama_hq").resolve()
+                okp = False
+                try:
+                    fp = fp.resolve()
+                    okp = (fp.parent == cache_root) or (cache_root in fp.parents)
+                except Exception:
+                    okp = False
+                if not okp or not fp.is_file():
+                    self.send_error(404, "drama media")
+                    return
+                size = fp.stat().st_size
+                rng = self.headers.get("Range") or ""
+                start, end, code = 0, size - 1, 200
+                m = _re.match(r"bytes=(\d*)-(\d*)", rng)
+                if m:
+                    if m.group(1):
+                        start = int(m.group(1))
+                    if m.group(2):
+                        end = min(size - 1, int(m.group(2)))
+                    code = 206
+                if start >= size:
+                    self.send_error(416, "range")
+                    return
+                self.send_response(code)
+                self.send_header("Content-Type", "video/mp4")
+                self.send_header("Accept-Ranges", "bytes")
+                self.send_header("Cache-Control", "public, max-age=86400")
+                self.send_header("Content-Length", str(end - start + 1))
+                if code == 206:
+                    self.send_header("Content-Range", "bytes %d-%d/%d" % (start, end, size))
+                self.end_headers()
+                try:
+                    with fp.open("rb") as f:
+                        f.seek(start)
+                        left = end - start + 1
+                        while left > 0:
+                            chunk = f.read(min(262144, left))
+                            if not chunk:
+                                break
+                            self.wfile.write(chunk)
+                            left -= len(chunk)
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                    pass
+                return
             if req_path == "/qbit" or req_path.startswith("/qbit/"):
                 if req_path == "/qbit":
                     self.send_response(302)
@@ -5563,6 +6713,14 @@ def run_3d_server(open_browser=True):
                                 pass
                 return
 
+
+            if req_path == "/api/stream_remote":
+                try:
+                    backend.log("[stream_remote] hit %s" % req_path, "INFO")
+                except Exception:
+                    pass
+                self._stream_remote(self._reader_qs())
+                return
             if req_path == "/api/stream_video":
                 from urllib.parse import parse_qs, urlsplit
                 qs = parse_qs(urlsplit(self.path).query)
@@ -5757,6 +6915,13 @@ def run_3d_server(open_browser=True):
                 self.end_headers()
                 self.wfile.write(data)
                 return
+            if req_path.startswith("/api/reader"):
+                try:
+                    backend.log("[reader-dispatch] %s" % req_path, "INFO")
+                except Exception:
+                    pass
+                self._handle_reader_get()
+                return
             try:
                 backend.log("面板 404: %s" % str(self.path)[:120], "WARN")
             except Exception:
@@ -5768,8 +6933,208 @@ def run_3d_server(open_browser=True):
                     return
             self.send_error(404)
 
+
+        def _px_jar(self):
+            if not hasattr(backend, "_px_cookies"):
+                backend._px_cookies = {}
+            return backend._px_cookies
+
+        def _proxy_px(self):
+            """路径前缀反代：/px/<host>/<path>?<query> → https://<host>/<path>?<query>"""
+            import requests as _rq
+            raw = self.path
+            path, _, query = raw.partition("?")
+            parts = path[len("/px/"):].split("/", 1)
+            host = (parts[0] or "").strip()
+            rest = parts[1] if len(parts) > 1 else ""
+            if not host or "." not in host:
+                self.send_error(400, "bad host")
+                return
+            target = "https://%s/%s" % (host, rest) + (("?" + query) if query else "")
+            jar = self._px_jar()
+            ck = jar.get(host) or {}
+            hdrs = {
+                "User-Agent": self.headers.get("User-Agent") or
+                              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                              "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                "Accept": self.headers.get("Accept") or "*/*",
+                "Accept-Language": self.headers.get("Accept-Language") or "zh-CN,zh;q=0.9",
+                "Referer": "https://%s/" % host,
+                "Origin": "https://%s" % host,
+            }
+            for h in ("Content-Type", "X-Requested-With", "Range", "If-None-Match", "If-Modified-Since"):
+                v = self.headers.get(h)
+                if v:
+                    hdrs[h] = v
+            if ck:
+                hdrs["Cookie"] = "; ".join("%s=%s" % (k, v) for k, v in ck.items())
+            body = None
+            if self.command in ("POST", "PUT", "PATCH"):
+                try:
+                    ln = int(self.headers.get("Content-Length") or 0)
+                    body = self.rfile.read(ln) if ln > 0 else b""
+                except Exception:
+                    body = b""
+            r = _rq.request(self.command, target, headers=hdrs, data=body, timeout=30,
+                            allow_redirects=False, proxies={"http": None, "https": None})
+            for sc in re.split(r",\s*(?=[A-Za-z0-9_\-]+=)", r.headers.get("Set-Cookie") or ""):
+                if "=" not in sc:
+                    continue
+                pair = sc.split(";")[0].strip()
+                k, _, v = pair.partition("=")
+                if k and "@" not in k:
+                    ck[k.strip()] = v.strip()
+            jar[host] = ck
+            ctype = r.headers.get("Content-Type") or "application/octet-stream"
+            loc = r.headers.get("Location")
+            if loc:
+                if loc.startswith("/"):
+                    loc = "/px/%s%s" % (host, loc)
+                elif loc.startswith("https://" + host):
+                    loc = "/px/" + loc[len("https://"):]
+                self.send_response(r.status_code)
+                self.send_header("Location", loc)
+                self.end_headers()
+                return
+            data = r.content or b""
+            low = ctype.lower()
+            if any(k in low for k in ("text/html", "javascript", "text/css", "application/json",
+                                      "text/plain", "xml")):
+                try:
+                    txt = data.decode("utf-8", "replace")
+                    if "text/html" in low:
+                        pref = "/px/" + host + "/"
+                        import re as _re2
+                        txt = _re2.sub(r'(href|src|action|data-src|poster)="/', r'\1="' + pref, txt)
+                        txt = _re2.sub(r"(href|src|action|data-src|poster)='/", r"\1='" + pref, txt)
+                        txt = txt.replace("https://" + host + "/", pref)
+                        low2 = txt.lower()
+                        li = low2.find("<head")
+                        if li >= 0:
+                            gt = txt.find(">", li)
+                            if gt > 0:
+                                _shim_tpl = ('<base href="__P__"><script>(function(){var P="__P__";'
+                                             'function f(u){try{if(typeof u==="string"&&u.charAt(0)==="/"&&u.indexOf(P)!==0){return P+u.substring(1);}}catch(e){}return u;}'
+                                             'var of=window.fetch;if(of){window.fetch=function(i,o){try{if(typeof i==="string"){i=f(i);}else if(i&&i.url){var n=f(i.url);if(n!==i.url){i=new Request(n,i);}}}catch(e){}return of.call(this,i,o);};}'
+                                             'var oo=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){try{u=f(u);}catch(e){}return oo.call(this,m,u,arguments[2],arguments[3],arguments[4]);};}'
+                                             '})();</script>')
+                                txt = txt[:gt + 1] + _shim_tpl.replace("__P__", pref) + txt[gt + 1:]
+                    elif "json" not in low and "javascript" not in low:
+                        txt = txt.replace("https://" + host + "/", "/px/" + host + "/")
+                    data = txt.encode("utf-8", "replace")
+                except Exception:
+                    pass
+            self.send_response(r.status_code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
+
+        def _stream_remote(self, qs):
+            """把 B站 DASH 的 视频流+音频流 用 ffmpeg 实时 mux 成 fragmented MP4 直出浏览器。"""
+            try:
+                return self._stream_remote_impl(qs)
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                return
+            except Exception as ex:
+                try:
+                    backend.log("[stream_remote] %s: %s" % (type(ex).__name__, ex), "ERROR")
+                except Exception:
+                    pass
+                try:
+                    self.send_error(500, "stream_remote: %s" % str(ex)[:120])
+                except Exception:
+                    pass
+
+        def _stream_remote_impl(self, qs):
+            import subprocess
+            tok = (qs.get("id") or [""])[0]
+            with backend.lock:
+                info = (backend.stream_tokens or {}).get(tok)
+            if not info or not info.get("vurl"):
+                self.send_error(404, "token")
+                return
+            ff_dir = backend._find_ffmpeg()
+            ff = (str(Path(ff_dir) / ("ffmpeg.exe" if IS_WIN else "ffmpeg")) if ff_dir else (shutil.which("ffmpeg") or ""))
+            if not ff:
+                self.send_error(503, "ffmpeg not available")
+                return
+            hdr = "Referer: https://www.bilibili.com/\r\nUser-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36\r\n"
+            try:
+                start = max(0.0, float((qs.get("start") or ["0"])[0] or 0))
+            except Exception:
+                start = 0.0
+            cmd = [ff, "-v", "error", "-nostdin"]
+            if start > 0.2:
+                cmd += ["-ss", "%.3f" % start]
+            cmd += ["-headers", hdr, "-i", info["vurl"]]
+            if info.get("aurl"):
+                cmd += ["-headers", hdr, "-i", info["aurl"]]
+                cmd += ["-map", "0:v:0", "-map", "1:a:0"]
+            else:
+                cmd += ["-map", "0:v:0"]
+            cmd += ["-c:v", "copy"]
+            if info.get("aurl"):
+                cmd += ["-c:a", "aac", "-b:a", "192k", "-ac", "2"]
+            cmd += ["-movflags", "frag_keyframe+empty_moov+default_base_moof", "-f", "mp4", "pipe:1"]
+            proc = None
+            try:
+                proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                        bufsize=262144, creationflags=(0x08000000 if IS_WIN else 0))
+                self.send_response(200)
+                self.send_header("Content-Type", "video/mp4")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Accept-Ranges", "none")
+                self.end_headers()
+                while True:
+                    chunk = proc.stdout.read(262144)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            finally:
+                if proc:
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
+
+
+
         def do_POST(self):
             req_path = self.path.split("?", 1)[0]
+            if req_path == "/api/client_log":
+                # 前端异常自上报：桌面壳没有地址栏，按不出 F12 也能定位问题。
+                # 落盘到 logs/client_errors.log，同时进后端日志流。
+                length = int(self.headers.get("Content-Length") or 0)
+                raw = self.rfile.read(length) if length > 0 else b""
+                try:
+                    info = json.loads(raw.decode("utf-8", "replace") or "{}")
+                    if not isinstance(info, dict):
+                        info = {"tag": "raw", "msg": str(info)}
+                except Exception:
+                    info = {"tag": "raw", "msg": raw.decode("utf-8", "replace")[:2000]}
+                msg = str(info.get("msg", "")).replace("\r", "")
+                try:
+                    LOGS.mkdir(parents=True, exist_ok=True)
+                    with (LOGS / "client_errors.log").open("a", encoding="utf-8") as f:
+                        f.write("[%s] %s\n    %s\n    href=%s\n" % (
+                            info.get("t") or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            info.get("tag", "?"),
+                            msg.replace("\n", "\n    "),
+                            info.get("href", "")[:300],
+                        ))
+                except Exception:
+                    pass
+                try:
+                    backend.log("[前端异常] %s :: %s" % (info.get("tag", "?"), msg.split("\n")[0][:300]), "WARN")
+                except Exception:
+                    pass
+                self._send_json({"ok": True})
+                return
             if req_path == "/qbit" or req_path.startswith("/qbit/"):
                 self._proxy_qbit("POST")
                 return
@@ -5847,6 +7212,9 @@ def run_3d_server(open_browser=True):
                     "first_frame": str(dst.resolve()),
                     "first_frame_name": Path(orig_name).name,
                 })
+                return
+            if req_path.startswith("/api/reader"):
+                self._handle_reader_post()
                 return
             self.send_error(404)
 

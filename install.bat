@@ -392,6 +392,9 @@ if exist "%~dp0panel.py" copy /y "%~dp0panel.py" "%BASE%\ControlPanel\" >nul 2>&
 if exist "%~dp0panel_ui.html" copy /y "%~dp0panel_ui.html" "%BASE%\ControlPanel\" >nul 2>&1
 if exist "%~dp0magnet_tools.py" copy /y "%~dp0magnet_tools.py" "%BASE%\ControlPanel\" >nul 2>&1
 if exist "%~dp0media_studio.py" copy /y "%~dp0media_studio.py" "%BASE%\ControlPanel\" >nul 2>&1
+if exist "%~dp0prompt_engine.py" copy /y "%~dp0prompt_engine.py" "%BASE%\ControlPanel\" >nul 2>&1
+if exist "%~dp0reader_hub.py" copy /y "%~dp0reader_hub.py" "%BASE%\ControlPanel\" >nul 2>&1
+if exist "%~dp0reader_catalog.py" copy /y "%~dp0reader_catalog.py" "%BASE%\ControlPanel\" >nul 2>&1
 if exist "%~dp0ytdl_gui.py" copy /y "%~dp0ytdl_gui.py" "%BASE%\ControlPanel\" >nul 2>&1
 if exist "%~dp0启动面板.bat" copy /y "%~dp0启动面板.bat" "%BASE%\ControlPanel\" >nul 2>&1
 if exist "%~dp0requirements.txt" copy /y "%~dp0requirements.txt" "%BASE%\ControlPanel\" >nul 2>&1
