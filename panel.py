@@ -1067,8 +1067,9 @@ class ControlBackend:
         base = Path(self.cfg.get("paths", {}).get("downloads") or str(DL_HOME))
         aria_dir = base / "aria2"
         yt_dir = Path(self.yt_output())
+        vod_dir = base / "cinema-vod"
         roots = [(Path(self.cfg.get("qbit", {}).get("save_dir") or str(base / "qBittorrent")), "qB"),
-                 (aria_dir, "aria2"), (yt_dir, "YT"), (base, "本地")]
+                 (vod_dir, "全球影视"), (aria_dir, "aria2"), (yt_dir, "YT"), (base, "本地")]
         for r, label in roots:
             for v in self._walk_videos(r):
                 key = str(v).lower()
@@ -1953,6 +1954,72 @@ class ControlBackend:
             self._yt_append_log(line)
         rc = proc.wait()
         return rc, last_file, "\n".join(err_text)
+
+    @staticmethod
+    def _is_safe_stream_url(raw_url: str) -> bool:
+        """校验在线流媒体 URL 合法性并拦截本地/内网地址（防 SSRF）。"""
+        import ipaddress
+        from urllib.parse import urlsplit
+        u = (raw_url or "").strip()
+        if not u.startswith(("http://", "https://")) or len(u) > 2048:
+            return False
+        try:
+            sp = urlsplit(u)
+            host = (sp.hostname or "").strip().lower().rstrip(".")
+            if not host or host in ("localhost", "ip6-localhost") or host.endswith(".local"):
+                return False
+            try:
+                ip = ipaddress.ip_address(host)
+                if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+                    return False
+            except ValueError:
+                pass
+            return True
+        except Exception:
+            return False
+
+    def _run_gtv_save_worker(self, url: str, title: str, upscale_4k: bool = False):
+        import re as _re
+        base = Path(self.cfg.get("paths", {}).get("downloads") or str(DL_HOME))
+        vod_dir = base / "cinema-vod"
+        vod_dir.mkdir(parents=True, exist_ok=True)
+        safe_title = _re.sub(r'[\\/:*?"<>|]+', "_", (title or "全球影视缓存").strip())[:72] or "全球影视缓存"
+        stamp = datetime.now().strftime("%H%M%S")
+        tmp_mp4 = vod_dir / f"{safe_title}_{stamp}.tmp.mp4"
+        out_mp4 = vod_dir / f"{safe_title}_{stamp}.mp4"
+        ff_dir = self._find_ffmpeg()
+        ffmpeg_exe = str(Path(ff_dir) / ("ffmpeg.exe" if IS_WIN else "ffmpeg")) if ff_dir else (shutil.which("ffmpeg") or "")
+        if not ffmpeg_exe:
+            self.log("全球影视缓存失败：未检测到 ffmpeg", "ERROR")
+            return
+        ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+        cmd = [
+            ffmpeg_exe, "-y", "-v", "error", "-nostdin",
+            "-user_agent", ua,
+            "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "3",
+            "-rw_timeout", "15000000",
+            "-i", url, "-map", "0:v:0", "-map", "0:a:0?",
+            "-c:v", "copy", "-c:a", "aac", "-b:a", "320k", "-ac", "2",
+            "-movflags", "+faststart", str(tmp_mp4),
+        ]
+        try:
+            self.log("全球影视 → 影院：开始无损缓存「%s」…" % safe_title, "INFO")
+            proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                                    text=True, encoding="utf-8", errors="replace", **_popen_kwargs())
+            _, err_s = proc.communicate(timeout=1800)
+            if proc.returncode != 0 or not tmp_mp4.is_file() or tmp_mp4.stat().st_size < 65536:
+                tmp_mp4.unlink(missing_ok=True)
+                self.log("全球影视缓存失败：%s" % (err_s or f"退出码 {proc.returncode}")[:120], "ERROR")
+                return
+            os.replace(tmp_mp4, out_mp4)
+            self._recent_ts = 0.0
+            self.log("全球影视已入库 4K 影院 → %s" % out_mp4.name, "OK")
+            if upscale_4k:
+                self.log("全球影视 → 启动 RTX 4K 母带重建：%s" % out_mp4.name, "INFO")
+                self.handle_action({"action": "video_repair_4k", "path": str(out_mp4)})
+        except Exception as ex:
+            tmp_mp4.unlink(missing_ok=True)
+            self.log("全球影视缓存异常：%s" % ex, "ERROR")
 
     def _run_yt_worker(self, url: str, quality: str, cookies: str, cookies_file: str, upscale: bool):
         out_dir = Path(self.yt_output())
@@ -2940,6 +3007,18 @@ class ControlBackend:
 
     def handle_action(self, body):
         act = (body.get("action") or "").strip()
+        if act == "gtv_save_to_cinema":
+            import threading
+            url = str(body.get("url") or "").strip()
+            title = str(body.get("title") or "全球影视").strip()
+            upscale_4k = bool(body.get("upscale_4k"))
+            if not self._is_safe_stream_url(url):
+                return False, "未捕获到有效的在线播放流 URL，请先在全球影视中点开剧集播放后再试", {}
+            t = threading.Thread(target=self._run_gtv_save_worker, args=(url, title, upscale_4k), daemon=True)
+            t.start()
+            mode_txt = "缓存并启动 RTX 4K 母带重建" if upscale_4k else "无损高速缓存"
+            return True, f"已开始后台{mode_txt}「{title[:30]}」，完成后自动进入 4K 影院片库 ✔", {}
+
         if act == "video_library":
             try:
                 items = self.video_library()
@@ -4974,6 +5053,57 @@ def run_3d_server(open_browser=True):
                 except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                     return
 
+        _GTV_BRIDGE_SCRIPT = (
+            "<script id='ds-gtv-bridge'>(function(){"
+            "if(window.__dsGtvInstalled)return;window.__dsGtvInstalled=1;"
+            "var lastUrl='',lastSent=0,enhOn=false;"
+            "function isMediaUrl(u){if(!u||typeof u!=='string')return false;"
+            "if(u.indexOf('http://')!==0&&u.indexOf('https://')!==0)return false;"
+            "var lo=u.toLowerCase().split('?')[0];"
+            "return /\\.(m3u8|mp4|flv|m4v|webm)$/.test(lo)||u.toLowerCase().indexOf('.m3u8')>0;}"
+            "function noteUrl(u){if(isMediaUrl(u)&&u.indexOf('blob:')!==0){lastUrl=u;emit(true);}}"
+            "var oFetch=window.fetch;if(oFetch){window.fetch=function(i){"
+            "try{var u=typeof i==='string'?i:(i&&i.url);noteUrl(u);}catch(e){}"
+            "return oFetch.apply(this,arguments);};}"
+            "var oOpen=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){"
+            "try{noteUrl(String(u||''));}catch(e){}return oOpen.apply(this,arguments);};"
+            "function getTitle(){try{var p=new URLSearchParams(location.search);"
+            "var t=p.get('title')||p.get('name')||'';"
+            "if(!t){var h=document.querySelector('h1,h2,[class*=\"title\"]');if(h)t=(h.textContent||'').trim();}"
+            "if(!t)t=(document.title||'').replace(/\\s*[-|·].*$/,'').trim();"
+            "return t.slice(0,80);}catch(e){return '';}}"
+            "function getVid(){var vs=document.querySelectorAll('video');var best=null;"
+            "for(var i=0;i<vs.length;i++){if(vs[i].videoWidth>0||vs[i].currentSrc){best=vs[i];break;}}"
+            "return best||vs[0]||null;}"
+            "function snap(){var v=getVid();var u=lastUrl;"
+            "if(!u&&v&&v.currentSrc&&v.currentSrc.indexOf('blob:')!==0)u=v.currentSrc;"
+            "if(!u&&window.performance&&performance.getEntriesByType){"
+            "var es=performance.getEntriesByType('resource');for(var j=es.length-1;j>=0;j--){"
+            "if(isMediaUrl(es[j].name)){u=es[j].name;break;}}}"
+            "return {type:'ds_gtv_media',url:u||'',title:getTitle(),"
+            "currentTime:v&&isFinite(v.currentTime)?v.currentTime:0,"
+            "duration:v&&isFinite(v.duration)?v.duration:0,"
+            "width:v?v.videoWidth||0:0,height:v?v.videoHeight||0:0,enhanced:enhOn};}"
+            "function emit(force){var now=Date.now();if(!force&&now-lastSent<1200)return;"
+            "lastSent=now;try{if(window.parent&&window.parent!==window)window.parent.postMessage(snap(),'*');}catch(e){}}"
+            "function applyEnh(on){enhOn=!!on;var sid='ds-gtv-svg-sharp';var sv=document.getElementById(sid);"
+            "if(enhOn&&!sv){var d=document.createElement('div');d.id=sid;d.style.cssText='position:fixed;width:0;height:0;overflow:hidden;pointer-events:none';"
+            "d.innerHTML='<svg xmlns=\"http://www.w3.org/2000/svg\"><defs><filter id=\"dsSharp4K\">"
+            "<feConvolveMatrix order=\"3\" preserveAlpha=\"true\" kernelMatrix=\"0 -0.45 0 -0.45 2.8 -0.45 0 -0.45 0\"/>"
+            "</filter></defs></svg>';document.body&&document.body.appendChild(d);}"
+            "var st=document.getElementById('ds-gtv-enh-css');"
+            "if(!st){st=document.createElement('style');st.id='ds-gtv-enh-css';document.head&&document.head.appendChild(st);}"
+            "st.textContent=enhOn?'video{filter:url(#dsSharp4K) contrast(1.09) saturate(1.12) brightness(1.02) !important;image-rendering:high-quality !important;}':'';"
+            "emit(true);}"
+            "window.__dsGtvSnapshot=snap;window.__dsGtvEnhance=applyEnh;"
+            "window.addEventListener('message',function(ev){var d=ev&&ev.data;if(!d||d.type!=='ds_gtv_cmd')return;"
+            "if(d.cmd==='pause'){var v=getVid();if(v&&!v.paused)try{v.pause();}catch(e){}}"
+            "else if(d.cmd==='enhance'){applyEnh(d.on);}"
+            "else if(d.cmd==='snapshot'){emit(true);}});"
+            "setInterval(function(){emit(false);},1800);"
+            "})();</script>"
+        )
+
         def _proxy_tv(self, method="GET"):
             # KatelyaTV 同源反代：把 3030 的页面/资源搬到 /tv/ 下，绕开 iframe 第三方 cookie 拦截
             host, port = "127.0.0.1", 3030
@@ -5043,6 +5173,11 @@ def run_3d_server(open_browser=True):
                             "t.get('redirect')||'/';e.replace(r)",
                             "t.get('redirect')||'/';e.replace(!r?'/tv/':(r.indexOf('/tv/')===0||r==='/tv'?r:(r==='/'?'/tv/':(r.charAt(0)==='/'?'/tv'+r:r))))"
                         )
+                        if "text/html" in low and "ds-gtv-bridge" not in txt:
+                            if "</body>" in txt:
+                                txt = txt.replace("</body>", self._GTV_BRIDGE_SCRIPT + "</body>", 1)
+                            elif "</html>" in txt:
+                                txt = txt.replace("</html>", self._GTV_BRIDGE_SCRIPT + "</html>", 1)
                         content = txt.encode("utf-8")
                     except Exception:
                         pass
@@ -5084,9 +5219,10 @@ def run_3d_server(open_browser=True):
                 _ck = self.headers.get("Cookie")
                 if _ck:
                     _hdr["Cookie"] = _ck
-                r = requests.get("http://127.0.0.1:3030" + str(self.path), timeout=12,
-                                 allow_redirects=False, proxies={"http": None, "https": None},
-                                 headers=_hdr)
+                _ps_raw = requests.Session()
+                _ps_raw.trust_env = False
+                r = _ps_raw.get("http://127.0.0.1:3030" + str(self.path), timeout=12,
+                                allow_redirects=False, headers=_hdr)
                 if r.status_code >= 400:
                     return False
                 content = r.content
@@ -5099,6 +5235,11 @@ def run_3d_server(open_browser=True):
                         txt = txt.replace('"/api/', '"/tv/api/')
                         txt = txt.replace("'/api/", "'/tv/api/")
                         txt = txt.replace("(/api/", "(/tv/api/")
+                        if "text/html" in low and "ds-gtv-bridge" not in txt:
+                            if "</body>" in txt:
+                                txt = txt.replace("</body>", self._GTV_BRIDGE_SCRIPT + "</body>", 1)
+                            elif "</html>" in txt:
+                                txt = txt.replace("</html>", self._GTV_BRIDGE_SCRIPT + "</html>", 1)
                         content = txt.encode("utf-8")
                     except Exception:
                         pass
@@ -5300,6 +5441,70 @@ def run_3d_server(open_browser=True):
                 self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
                 self.wfile.write(data)
+                return
+
+            if req_path == "/api/stream_url":
+                from urllib.parse import parse_qs, urlsplit
+                qs = parse_qs(urlsplit(self.path).query)
+                raw_u = (qs.get("url") or [""])[0].strip()
+                if not backend._is_safe_stream_url(raw_u):
+                    self.send_error(403, "Stream URL not allowed")
+                    return
+                ff_dir = backend._find_ffmpeg()
+                ffmpeg_exe = (str(Path(ff_dir) / ("ffmpeg.exe" if IS_WIN else "ffmpeg")) if ff_dir else (shutil.which("ffmpeg") or ""))
+                if not ffmpeg_exe:
+                    self.send_error(503, "ffmpeg not available")
+                    return
+                try:
+                    start_sec = max(0.0, float((qs.get("start") or ["0"])[0] or 0))
+                except Exception:
+                    start_sec = 0.0
+                ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+                cmd = [
+                    ffmpeg_exe, "-v", "error", "-nostdin",
+                    "-user_agent", ua,
+                    "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "3",
+                    "-rw_timeout", "15000000",
+                ]
+                if start_sec > 0.5:
+                    cmd += ["-ss", "%.2f" % start_sec]
+                cmd += [
+                    "-i", raw_u, "-map", "0:v:0", "-map", "0:a:0?",
+                    "-c:v", "copy", "-c:a", "aac", "-b:a", "320k", "-ac", "2",
+                    "-movflags", "frag_keyframe+empty_moov+default_base_moof", "-f", "mp4", "pipe:1",
+                ]
+                proc = None
+                try:
+                    proc = subprocess.Popen(
+                        cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                        bufsize=262144, creationflags=(0x08000000 if IS_WIN else 0),
+                    )
+                    self.send_response(200)
+                    self.send_header("Content-Type", "video/mp4")
+                    self.send_header("Cache-Control", "no-store")
+                    self.send_header("X-Cinema-Mode", "online-lossless-relay")
+                    self.end_headers()
+                    assert proc.stdout is not None
+                    while True:
+                        chunk = proc.stdout.read(65536)
+                        if not chunk:
+                            break
+                        try:
+                            self.wfile.write(chunk)
+                        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                            break
+                except Exception:
+                    pass
+                finally:
+                    if proc is not None:
+                        try:
+                            proc.terminate()
+                            proc.wait(timeout=1.5)
+                        except Exception:
+                            try:
+                                proc.kill()
+                            except Exception:
+                                pass
                 return
 
             if req_path == "/api/stream_video":

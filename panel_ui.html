@@ -2729,22 +2729,23 @@
       </div>
     </section>
     <!-- ========== VIEW 8: CODEX AGENT WORKSPACE ========== -->
-    <!-- ========== VIEW: GLOBAL TV (KatelyaTV 本地影视聚合站) ========== -->
+    <!-- ========== VIEW: GLOBAL TV (KatelyaTV 本地影视聚合站 · 与 4K 影院无缝打通) ========== -->
     <section id="view-globaltv" class="view hidden" data-aura="cyan">
-      <div style="display:flex;flex-direction:column;height:100%;min-height:0;gap:10px;">
+      <div style="display:flex;flex-direction:column;height:100%;min-height:0;gap:8px;">
         <div class="holo-card" style="flex-shrink:0;">
-          <div class="card-hd">
-            <div class="card-title c-cyan">🌐 全球影视 · KatelyaTV</div>
-            <div style="display:flex;gap:5px;">
-              <button class="btn btn-xs btn-cyan" onclick="gtvReload()">↻ 刷新</button>
-              <button class="btn btn-xs" onclick="gtvFull()">⛶ 全屏</button>
-              <button class="btn btn-xs" onclick="gtvOpen()">↗ 新窗口</button>
-              <button class="btn btn-xs" onclick="gtvBoot()" title="若提示连接失败，启动本地 Docker 影视栈">🚀 启动栈</button>
+          <div class="card-hd" style="flex-wrap:wrap;gap:6px;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <div class="card-title c-cyan">🌐 全球影视 · KatelyaTV</div>
+              <span id="gtv-stream-badge" class="tag-pill mono" style="background:rgba(0,229,255,0.14);color:#67e8f9;">点开任意影片播放后，可一键送入 4K 影院开启 GPU 画质修复</span>
             </div>
-          </div>
-          <div class="card-body" style="padding:8px 12px;">
-            <div class="mono c-dim" style="font-size:11px;line-height:1.5;">
-              站内直连 <b>localhost:3030</b> · 首次进入需登录（账号密码见 D:\MediaStack\.env 的 KATELYA_USER / KATELYA_PASS）
+            <div style="display:flex;gap:5px;flex-wrap:wrap;">
+              <button id="gtv-send-cine-btn" class="btn btn-xs btn-violet" onclick="gtvSendToCinema()" title="把当前正在播放的在线影片直接拉入站内 4K 影院，自动开启 WebGL2 FidelityFX CAS 4K 锐化与 HDR 色彩还原">✨ 送入 4K 影院（开4K修复）</button>
+              <button id="gtv-enh-btn" class="btn btn-xs btn-cyan" onclick="gtvToggleEnhance()" title="不切页，直接给全球影视内置播放器叠加实时 GPU 锐化与对比度增强">💎 原地增强</button>
+              <button class="btn btn-xs btn-mint" onclick="gtvSaveToCinema(false)" title="把当前在线流无损高速缓存到 4K 影院片库（支持离线 4K 重建）">📥 缓存入影院</button>
+              <button class="btn btn-xs btn-amber" onclick="gtvSearch4kMagnet()" title="若在线片源压缩太糊，一键带片名搜 14 源真 4K 原盘磁力">🧲 搜真4K原盘</button>
+              <button class="btn btn-xs" onclick="gtvReload()">↻ 刷新</button>
+              <button class="btn btn-xs" onclick="gtvFull()">⛶ 全屏</button>
+              <button class="btn btn-xs" onclick="gtvBoot()" title="若提示连接失败，启动本地 Docker 影视栈">🚀 启动栈</button>
             </div>
           </div>
         </div>
@@ -2761,9 +2762,10 @@
           <div class="card-hd">
             <div class="card-title" style="color:#c4b5fd;">🎞️ 片库 <span class="nav-badge mono" id="cine-cnt">0</span></div>
             <div style="display:flex;gap:5px;">
+              <button class="btn btn-xs btn-cyan" onclick="switchView('globaltv')" title="前往全球影视选片，一键送入此处享 GPU 4K 修复">🌐 全球影视</button>
               <button class="btn btn-xs btn-violet" id="cine-refresh" onclick="loadCinemaLib()">↻ 刷新</button>
               <button class="btn btn-xs btn-amber" onclick="cineCleanCache()" title="清理临时缓存与已完成记录">🧹 清缓存</button>
-              <button class="btn btn-xs" onclick="act('open_path',{key:'qbit_dl'})">📂 BT 目录</button>
+              <button class="btn btn-xs" onclick="act('open_path',{key:'qbit_dl'})">📂 目录</button>
             </div>
           </div>
           <div class="card-body">
@@ -3548,7 +3550,7 @@
   function getCineCurTime() {
     const v = cineV();
     const raw = (v && isFinite(v.currentTime)) ? v.currentTime : 0;
-    return CINE.mode === 'remux' ? (CINE.offset + raw) : raw;
+    return (CINE.mode === 'remux' || CINE.mode === 'online') ? (CINE.offset + raw) : raw;
   }
 
   function setCineImmersive(on) {
@@ -3590,12 +3592,14 @@
     const mb = $('cine-mode-btn');
     const p = CINE.probe;
     if (mb) {
-      mb.textContent = CINE.mode === 'remux' ? '💎 无损直封 (-c:v copy)' : '💎 原画直出';
+      mb.textContent = CINE.mode === 'online' ? '🌐 全球影视直通' : (CINE.mode === 'remux' ? '💎 无损直封 (-c:v copy)' : '💎 原画直出');
     }
     if (!b) return;
     if (!CINE.cur) { b.classList.add('hidden'); return; }
     const parts = [];
-    if (CINE.mode === 'remux') {
+    if (CINE.mode === 'online') {
+      parts.push('🌐 全球影视直通 · GPU 4K 修复');
+    } else if (CINE.mode === 'remux') {
       parts.push(p && p.can_copy_video === false ? '⚡ 高码率兼容解码' : '💎 原画无损直封 (-c:v copy 零压缩)');
     } else {
       parts.push('💎 原画直出 · 零压缩');
@@ -3636,11 +3640,14 @@
   function startCineStream(mode, startSec = 0) {
     const v = cineV();
     if (!CINE.cur || !v) return;
+    if (CINE.cur.is_online) mode = 'online';
     CINE.mode = mode;
-    CINE.offset = mode === 'remux' ? Math.max(0, Number(startSec) || 0) : 0;
+    CINE.offset = (mode === 'remux' || mode === 'online') ? Math.max(0, Number(startSec) || 0) : 0;
     $('cine-err').classList.add('hidden');
     $('cine-spin').classList.remove('hidden');
-    if (mode === 'remux') {
+    if (mode === 'online') {
+      v.src = `/api/stream_url?url=${encodeURIComponent(CINE.cur.url)}&start=${CINE.offset.toFixed(2)}&_t=${Date.now()}`;
+    } else if (mode === 'remux') {
       v.src = `/api/stream_video?path=${encodeURIComponent(CINE.cur.path)}&start=${CINE.offset.toFixed(2)}&_t=${Date.now()}`;
     } else {
       v.src = CINE.cur.play_url;
@@ -3876,8 +3883,8 @@
   function cineSeekTo(targetSec) {
     const dur = getCineDur();
     const t = Math.max(0, dur ? Math.min(dur - 0.5, targetSec) : Math.max(0, targetSec));
-    if (CINE.mode === 'remux') {
-      startCineStream('remux', t);
+    if (CINE.mode === 'remux' || CINE.mode === 'online') {
+      startCineStream(CINE.mode, t);
     } else {
       const v = cineV();
       if (v && isFinite(v.duration)) v.currentTime = t;
@@ -4562,7 +4569,7 @@
         if (!dur || !v.buffered.length) return;
         let end = 0;
         for (let i = 0; i < v.buffered.length; i++) if (v.buffered.start(i) <= v.currentTime + 1) end = Math.max(end, v.buffered.end(i));
-        const absEnd = CINE.mode === 'remux' ? (CINE.offset + end) : end;
+        const absEnd = (CINE.mode === 'remux' || CINE.mode === 'online') ? (CINE.offset + end) : end;
         $('cine-buf').style.width = Math.min(100, absEnd / dur * 100).toFixed(2) + '%';
       } catch (_) {}
     });
@@ -4796,7 +4803,153 @@
   }
   window.switchView = switchView;
 
-  /* ===================== GLOBAL TV (KatelyaTV) ===================== */
+  /* ===================== GLOBAL TV (KatelyaTV) <-> 4K CINEMA BRIDGE ===================== */
+  const GTV = { url: '', title: '', currentTime: 0, duration: 0, width: 0, height: 0, enhanced: false };
+
+  function updateGtvBadge() {
+    const b = $('gtv-stream-badge');
+    const eb = $('gtv-enh-btn');
+    if (eb) {
+      eb.classList.toggle('btn-mint', GTV.enhanced);
+      eb.classList.toggle('btn-cyan', !GTV.enhanced);
+      eb.textContent = GTV.enhanced ? '💎 原地增强已开' : '💎 原地增强';
+    }
+    if (!b) return;
+    if (GTV.url) {
+      const resTxt = (GTV.width && GTV.height) ? ` · ${GTV.width}×${GTV.height}` : '';
+      b.style.background = 'rgba(0,245,184,0.16)';
+      b.style.color = '#6ee7b7';
+      b.textContent = `🎬 已捕获在线流：${(GTV.title || '正在播放').slice(0, 26)}${resTxt} · 可一键送入 4K 影院修复画质`;
+    } else {
+      b.style.background = 'rgba(0,229,255,0.14)';
+      b.style.color = '#67e8f9';
+      b.textContent = '点开任意影片播放后，可一键送入 4K 影院开启 GPU 画质修复';
+    }
+  }
+
+  window.addEventListener('message', ev => {
+    const d = ev && ev.data;
+    if (!d || d.type !== 'ds_gtv_media') return;
+    if (d.url) GTV.url = d.url;
+    if (d.title) GTV.title = d.title;
+    if (isFinite(d.currentTime)) GTV.currentTime = Number(d.currentTime || 0);
+    if (isFinite(d.duration) && d.duration > 0) GTV.duration = Number(d.duration);
+    if (d.width) GTV.width = Number(d.width);
+    if (d.height) GTV.height = Number(d.height);
+    if (typeof d.enhanced === 'boolean') GTV.enhanced = d.enhanced;
+    updateGtvBadge();
+  });
+
+  function pullGtvSnapshotNow() {
+    const f = $('gtv-frame');
+    try {
+      const cw = f && f.contentWindow;
+      if (cw && typeof cw.__dsGtvSnapshot === 'function') {
+        const snap = cw.__dsGtvSnapshot();
+        if (snap) {
+          if (snap.url) GTV.url = snap.url;
+          if (snap.title) GTV.title = snap.title;
+          if (isFinite(snap.currentTime)) GTV.currentTime = Number(snap.currentTime || 0);
+          if (isFinite(snap.duration) && snap.duration > 0) GTV.duration = Number(snap.duration);
+          if (snap.width) GTV.width = Number(snap.width);
+          if (snap.height) GTV.height = Number(snap.height);
+        }
+      }
+    } catch (e) {}
+    updateGtvBadge();
+    return { ...GTV };
+  }
+
+  function playOnlineStreamInCinema(url, title, startSec = 0, duration = 0) {
+    const ga = $('global-audio'); if (ga && !ga.paused) ga.pause();
+    switchView('cinema');
+    CINE.cur = {
+      is_online: true,
+      url,
+      path: url,
+      name: title || '全球影视在线直通',
+      source: '全球影视',
+      ext: '.m3u8',
+      size: 0,
+      ready: true,
+      web: false,
+      subs: [],
+    };
+    CINE.probe = {
+      ok: true,
+      width: GTV.width || 0,
+      height: GTV.height || 0,
+      res_label: GTV.height >= 2100 ? '4K UHD' : (GTV.height >= 1000 ? '1080P 在线流' : (GTV.height ? `${GTV.height}P 在线流` : '在线高清流')),
+      vcodec: 'hls',
+      acodec: 'aac',
+      issues: ['来自全球影视在线流（有损压缩），已自动开启 GPU WebGL2 4K 去模糊锐化 + 色彩增强'],
+    };
+    CINE.duration = duration > 0 ? duration : 0;
+    CINE.offset = Math.max(0, Number(startSec) || 0);
+    CINE.autoTriedRemux = true;
+    $('cine-empty').classList.add('hidden');
+    $('cine-err').classList.add('hidden');
+    if ($('cine-ended')) $('cine-ended').classList.add('hidden');
+    $('cine-title').textContent = `🌐 ${CINE.cur.name}`;
+    $('cine-meta').textContent = '全球影视 · 同源无损直通 4K 影院（WebGL2 FidelityFX CAS 实时修复中 · 按 E 开关 · 点左侧「🌐 全球影视」回选集）';
+    applyCineSubList([], false);
+    startCineStream('online', CINE.offset);
+    // 自动开启 GPU WebGL2 4K 去压缩锐化预设，立竿见影提升清晰度！
+    applyCine4kPreset('deblock');
+    setCine4kEnabled(true);
+    renderCine4kDiag();
+    bumpCineIdle();
+    toast(`✨ 已接管「${CINE.cur.name}」进入 4K 影院并自动开启 GPU 去压缩 4K 修复！`, 'mint');
+  }
+  window.playOnlineStreamInCinema = playOnlineStreamInCinema;
+
+  function gtvSendToCinema() {
+    const snap = pullGtvSnapshotNow();
+    if (!snap.url) {
+      toast('请先在下方全球影视里点开一部影片并开始播放，再点「✨ 送入 4K 影院」', 'amber');
+      return;
+    }
+    try { $('gtv-frame')?.contentWindow?.postMessage({ type: 'ds_gtv_cmd', cmd: 'pause' }, '*'); } catch (e) {}
+    playOnlineStreamInCinema(snap.url, snap.title || '全球影视', snap.currentTime || 0, snap.duration || 0);
+  }
+  window.gtvSendToCinema = gtvSendToCinema;
+
+  function gtvToggleEnhance() {
+    GTV.enhanced = !GTV.enhanced;
+    try { $('gtv-frame')?.contentWindow?.postMessage({ type: 'ds_gtv_cmd', cmd: 'enhance', on: GTV.enhanced }, '*'); } catch (e) {}
+    updateGtvBadge();
+    toast(GTV.enhanced ? '💎 已开启全球影视原地 GPU 锐化 + 对比度增强 ✔' : '已关闭原地画质增强', 'cyan');
+  }
+  window.gtvToggleEnhance = gtvToggleEnhance;
+
+  async function gtvSaveToCinema(upscale4k = false) {
+    const snap = pullGtvSnapshotNow();
+    if (!snap.url) {
+      toast('请先在下方点开一部影片开始播放，才能缓存入 4K 影院片库', 'amber');
+      return;
+    }
+    const res = await act('gtv_save_to_cinema', { url: snap.url, title: snap.title || '全球影视', upscale_4k: !!upscale4k }, false);
+    if (res && res.ok) toast(res.msg, 'mint');
+  }
+  window.gtvSaveToCinema = gtvSaveToCinema;
+
+  function gtvSearch4kMagnet() {
+    const snap = pullGtvSnapshotNow();
+    const title = (snap.title || '').replace(/\s*第\d+[集话期].*$/, '').trim();
+    switchView('downloads');
+    setDlTab('magnet');
+    setMagCat('video');
+    if (title && $('mag-search-q')) {
+      $('mag-search-q').value = title;
+      searchMagnetsUI();
+      toast(`🧲 已带片名「${title}」进入 14 源磁力搜索引擎搜真 4K 原盘`, 'cyan');
+    } else {
+      toast('已跳转 14 源磁力搜索引擎，输入片名即可搜 2160p 真 4K 原盘', 'cyan');
+      setTimeout(() => $('mag-search-q')?.focus(), 60);
+    }
+  }
+  window.gtvSearch4kMagnet = gtvSearch4kMagnet;
+
   function gtvReload() {
     const f = $('gtv-frame');
     if (f) f.setAttribute('src', '/tv/login?_t=' + Date.now());
@@ -4806,15 +4959,11 @@
     const f = $('gtv-frame');
     if (f && f.requestFullscreen) { try { f.requestFullscreen(); } catch (e) {} }
   }
-  function gtvOpen() {
-    window.open('http://localhost:3030/', '_blank');
-  }
   function gtvBoot() {
     toast('Docker Desktop 已设为开机自启；若容器没起，在 D:\\MediaStack 跑 docker compose up -d', 'amber', 5200);
   }
   window.gtvReload = gtvReload;
   window.gtvFull = gtvFull;
-  window.gtvOpen = gtvOpen;
   window.gtvBoot = gtvBoot;
 
   function setDlTab(tab) {
