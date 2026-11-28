@@ -5010,6 +5010,11 @@ def run_3d_server(open_browser=True):
                 _ps.trust_env = False
                 r = _ps.request(method, target_url, headers=hdrs, data=body_bytes,
                                 timeout=25, allow_redirects=False)
+                try:
+                    if r.status_code >= 400:
+                        backend.log("TV代理 %s %s -> %s" % (method, sub[:90], r.status_code), "WARN")
+                except Exception:
+                    pass
                 content = r.content
                 ctype = r.headers.get("Content-Type") or "application/octet-stream"
                 low = ctype.lower()
@@ -5020,7 +5025,14 @@ def run_3d_server(open_browser=True):
                         txt = txt.replace("/_next/", "/tv/_next/")
                         txt = txt.replace('"/api/', '"/tv/api/')
                         txt = txt.replace("'/api/", "'/tv/api/")
+                        txt = txt.replace("( /api/", "( /tv/api/")
                         txt = txt.replace("(/api/", "(/tv/api/")
+                        # 根路径下的静态文件也要搬到 /tv 下，否则会打到面板根吃 404
+                        for _root in ("/manifest.json", "/sw.js", "/favicon.ico", "/icon-192.png",
+                                      "/icon-512.png", "/apple-touch-icon.png", "/robots.txt",
+                                      "/logo.png", "/logo.svg", "/banner.png"):
+                            txt = txt.replace('"' + _root + '"', '"/tv' + _root + '"')
+                            txt = txt.replace("'" + _root + "'", "'/tv" + _root + "'")
                         # Next.js 登录成功后 router.replace(redirect)，redirect 默认是 "/"，
                         # 在反代下必须补上 /tv 前缀；已带 /tv 的不能再拼，否则会变成 /tv/tv/
                         txt = txt.replace(
@@ -5435,6 +5447,10 @@ def run_3d_server(open_browser=True):
                 self.end_headers()
                 self.wfile.write(data)
                 return
+            try:
+                backend.log("面板 404: %s" % str(self.path)[:120], "WARN")
+            except Exception:
+                pass
             self.send_error(404)
 
         def do_POST(self):
