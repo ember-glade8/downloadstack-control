@@ -5022,14 +5022,14 @@ def run_3d_server(open_browser=True):
                         txt = txt.replace("'/api/", "'/tv/api/")
                         txt = txt.replace("(/api/", "(/tv/api/")
                         # Next.js 登录成功后 router.replace(redirect)，redirect 默认是 "/"，
-                        # 在反代下必须补上 /tv 前缀，否则会跳出到面板根
+                        # 在反代下必须补上 /tv 前缀；已带 /tv 的不能再拼，否则会变成 /tv/tv/
                         txt = txt.replace(
                             't.get("redirect")||"/";e.replace(r)',
-                            't.get("redirect")||"/tv/";e.replace((r==="/"||!r)?"/tv/":(r.charAt(0)==="/"?"/tv"+r:r))'
+                            't.get("redirect")||"/";e.replace(!r?"/tv/":(r.indexOf("/tv/")===0||r==="/tv"?r:(r==="/"?"/tv/":(r.charAt(0)==="/"?"/tv"+r:r))))'
                         )
                         txt = txt.replace(
                             "t.get('redirect')||'/';e.replace(r)",
-                            "t.get('redirect')||'/tv/';e.replace((r==='/'||!r)?'/tv/':(r.charAt(0)==='/'?'/tv'+r:r))"
+                            "t.get('redirect')||'/';e.replace(!r?'/tv/':(r.indexOf('/tv/')===0||r==='/tv'?r:(r==='/'?'/tv/':(r.charAt(0)==='/'?'/tv'+r:r))))"
                         )
                         content = txt.encode("utf-8")
                     except Exception:
