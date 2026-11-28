@@ -10,6 +10,7 @@ DOWNLOAD STACK // CONTROL —— Spatial 3D 曲面空间控制台后端服务。
 """
 
 import json
+import re
 import os
 import shutil
 import socket
@@ -5104,6 +5105,36 @@ def run_3d_server(open_browser=True):
             "})();</script>"
         )
 
+        def _resolve_share_m3u8(self, url):
+            # 从第三方分享页里抠出真正的 m3u8 直链（页面里就写着 var main = "/xxx/index.m3u8?sign=…"）
+            try:
+                r = requests.get(url, timeout=12, proxies={"http": None, "https": None},
+                                 headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                                                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                                                        "Chrome/120.0.0.0 Safari/537.36"})
+                if r.status_code != 200:
+                    return None
+                txt = r.text
+                m = re.search(r'var\s+main\s*=\s*["\']([^"\']+\.m3u8[^"\']*)["\']', txt)
+                if not m:
+                    m = re.search(r'["\']((?:https?:)?//[^"\']+\.m3u8[^"\']*)["\']', txt)
+                if not m:
+                    m = re.search(r'["\']([^"\']+\.m3u8[^"\']*)["\']', txt)
+                if not m:
+                    return None
+                path = m.group(1)
+                if path.startswith("//"):
+                    return "https:" + path
+                if path.startswith("http"):
+                    return path
+                try:
+                    from urllib.parse import urljoin
+                    return urljoin(url, path)
+                except Exception:
+                    return None
+            except Exception:
+                return None
+
         def _proxy_tv(self, method="GET"):
             # KatelyaTV 同源反代：把 3030 的页面/资源搬到 /tv/ 下，绕开 iframe 第三方 cookie 拦截
             host, port = "127.0.0.1", 3030
@@ -5148,6 +5179,31 @@ def run_3d_server(open_browser=True):
                 content = r.content
                 ctype = r.headers.get("Content-Type") or "application/octet-stream"
                 low = ctype.lower()
+                # 分享页 → m3u8：第三方解析站已全部关停，播放器拿到分享页 HTML 就会永久转圈。
+                # 这里直接把分享页里的 var main="…m3u8" 抠出来替换掉，播放器收到的永远是可直接播的流
+                if sub.startswith("/api/detail") and r.status_code == 200 and "json" in low:
+                    try:
+                        _j = json.loads(content.decode("utf-8", errors="replace"))
+                        _eps = _j.get("episodes") or []
+                        _new = []
+                        _hit = 0
+                        for _u in _eps:
+                            if isinstance(_u, str) and "/share/" in _u:
+                                _m3 = self._resolve_share_m3u8(_u)
+                                if _m3:
+                                    _new.append(_m3)
+                                    _hit += 1
+                                    continue
+                            _new.append(_u)
+                        if _hit:
+                            _j["episodes"] = _new
+                            content = json.dumps(_j, ensure_ascii=False).encode("utf-8")
+                            try:
+                                backend.log("TV 分享页→m3u8 已改写 %d 条" % _hit, "OK")
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
                 # Next.js 用绝对路径 /_next/ 与 /api/，必须改写到 /tv 前缀下才不会被面板根路径吞掉
                 if ("text/html" in low) or ("javascript" in low) or ("text/css" in low):
                     try:
