@@ -3633,6 +3633,111 @@ class ControlBackend:
             info = MT.parse_magnet(str(body.get("raw") or ""))
             return bool(info.get("valid")), info.get("error") or "磁力解析成功", {"info": info}
 
+        if act == "magnet_preview":
+            # 投递到临时目录 → 下几 MB → 截一帧 → 让用户"先看画面再决定下不下"
+            if MT is None:
+                return False, "magnet_tools 模块不可用", {}
+            mi = MT.parse_magnet(str(body.get("raw") or body.get("magnet") or ""))
+            if not (mi or {}).get("valid"):
+                return False, "磁力链接无效", {}
+            ih = mi.get("infohash", "")
+            uri = mi.get("uri") or str(body.get("raw") or "")
+            pdir = CACHE / "preview"
+            try:
+                pdir.mkdir(parents=True, exist_ok=True)
+                for f in list(pdir.rglob("*")):
+                    if f.is_file():
+                        f.unlink()
+            except Exception:
+                pass
+            try:
+                s, base = self.pr.q_login()
+            except Exception as ex:
+                return False, "qBittorrent 未就绪：%s" % str(ex)[:60], {}
+            hdr = {"Referer": base + "/", "Origin": base}
+            # 同 infohash 只允许一个任务：已在下载就不要再建预览任务，否则清理时会互相误删
+            try:
+                _infos = s.get(base + "/api/v2/torrents/info", timeout=8, headers=hdr,
+                               proxies={"http": None, "https": None}).json() or []
+                for _t in _infos:
+                    if str(_t.get("hash", "")).lower() == str(ih).lower():
+                        return False, "该种子已在下载队列中（%s%%），直接看下载进度即可，无需预览" % round(float(_t.get("progress") or 0) * 100, 1), {}
+            except Exception:
+                pass
+
+            def _cleanup_preview():
+                try:
+                    s.post(base + "/api/v2/torrents/delete", timeout=8, headers=hdr,
+                           data={"hashes": ih, "deleteFiles": "true"})
+                except Exception:
+                    pass
+
+            try:
+                s.post(base + "/api/v2/torrents/add", timeout=10, headers=hdr,
+                       data={"urls": uri, "savepath": str(pdir), "paused": "false"})
+            except Exception as ex:
+                return False, "投递预览任务失败：%s" % str(ex)[:60], {}
+            exts = (".mp4", ".mkv", ".avi", ".mov", ".ts", ".webm", ".flv", ".wmv", ".m4v")
+            vfile = None
+            deadline = time.time() + 45
+            while time.time() < deadline:
+                time.sleep(1.2)
+                try:
+                    for f in pdir.rglob("*"):
+                        if f.is_file() and f.suffix.lower() in exts and f.stat().st_size >= 256 * 1024:
+                            vfile = f
+                            break
+                except Exception:
+                    pass
+                if vfile:
+                    break
+            if not vfile:
+                _cleanup_preview()
+                return False, "22 秒内没下到可解析的视频数据（种子可能冷门，或还没连上做种者）", {}
+            ff = self._find_ffmpeg()
+            if not ff:
+                _cleanup_preview()
+                return False, "未找到 ffmpeg", {}
+            shot = pdir / "_shot.jpg"
+            ok_shot = False
+            for ss in ("3", "1", "0"):
+                try:
+                    if shot.exists():
+                        shot.unlink()
+                except Exception:
+                    pass
+                try:
+                    subprocess.run([str(ff), "-y", "-ss", ss, "-i", str(vfile),
+                                    "-frames:v", "1", "-q:v", "3", str(shot)],
+                                   capture_output=True, timeout=25)
+                    if shot.exists() and shot.stat().st_size > 2048:
+                        ok_shot = True
+                        break
+                except Exception:
+                    pass
+            if not ok_shot:
+                _cleanup_preview()
+                return False, "已下到数据但截帧失败（文件头没到齐），稍后重试", {}
+            try:
+                import base64
+                b64 = base64.b64encode(shot.read_bytes()).decode("ascii")
+            except Exception as ex:
+                _cleanup_preview()
+                return False, "读取预览图失败：%s" % str(ex)[:60], {}
+            vname = vfile.name
+            _cleanup_preview()
+            try:
+                for f in list(pdir.rglob("*")):
+                    if f.is_file() and f.name != "_shot.jpg":
+                        f.unlink()
+            except Exception:
+                pass
+            self.log("磁力预览已生成：%s" % vname[:40], "OK")
+            return True, "预览已生成：%s" % vname, {
+                "image": "data:image/jpeg;base64," + b64,
+                "file": vname,
+            }
+
         if act == "magnet_search":
             if MT is None:
                 return False, "magnet_tools 模块不可用", {}

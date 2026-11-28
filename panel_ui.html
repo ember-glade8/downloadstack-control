@@ -922,6 +922,30 @@
     display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
     font-size: 10.5px; color: var(--text-2);
   }
+  .mag-parsed {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin: 5px 0 5px;
+  }
+  .mag-chip {
+    font-size: 10.5px;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: rgba(56, 189, 248, 0.10);
+    border: 1px solid rgba(56, 189, 248, 0.26);
+    color: #9fd8ff;
+    white-space: nowrap;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .mag-chip.hi {
+    background: rgba(0, 229, 255, 0.16);
+    border-color: rgba(0, 229, 255, 0.48);
+    color: #c8f7ff;
+    font-weight: 800;
+  }
   .mag-badge {
     padding: 2px 7px; border-radius: 999px;
     background: rgba(129, 140, 248, 0.16);
@@ -6186,6 +6210,56 @@
   }
   window.searchMagnetsUI = searchMagnetsUI;
 
+  // 把 [组][类型][剧名][年份][集数][编码][字幕][画质] 这种发布组命名拆成可读标签
+  function parseMagnetTitle(raw) {
+    const chips = [];
+    const src = String(raw || '');
+    const TYPE_WORDS = /^(国漫|日漫|日番|美漫|美剧|英剧|韩剧|港剧|台剧|动画|动漫|剧场版|电影|电视剧|综艺|纪录片|合集|全集|完结|连载|TV|WEB|WEB-DL|WEBRip|BluRay|BDRip|REMUX|UHD|HDR|DV|SDR|PROPER|REPACK|内部|官译|简日|繁日|简繁日|中日双语|简繁内封|简繁|内封|内嵌|外挂|字幕|双语|中字|无字)$/i;
+    let segs = [];
+    const re = /\[([^\]]+)\]/g;
+    let m;
+    while ((m = re.exec(src)) !== null) {
+      const t = m[1].trim();
+      if (t) segs.push(t);
+    }
+    // 没有方括号的（如 Interstellar.2014.2160p.PROPER.IMAX.REMUX…）改用点号/空格切分
+    const dotted = segs.length === 0;
+    if (dotted) {
+      segs = src.split(/[\.\_\s]+/).map(s => s.trim()).filter(Boolean);
+    }
+    if (!segs.length) return { chips };
+    const hasCJK = s => /[\u4e00-\u9fff\u3040-\u30ff]/.test(s);
+    const isYear = s => /^(19|20)\d{2}$/.test(s);
+    const isRes = s => /^(480|540|720|1080|1440|2160|4K|8K)[iPp]?$/i.test(s);
+    const isCodec = s => /^(AVC|HEVC|H264|H\.264|H265|H\.265|AV1|X265|X264|10bit|8bit|Ma10p|Hi10p)$/i.test(s);
+    const isSub = s => /^(GB|BIG5|CHS|CHT|JPSC|JPTC|SC|TC|简|繁|简繁|简体|繁体|多语|内嵌|外挂|简中|繁中)$/i.test(s);
+    const isEp = s => /^\d{1,4}([-\s]\d{1,4})?$/.test(s) && s.replace(/\D/g, '').length <= 8;
+    const isAudio = s => /^(TrueHD|Atmos|DTS|DTS-HD|AC3|EAC3|DD5\.1|FLAC|AAC|OPUS|5\.1|7\.1|2\.0)([\.\+].*)?$/i.test(s);
+    let year = '', ep = '', res = '', codec = '', sub = '', audio = '';
+    const names = [], groups = [];
+    for (const s of segs) {
+      if (TYPE_WORDS.test(s)) continue;
+      if (isYear(s)) { year = year || s; continue; }
+      if (isRes(s)) { res = res || s; continue; }
+      if (isCodec(s)) { codec = codec || s; continue; }
+      if (isSub(s)) { sub = sub || s; continue; }
+      if (isEp(s)) { ep = ep || s; continue; }
+      if (isAudio(s)) { audio = audio || s; continue; }
+      if (hasCJK(s)) { names.push(s); continue; }
+      // 纯英文长串多半是副标题；短的当组名
+      if (s.length <= 20) groups.push(s);
+    }
+    if (names.length) chips.push({ text: '📺 ' + names.join(' / ').slice(0, 46), hi: true });
+    if (ep) chips.push({ text: '🎞 第 ' + ep + ' 集', hi: true });
+    if (year) chips.push({ text: '📅 ' + year });
+    if (res) chips.push({ text: '🖼 ' + res });
+    if (codec) chips.push({ text: '⚙ ' + codec });
+    if (sub) chips.push({ text: '💬 ' + sub });
+    if (audio) chips.push({ text: '🎧 ' + audio.slice(0, 14) });
+    if (groups.length) chips.push({ text: '🏷 ' + groups[0] });
+    return { chips };
+  }
+
   function renderMagnetResults() {
     const box = $('mag-search-list');
     if (!box) return;
@@ -6205,6 +6279,11 @@
       const dateBadge = it.date ? `<span class="mono c-dim">🕒 ${esc(it.date)}</span>` : '';
       return `<div class="mag-card">
         <div class="mag-title selectable">${esc(it.title || it.infohash)}</div>
+        ${(function () {
+          const p = parseMagnetTitle(it.title || '');
+          if (!p.chips.length) return '';
+          return `<div class="mag-parsed">${p.chips.map(c => `<span class="mag-chip${c.hi ? ' hi' : ''}">${esc(c.text)}</span>`).join('')}</div>`;
+        })()}
         <div class="mag-meta">
           <span class="mag-badge">${esc(it.source || '磁力源')}</span>
           <span class="mono c-cyan" style="font-weight:700;">📦 ${esc(it.size_str || '-')}</span>
