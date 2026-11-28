@@ -1455,6 +1455,7 @@
       <!-- 下载与影音 -->
       <button class="nav-btn" data-view="downloads" onclick="switchView('downloads', this)">⚡ 下载 <span class="nav-badge mono" id="nav-task-cnt">0</span></button>
       <button class="nav-btn" data-view="cinema" onclick="switchView('cinema', this)">🎞️ 影院 <span class="nav-badge mono hidden" id="nav-cine-cnt"></span></button>
+      <button class="nav-btn" data-view="globaltv" onclick="switchView('globaltv', this)">🌐 全球影视</button>
       <button class="nav-btn" data-view="yt" onclick="switchView('yt', this)">🎬 视频</button>
       <span class="nav-sep"></span>
       <!-- 音乐与舞台 -->
@@ -2728,6 +2729,31 @@
       </div>
     </section>
     <!-- ========== VIEW 8: CODEX AGENT WORKSPACE ========== -->
+    <!-- ========== VIEW: GLOBAL TV (KatelyaTV 本地影视聚合站) ========== -->
+    <section id="view-globaltv" class="view hidden" data-aura="cyan">
+      <div style="display:flex;flex-direction:column;height:100%;min-height:0;gap:10px;">
+        <div class="holo-card" style="flex-shrink:0;">
+          <div class="card-hd">
+            <div class="card-title c-cyan">🌐 全球影视 · KatelyaTV</div>
+            <div style="display:flex;gap:5px;">
+              <button class="btn btn-xs btn-cyan" onclick="gtvReload()">↻ 刷新</button>
+              <button class="btn btn-xs" onclick="gtvFull()">⛶ 全屏</button>
+              <button class="btn btn-xs" onclick="gtvOpen()">↗ 新窗口</button>
+              <button class="btn btn-xs" onclick="gtvBoot()" title="若提示连接失败，启动本地 Docker 影视栈">🚀 启动栈</button>
+            </div>
+          </div>
+          <div class="card-body" style="padding:8px 12px;">
+            <div class="mono c-dim" style="font-size:11px;line-height:1.5;">
+              站内直连 <b>localhost:3030</b> · 首次进入需登录（账号密码见 D:\MediaStack\.env 的 KATELYA_USER / KATELYA_PASS）
+            </div>
+          </div>
+        </div>
+        <div class="holo-card" style="flex:1;min-height:0;display:flex;padding:8px;">
+          <iframe id="gtv-frame" src="about:blank" allow="fullscreen; autoplay; encrypted-media; picture-in-picture" style="flex:1;width:100%;border:0;border-radius:12px;background:#05080f;"></iframe>
+        </div>
+      </div>
+    </section>
+
     <!-- ========== VIEW: CINEMA (IN-APP IMMERSIVE VIDEO PLAYER) ========== -->
     <section id="view-cinema" class="view hidden" data-aura="violet">
       <div class="cine-layout">
@@ -3423,6 +3449,7 @@
     system:    { a1: 'rgba(0,229,255,0.16)',  a2: 'rgba(56,189,248,0.12)', c1: [0,229,255],   c2: [56,189,248] },
     tutorial:  { a1: 'rgba(255,179,71,0.20)', a2: 'rgba(0,229,255,0.14)',  c1: [255,179,71],  c2: [0,229,255] },
     cinema:    { a1: 'rgba(167,139,250,0.20)',a2: 'rgba(255,61,113,0.10)', c1: [167,139,250], c2: [255,61,113] },
+    globaltv:  { a1: 'rgba(0,229,255,0.20)',  a2: 'rgba(167,139,250,0.14)', c1: [0,229,255],   c2: [167,139,250] },
   };
 
   /* ===================== HELPERS ===================== */
@@ -4750,6 +4777,12 @@
     if (v === 'aigc' && !S.aiPromptsLoaded) searchAigcPrompts('', 'all', true);
     if (v === 'downloads') setDlTab(S.dlTab);
     if (v === 'tutorial') renderTutorialHub();
+    if (v === 'globaltv') {
+      const gf = $('gtv-frame');
+      if (gf && (!gf.getAttribute('src') || gf.getAttribute('src') === 'about:blank' || String(gf.getAttribute('src')).indexOf('3030') < 0)) {
+        gf.setAttribute('src', 'http://localhost:3030/');
+      }
+    }
     if (v === 'cinema') {
       CINE.newDone = 0;
       const nb = $('nav-cine-cnt'); if (nb) nb.classList.add('hidden');
@@ -4761,6 +4794,27 @@
     requestAnimationFrame(resizeAllCanvases);
   }
   window.switchView = switchView;
+
+  /* ===================== GLOBAL TV (KatelyaTV) ===================== */
+  function gtvReload() {
+    const f = $('gtv-frame');
+    if (f) f.setAttribute('src', 'http://localhost:3030/?_t=' + Date.now());
+    else toast('全球影视容器未就绪', 'amber');
+  }
+  function gtvFull() {
+    const f = $('gtv-frame');
+    if (f && f.requestFullscreen) { try { f.requestFullscreen(); } catch (e) {} }
+  }
+  function gtvOpen() {
+    window.open('http://localhost:3030/', '_blank');
+  }
+  function gtvBoot() {
+    toast('Docker Desktop 已设为开机自启；若容器没起，在 D:\\MediaStack 跑 docker compose up -d', 'amber', 5200);
+  }
+  window.gtvReload = gtvReload;
+  window.gtvFull = gtvFull;
+  window.gtvOpen = gtvOpen;
+  window.gtvBoot = gtvBoot;
 
   function setDlTab(tab) {
     S.dlTab = tab || 'queue';
