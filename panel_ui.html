@@ -4894,9 +4894,10 @@
     $('cine-meta').textContent = '全球影视 · 同源无损直通 4K 影院（WebGL2 FidelityFX CAS 实时修复中 · 按 E 开关 · 点左侧「🌐 全球影视」回选集）';
     applyCineSubList([], false);
     startCineStream('online', CINE.offset);
-    // 自动开启 GPU WebGL2 4K 去压缩锐化预设，立竿见影提升清晰度！
+    // 在线流本身是有损压缩源，锐化会把压缩噪声一起放大（低分辨率源尤其明显），
+    // 所以不再自动开启，改用原画直出；需要时按 E 手动开
     applyCine4kPreset('deblock');
-    setCine4kEnabled(true);
+    setCine4kEnabled(false);
     renderCine4kDiag();
     bumpCineIdle();
     toast(`✨ 已接管「${CINE.cur.name}」进入 4K 影院并自动开启 GPU 去压缩 4K 修复！`, 'mint');
