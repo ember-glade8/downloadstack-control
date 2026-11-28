@@ -14,7 +14,9 @@ from pathlib import Path
 
 APP_DIR = Path(__file__).resolve().parent
 PORT = 18550
-URL = f"http://127.0.0.1:{PORT}/?boot=1"
+# 带上启动时间戳：每次打开都是全新 URL，强制 Chromium 重新拉取页面，
+# 避免固定 profile 里缓存住旧版 panel_ui.html（改了界面看不到的问题）
+URL = f"http://127.0.0.1:{PORT}/?boot=1&v={int(time.time())}"
 
 
 def _set_app_id():
